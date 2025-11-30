@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t("workers.title") }}</h1>
+<div class="actions">
+    <a class="button" href="/workers/new">{{ t("workers.new") }}</a>
+</div>
+<table>
+    <thead>
+        <tr>
+            <th>{{ t("workers.name") }}</th>
+            <th>{{ t("workers.role") }}</th>
+            <th>{{ t("workers.hourly_rate") }}</th>
+            <th>{{ t("workers.is_active") }}</th>
+            <th>{{ t("workers.total_hours") }}</th>
+            <th>{{ t("workers.total_gross") }}</th>
+            <th>{{ t("workers.total_net") }}</th>
+            <th>{{ t("label.actions") }}</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for worker in workers %}
+        {% set agg = aggregates.get(worker.id, {}) %}
+        <tr>
+            <td>{{ worker.name }}</td>
+            <td>{{ worker.role or '' }}</td>
+            <td>{{ worker.hourly_rate or '' }}</td>
+            <td>{{ t("label.yes") if worker.is_active else t("label.no") }}</td>
+            <td>{{ agg.get("total_hours", 0) }}</td>
+            <td>{{ agg.get("total_gross", 0) }}</td>
+            <td>{{ agg.get("approx_net", 0) }}</td>
+            <td><a href="/workers/{{ worker.id }}/edit">{{ t("workers.edit") }}</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8">—</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

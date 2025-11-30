@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t("stats.title") }}</h1>
+
+<section>
+    <h2>{{ t("stats.by_month") }}</h2>
+    <a href="/stats/export/monthly.csv">{{ t("stats.export_monthly_csv") }}</a>
+    <table>
+        <thead>
+            <tr>
+                <th>Year</th>
+                <th>Month</th>
+                <th>Revenue</th>
+                <th>Total cost</th>
+                <th>Profit</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in profit_by_month %}
+            <tr>
+                <td>{{ row.year }}</td>
+                <td>{{ row.month }}</td>
+                <td>{{ row.revenue }}</td>
+                <td>{{ row.total_cost }}</td>
+                <td>{{ row.profit }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5">—</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+
+<section>
+    <h2>{{ t("stats.by_client") }}</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Client</th>
+                <th>Revenue</th>
+                <th>Profit</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in profit_by_client %}
+            <tr>
+                <td>{{ row.client_name }}</td>
+                <td>{{ row.revenue }}</td>
+                <td>{{ row.profit }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="3">—</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+
+<section>
+    <h2>{{ t("stats.by_worktype") }}</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Category</th>
+                <th>Revenue</th>
+                <th>Profit</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in profit_by_worktype %}
+            <tr>
+                <td>{{ row.category }}</td>
+                <td>{{ row.revenue }}</td>
+                <td>{{ row.profit }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="3">—</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endblock %}
