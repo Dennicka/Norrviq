@@ -12,6 +12,7 @@ from app.models.cost import CostCategory, ProjectCostItem
 from app.models.legal_note import LegalNote
 from app.models.material import Material
 from app.models.project import Project, ProjectWorkItem, ProjectWorkerAssignment
+from app.models.room import Room
 from app.models.worker import Worker
 from app.models.worktype import WorkType
 from app.services.estimates import calculate_project_totals, recalculate_project_work_items
@@ -84,6 +85,7 @@ async def project_detail(
         db.query(Project)
         .options(
             selectinload(Project.client),
+            selectinload(Project.rooms),
             selectinload(Project.work_items).selectinload(ProjectWorkItem.work_type),
             selectinload(Project.worker_assignments).selectinload(ProjectWorkerAssignment.worker),
             selectinload(Project.cost_items).selectinload(ProjectCostItem.category),
@@ -98,8 +100,18 @@ async def project_detail(
     cost_categories = db.query(CostCategory).all()
     workers = db.query(Worker).all()
     materials = db.query(Material).filter(Material.is_active).all()
+    rooms = sorted(project.rooms, key=lambda room: room.name.lower() if room.name else "")
     context = template_context(request, lang)
-    context.update({"project": project, "worktypes": worktypes, "cost_categories": cost_categories, "workers": workers, "materials": materials})
+    context.update(
+        {
+            "project": project,
+            "worktypes": worktypes,
+            "cost_categories": cost_categories,
+            "workers": workers,
+            "materials": materials,
+            "rooms": rooms,
+        }
+    )
     return templates.TemplateResponse("projects/detail.html", context)
 
 
@@ -217,9 +229,15 @@ async def add_work_item(
     if not work_type:
         raise HTTPException(status_code=400, detail="Work type required")
 
+    room_id = form.get("room_id")
+    room = db.get(Room, int(room_id)) if room_id else None
+    if room and room.project_id != project.id:
+        raise HTTPException(status_code=400, detail="Room is not part of project")
+
     item = ProjectWorkItem(
         project_id=project.id,
         work_type_id=work_type.id,
+        room_id=room.id if room else None,
         quantity=Decimal(form.get("quantity") or "0"),
         difficulty_factor=Decimal(form.get("difficulty_factor") or "1"),
         comment=form.get("comment"),

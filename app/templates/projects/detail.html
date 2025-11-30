@@ -21,6 +21,50 @@
 </section>
 
 <section>
+    <h2>{{ t("rooms.section_title") }}</h2>
+    <p>{{ t("rooms.help") }}</p>
+    <p>
+        <a href="/projects/{{ project.id }}/rooms/create">{{ t("label.create") }}</a>
+        | <a href="/projects/{{ project.id }}/rooms/">{{ t("rooms.section_title") }}</a>
+    </p>
+    <table>
+        <thead>
+            <tr>
+                <th>{{ t("label.name") }}</th>
+                <th>{{ t("rooms.field.floor_area") }}</th>
+                <th>{{ t("rooms.field.wall_perimeter") }}</th>
+                <th>{{ t("rooms.field.wall_height") }}</th>
+                <th>{{ t("rooms.field.wall_area") }}</th>
+                <th>{{ t("rooms.field.ceiling_area") }}</th>
+                <th>{{ t("rooms.field.baseboard_length") }}</th>
+                <th>{{ t("label.actions") }}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for room in rooms %}
+            <tr>
+                <td>{{ room.name }}</td>
+                <td>{{ room.floor_area_m2 or '' }}</td>
+                <td>{{ room.wall_perimeter_m or '' }}</td>
+                <td>{{ room.wall_height_m or '' }}</td>
+                <td>{{ room.wall_area_m2 or '' }}</td>
+                <td>{{ room.ceiling_area_m2 or '' }}</td>
+                <td>{{ room.baseboard_length_m or '' }}</td>
+                <td>
+                    <a href="/projects/{{ project.id }}/rooms/{{ room.id }}/edit">{{ t("projects.edit") }}</a>
+                    <form method="post" action="/projects/{{ project.id }}/rooms/{{ room.id }}/delete" style="display:inline;">
+                        <button type="submit" onclick="return confirm('{{ t("label.delete") }}?');">{{ t("label.delete") }}</button>
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="8">—</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+
+<section>
     <h2>{{ t("label.add_work_item") }}</h2>
     <form method="post" action="/projects/{{ project.id }}/add-work-item">
         <div>
@@ -31,6 +75,32 @@
                 <option value="{{ wt.id }}">{{ wt.name_ru if lang == 'ru' else wt.name_sv }}</option>
                 {% endfor %}
             </select>
+        </div>
+        <div>
+            <label>{{ t("label.room") }}</label>
+            <select name="room_id" id="room-select">
+                <option value="">{{ t("rooms.no_room") }}</option>
+                {% for room in rooms %}
+                <option
+                    value="{{ room.id }}"
+                    data-wall-area="{{ room.wall_area_m2 }}"
+                    data-ceiling-area="{{ room.ceiling_area_m2 }}"
+                    data-floor-area="{{ room.floor_area_m2 }}"
+                    data-baseboard-length="{{ room.baseboard_length_m }}"
+                >
+                    {{ room.name }}
+                </option>
+                {% endfor %}
+            </select>
+            <div id="room-info"></div>
+            {% if rooms %}
+            <div id="room-autofill-buttons">
+                <button type="button" data-fill-target="quantity" data-room-value="wallArea">{{ t("rooms.autofill.from_walls") }}</button>
+                <button type="button" data-fill-target="quantity" data-room-value="ceilingArea">{{ t("rooms.autofill.from_ceiling") }}</button>
+                <button type="button" data-fill-target="quantity" data-room-value="floorArea">{{ t("rooms.autofill.from_floor") }}</button>
+                <button type="button" data-fill-target="quantity" data-room-value="baseboardLength">{{ t("rooms.autofill.from_baseboard") }}</button>
+            </div>
+            {% endif %}
         </div>
         <div>
             <label>{{ t("label.quantity") }}</label>
@@ -54,6 +124,7 @@
         <thead>
             <tr>
                 <th>{{ t("label.work_type") }}</th>
+                <th>{{ t("label.room") }}</th>
                 <th>{{ t("label.quantity") }}</th>
                 <th>{{ t("label.difficulty") }}</th>
                 <th>{{ t("label.hours") }}</th>
@@ -64,6 +135,7 @@
             {% for item in project.work_items %}
             <tr>
                 <td>{{ item.work_type.name_ru if lang == 'ru' else item.work_type.name_sv }}</td>
+                <td>{{ item.room.name if item.room else '' }}</td>
                 <td>{{ item.quantity }}</td>
                 <td>{{ item.difficulty_factor }}</td>
                 <td>{{ item.calculated_hours or '' }}</td>
@@ -231,4 +303,64 @@
         <li>{{ t("projects.finance.margin_percent") }}: {{ project.margin_percent or 0 }}%</li>
     </ul>
 </section>
+<script>
+function updateRoomInfo() {
+  const select = document.getElementById("room-select");
+  const info = document.getElementById("room-info");
+  const option = select ? select.options[select.selectedIndex] : null;
+
+  const wallArea = option ? option.getAttribute("data-wall-area") : null;
+  const ceilingArea = option ? option.getAttribute("data-ceiling-area") : null;
+  const floorArea = option ? option.getAttribute("data-floor-area") : null;
+  const baseboardLength = option ? option.getAttribute("data-baseboard-length") : null;
+
+  const parts = [];
+  if (wallArea) parts.push("{{ t('rooms.field.wall_area') }}: " + wallArea);
+  if (ceilingArea) parts.push("{{ t('rooms.field.ceiling_area') }}: " + ceilingArea);
+  if (floorArea) parts.push("{{ t('rooms.field.floor_area') }}: " + floorArea);
+  if (baseboardLength) parts.push("{{ t('rooms.field.baseboard_length') }}: " + baseboardLength);
+  if (info) {
+    info.textContent = parts.join(', ');
+  }
+
+  document.querySelectorAll('[data-room-value]').forEach((btn) => {
+    const key = btn.getAttribute('data-room-value');
+    let value = '';
+    if (key === 'wallArea') value = wallArea || '';
+    if (key === 'ceilingArea') value = ceilingArea || '';
+    if (key === 'floorArea') value = floorArea || '';
+    if (key === 'baseboardLength') value = baseboardLength || '';
+
+    if (value) {
+      btn.disabled = false;
+      btn.setAttribute('data-value', value);
+    } else {
+      btn.disabled = true;
+      btn.removeAttribute('data-value');
+    }
+  });
+}
+
+document.addEventListener("click", function (event) {
+  const btn = event.target.closest("[data-fill-target]");
+  if (!btn) return;
+  const targetName = btn.getAttribute("data-fill-target");
+  const value = btn.getAttribute("data-value");
+  if (!targetName || !value) return;
+  const input = document.querySelector(`[name="${targetName}"]`);
+  if (input) {
+    input.value = value;
+  }
+});
+
+document.addEventListener("change", function (event) {
+  if (event.target && event.target.id === "room-select") {
+    updateRoomInfo();
+  }
+});
+
+document.addEventListener("DOMContentLoaded", function () {
+  updateRoomInfo();
+});
+</script>
 {% endblock %}

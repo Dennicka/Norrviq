@@ -1,5 +1,6 @@
 from .client import Client
-from .project import Project, Room, ProjectWorkItem, ProjectWorkerAssignment
+from .project import Project, ProjectWorkItem, ProjectWorkerAssignment
+from .room import Room
 from .worktype import WorkType
 from .worker import Worker
 from .cost import CostCategory, ProjectCostItem

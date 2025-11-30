@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ room and t('projects.edit') or t('label.create') }}: {{ t('rooms.section_title') }}</h1>
+<p><a href="/projects/{{ project.id }}/rooms/">{{ t('rooms.section_title') }}</a></p>
+<form method="post">
+    <div>
+        <label>{{ t("label.name") }}</label>
+        <input type="text" name="name" value="{{ room.name if room else '' }}" required>
+    </div>
+    <div>
+        <label>{{ t("label.comment") }}</label>
+        <textarea name="description">{{ room.description if room else '' }}</textarea>
+    </div>
+    <div>
+        <label>{{ t("rooms.field.floor_area") }}</label>
+        <input type="number" step="0.01" name="floor_area_m2" value="{{ room.floor_area_m2 if room else '' }}">
+    </div>
+    <div>
+        <label>{{ t("rooms.field.wall_perimeter") }}</label>
+        <input type="number" step="0.01" name="wall_perimeter_m" value="{{ room.wall_perimeter_m if room else '' }}">
+    </div>
+    <div>
+        <label>{{ t("rooms.field.wall_height") }}</label>
+        <input type="number" step="0.01" name="wall_height_m" value="{{ room.wall_height_m if room else '' }}">
+    </div>
+    <div>
+        <p>{{ t("rooms.field.wall_area") }}: {{ room.wall_area_m2 if room else '' }}</p>
+        <p>{{ t("rooms.field.ceiling_area") }}: {{ room.ceiling_area_m2 if room else '' }}</p>
+        <p>{{ t("rooms.field.baseboard_length") }}: {{ room.baseboard_length_m if room else '' }}</p>
+    </div>
+    <button type="submit">{{ t("label.save") }}</button>
+</form>
+{% endblock %}
