@@ -3,6 +3,7 @@ from .project import Project, Room, ProjectWorkItem, ProjectWorkerAssignment
 from .worktype import WorkType
 from .worker import Worker
 from .cost import CostCategory, ProjectCostItem
+from .material import Material
 from .settings import Settings
 from .legal_note import LegalNote
 
@@ -16,6 +17,7 @@ __all__ = [
     "Worker",
     "CostCategory",
     "ProjectCostItem",
+    "Material",
     "Settings",
     "LegalNote",
 ]

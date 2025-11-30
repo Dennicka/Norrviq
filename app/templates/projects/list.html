@@ -10,6 +10,8 @@
             <th>{{ t("label.name") }}</th>
             <th>{{ t("label.client") }}</th>
             <th>{{ t("label.status") }}</th>
+            <th>{{ t('label.planned_start_date') }}</th>
+            <th>{{ t('label.planned_end_date') }}</th>
             <th>{{ t("label.client_pays_total") }}</th>
             <th>{{ t("label.actions") }}</th>
         </tr>
@@ -20,6 +22,8 @@
             <td>{{ project.name }}</td>
             <td>{{ project.client.name if project.client else '' }}</td>
             <td>{{ project.status }}</td>
+            <td>{{ project.planned_start_date or '' }}</td>
+            <td>{{ project.planned_end_date or '' }}</td>
             <td>{{ project.client_pays_total or '' }}</td>
             <td><a href="/projects/{{ project.id }}">{{ t("projects.detail") }}</a></td>
         </tr>

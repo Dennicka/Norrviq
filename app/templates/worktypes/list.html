@@ -13,6 +13,7 @@
             <th>{{ t("label.name_ru") }}</th>
             <th>{{ t("label.name_sv") }}</th>
             <th>{{ t("label.hours_per_unit") }}</th>
+            <th>{{ t('label.active') }}</th>
             <th>{{ t("label.actions") }}</th>
         </tr>
     </thead>
@@ -25,7 +26,13 @@
             <td>{{ wt.name_ru }}</td>
             <td>{{ wt.name_sv }}</td>
             <td>{{ wt.hours_per_unit }}</td>
-            <td><a href="/worktypes/{{ wt.id }}/edit">{{ t("worktypes.edit") }}</a></td>
+            <td>{{ t('label.yes') if wt.is_active else t('label.no') }}</td>
+            <td>
+                <a href="/worktypes/{{ wt.id }}/edit">{{ t("worktypes.edit") }}</a>
+                <form method="post" action="/worktypes/{{ wt.id }}/delete" style="display:inline" onsubmit="return confirm('Delete?')">
+                    <button type="submit">{{ t('label.delete') }}</button>
+                </form>
+            </td>
         </tr>
         {% else %}
         <tr><td colspan="7">—</td></tr>

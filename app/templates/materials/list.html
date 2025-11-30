@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t("materials.title") }}</h1>
+<p><a href="/materials/create">{{ t("materials.create") }}</a></p>
+<table>
+    <thead>
+        <tr>
+            <th>{{ t("label.code") }}</th>
+            <th>{{ t("label.name") }}</th>
+            <th>{{ t("label.category") }}</th>
+            <th>{{ t("label.unit") }}</th>
+            <th>{{ t("label.active") }}</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for material in materials %}
+        <tr>
+            <td>{{ material.code }}</td>
+            <td>{{ material.name_ru if lang == 'ru' else material.name_sv }}</td>
+            <td>{{ material.category or '' }}</td>
+            <td>{{ material.unit }}</td>
+            <td>{{ t('label.yes') if material.is_active else t('label.no') }}</td>
+            <td>
+                <a href="/materials/{{ material.id }}/edit">{{ t('label.edit') }}</a>
+                <form method="post" action="/materials/{{ material.id }}/delete" style="display:inline" onsubmit="return confirm('Delete material?')">
+                    <button type="submit">{{ t('label.delete') }}</button>
+                </form>
+            </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6">—</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

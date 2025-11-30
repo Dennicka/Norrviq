@@ -1,36 +1,57 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>{{ t("projects.new") }}</h1>
-<form method="post">
+<h1>{{ project and t('projects.edit') or t("projects.new") }}</h1>
+<form method="post" action="{{ project and ('/projects/' ~ project.id ~ '/edit') or '' }}">
     <div>
         <label>{{ t("label.name") }}</label>
-        <input type="text" name="name" required>
+        <input type="text" name="name" value="{{ project.name if project else '' }}" required>
     </div>
     <div>
         <label>{{ t("label.client") }}</label>
         <select name="client_id">
             <option value="">—</option>
             {% for client in clients %}
-            <option value="{{ client.id }}">{{ client.name }}</option>
+            <option value="{{ client.id }}" {% if project and project.client_id == client.id %}selected{% endif %}>{{ client.name }}</option>
             {% endfor %}
         </select>
     </div>
     <div>
         <label>{{ t("label.address") }}</label>
-        <input type="text" name="address">
+        <input type="text" name="address" value="{{ project.address if project else '' }}">
     </div>
     <div>
         <label>
-            <input type="checkbox" name="use_rot">
+            <input type="checkbox" name="use_rot" {% if project and project.use_rot %}checked{% endif %}>
             {{ t("label.use_rot") }}
         </label>
     </div>
     <div>
         <label>{{ t("label.status") }}</label>
-        <input type="text" name="status" value="draft">
+        <select name="status">
+            {% set current_status = project.status if project else 'draft' %}
+            {% for st in ['draft','sent','accepted','in_progress','completed'] %}
+            <option value="{{ st }}" {% if current_status == st %}selected{% endif %}>{{ st }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div>
+        <label>{{ t('label.planned_start_date') }}</label>
+        <input type="date" name="planned_start_date" value="{{ project.planned_start_date }}">
+    </div>
+    <div>
+        <label>{{ t('label.planned_end_date') }}</label>
+        <input type="date" name="planned_end_date" value="{{ project.planned_end_date }}">
+    </div>
+    <div>
+        <label>{{ t('label.actual_start_date') }}</label>
+        <input type="date" name="actual_start_date" value="{{ project.actual_start_date }}">
+    </div>
+    <div>
+        <label>{{ t('label.actual_end_date') }}</label>
+        <input type="date" name="actual_end_date" value="{{ project.actual_end_date }}">
     </div>
     <div class="actions">
-        <button type="submit">{{ t("label.create") }}</button>
+        <button type="submit">{{ project and t('label.save') or t("label.create") }}</button>
         <a href="/projects/">{{ t("label.back") }}</a>
     </div>
 </form>

@@ -21,6 +21,7 @@ class ProjectCostItem(Base):
     id = Column(Integer, primary_key=True, index=True)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
     cost_category_id = Column(Integer, ForeignKey("cost_categories.id"), nullable=False)
+    material_id = Column(Integer, ForeignKey("materials.id"), nullable=True)
     title = Column(String(255), nullable=False)
     amount = Column(Numeric(12, 2), nullable=False)
     moms_amount = Column(Numeric(12, 2), nullable=True)
@@ -29,3 +30,4 @@ class ProjectCostItem(Base):
 
     project = relationship("Project", back_populates="cost_items")
     category = relationship("CostCategory", back_populates="project_cost_items")
+    material = relationship("Material", back_populates="cost_items")

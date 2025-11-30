@@ -10,6 +10,7 @@ from app.dependencies import get_current_lang, get_db, template_context, templat
 from app.models.client import Client
 from app.models.cost import CostCategory, ProjectCostItem
 from app.models.legal_note import LegalNote
+from app.models.material import Material
 from app.models.project import Project, ProjectWorkItem, ProjectWorkerAssignment
 from app.models.worker import Worker
 from app.models.worktype import WorkType
@@ -18,6 +19,15 @@ from app.services.finance import calculate_project_financials
 from app.security import require_auth
 
 router = APIRouter(prefix="/projects", tags=["projects"])
+
+
+def _parse_date(value: str | None):
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
 
 
 @router.get("/")
@@ -36,7 +46,7 @@ async def new_project_form(
 ):
     clients = db.query(Client).all()
     context = template_context(request, lang)
-    context.update({"clients": clients})
+    context.update({"clients": clients, "project": None})
     return templates.TemplateResponse("projects/form.html", context)
 
 
@@ -52,6 +62,10 @@ async def create_project(
         address=form.get("address"),
         use_rot=bool(form.get("use_rot")),
         status=form.get("status") or "draft",
+        planned_start_date=_parse_date(form.get("planned_start_date")),
+        planned_end_date=_parse_date(form.get("planned_end_date")),
+        actual_start_date=_parse_date(form.get("actual_start_date")),
+        actual_end_date=_parse_date(form.get("actual_end_date")),
     )
     db.add(project)
     db.commit()
@@ -80,12 +94,59 @@ async def project_detail(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    worktypes = db.query(WorkType).all()
+    worktypes = db.query(WorkType).filter(WorkType.is_active).all()
     cost_categories = db.query(CostCategory).all()
     workers = db.query(Worker).all()
+    materials = db.query(Material).filter(Material.is_active).all()
     context = template_context(request, lang)
-    context.update({"project": project, "worktypes": worktypes, "cost_categories": cost_categories, "workers": workers})
+    context.update({"project": project, "worktypes": worktypes, "cost_categories": cost_categories, "workers": workers, "materials": materials})
     return templates.TemplateResponse("projects/detail.html", context)
+
+
+@router.get("/{project_id}/edit")
+async def edit_project_form(
+    project_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    lang: str = Depends(get_current_lang),
+):
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    clients = db.query(Client).all()
+    context = template_context(request, lang)
+    context.update({"clients": clients, "project": project})
+    return templates.TemplateResponse("projects/form.html", context)
+
+
+@router.post("/{project_id}/edit")
+async def update_project(
+    project_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    lang: str = Depends(get_current_lang),
+):
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    form = await request.form()
+    client_id = form.get("client_id")
+    project.name = form.get("name")
+    project.client_id = int(client_id) if client_id else None
+    project.address = form.get("address")
+    project.use_rot = bool(form.get("use_rot"))
+    project.status = form.get("status") or project.status
+    project.planned_start_date = _parse_date(form.get("planned_start_date"))
+    project.planned_end_date = _parse_date(form.get("planned_end_date"))
+    project.actual_start_date = _parse_date(form.get("actual_start_date"))
+    project.actual_end_date = _parse_date(form.get("actual_end_date"))
+
+    db.add(project)
+    db.commit()
+
+    return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.get("/{project_id}/offer", response_class=HTMLResponse)
@@ -228,13 +289,15 @@ async def add_cost_item(
     category_id = form.get("cost_category_id")
     if not category_id:
         raise HTTPException(status_code=400, detail="Category required")
-
+    material_id = form.get("material_id")
+    material = db.get(Material, int(material_id)) if material_id else None
     cost_item = ProjectCostItem(
         project_id=project.id,
         cost_category_id=int(category_id),
-        title=form.get("title"),
-        amount=Decimal(form.get("amount") or "0"),
+        title=form.get("title") or (material.name_ru if material else None),
+        amount=Decimal(form.get("amount") or (material.default_price_per_unit if material else "0")),
         comment=form.get("comment"),
+        material=material,
     )
     db.add(cost_item)
     db.commit()
