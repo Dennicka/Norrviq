@@ -6,9 +6,12 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.dependencies import get_current_lang, get_db, template_context, templates
 from app.models.client import Client
-from app.models.project import Project, ProjectWorkItem
+from app.models.cost import CostCategory, ProjectCostItem
+from app.models.project import Project, ProjectWorkItem, ProjectWorkerAssignment
+from app.models.worker import Worker
 from app.models.worktype import WorkType
 from app.services.estimates import calculate_project_totals, recalculate_project_work_items
+from app.services.finance import calculate_project_financials
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -64,6 +67,8 @@ async def project_detail(
         .options(
             selectinload(Project.client),
             selectinload(Project.work_items).selectinload(ProjectWorkItem.work_type),
+            selectinload(Project.worker_assignments).selectinload(ProjectWorkerAssignment.worker),
+            selectinload(Project.cost_items).selectinload(ProjectCostItem.category),
         )
         .filter(Project.id == project_id)
         .first()
@@ -72,8 +77,10 @@ async def project_detail(
         raise HTTPException(status_code=404, detail="Project not found")
 
     worktypes = db.query(WorkType).all()
+    cost_categories = db.query(CostCategory).all()
+    workers = db.query(Worker).all()
     context = template_context(request, lang)
-    context.update({"project": project, "worktypes": worktypes})
+    context.update({"project": project, "worktypes": worktypes, "cost_categories": cost_categories, "workers": workers})
     return templates.TemplateResponse("projects/detail.html", context)
 
 
@@ -125,5 +132,83 @@ async def recalc_project(
 
     recalculate_project_work_items(db, project)
     calculate_project_totals(db, project)
+
+    return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{project_id}/recalculate-finance")
+async def recalculate_finance(project_id: int, db: Session = Depends(get_db)):
+    project = (
+        db.query(Project)
+        .options(
+            selectinload(Project.work_items).selectinload(ProjectWorkItem.work_type),
+            selectinload(Project.client),
+            selectinload(Project.worker_assignments).selectinload(ProjectWorkerAssignment.worker),
+            selectinload(Project.cost_items).selectinload(ProjectCostItem.category),
+        )
+        .filter(Project.id == project_id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    recalculate_project_work_items(db, project)
+    calculate_project_totals(db, project)
+    calculate_project_financials(db, project)
+
+    return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{project_id}/add-cost-item")
+async def add_cost_item(
+    project_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    form = await request.form()
+    category_id = form.get("cost_category_id")
+    if not category_id:
+        raise HTTPException(status_code=400, detail="Category required")
+
+    cost_item = ProjectCostItem(
+        project_id=project.id,
+        cost_category_id=int(category_id),
+        title=form.get("title"),
+        amount=Decimal(form.get("amount") or "0"),
+        comment=form.get("comment"),
+    )
+    db.add(cost_item)
+    db.commit()
+
+    return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{project_id}/add-worker-assignment")
+async def add_worker_assignment(
+    project_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    form = await request.form()
+    worker_id = form.get("worker_id")
+    if not worker_id:
+        raise HTTPException(status_code=400, detail="Worker required")
+
+    assignment = ProjectWorkerAssignment(
+        project_id=project.id,
+        worker_id=int(worker_id),
+        planned_hours=Decimal(form.get("planned_hours") or "0"),
+        actual_hours=Decimal(form.get("actual_hours") or "0"),
+    )
+    db.add(assignment)
+    db.commit()
 
     return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
