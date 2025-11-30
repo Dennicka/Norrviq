@@ -94,10 +94,10 @@ async def project_detail(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    worktypes = db.query(WorkType).filter(WorkType.is_active == True).all()
+    worktypes = db.query(WorkType).filter(WorkType.is_active).all()
     cost_categories = db.query(CostCategory).all()
     workers = db.query(Worker).all()
-    materials = db.query(Material).filter(Material.is_active == True).all()
+    materials = db.query(Material).filter(Material.is_active).all()
     context = template_context(request, lang)
     context.update({"project": project, "worktypes": worktypes, "cost_categories": cost_categories, "workers": workers, "materials": materials})
     return templates.TemplateResponse("projects/detail.html", context)
