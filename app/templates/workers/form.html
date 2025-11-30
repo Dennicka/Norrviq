@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ worker and t("workers.edit") or t("workers.new") }}</h1>
+<form method="post">
+    <div class="form-group">
+        <label for="name">{{ t("workers.name") }}</label>
+        <input type="text" id="name" name="name" value="{{ worker.name if worker else '' }}" required>
+    </div>
+    <div class="form-group">
+        <label for="role">{{ t("workers.role") }}</label>
+        <input type="text" id="role" name="role" value="{{ worker.role if worker else '' }}">
+    </div>
+    <div class="form-group">
+        <label for="hourly_rate">{{ t("workers.hourly_rate") }}</label>
+        <input type="number" step="0.01" id="hourly_rate" name="hourly_rate" value="{{ worker.hourly_rate if worker else '' }}">
+    </div>
+    <div class="form-group">
+        <label>
+            <input type="checkbox" name="is_active" value="1" {% if worker is none or worker.is_active %}checked{% endif %}>
+            {{ t("workers.is_active") }}
+        </label>
+    </div>
+    <button type="submit">{{ t("common.save") }}</button>
+</form>
+{% endblock %}

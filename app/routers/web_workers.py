@@ -1,0 +1,91 @@
+from decimal import Decimal
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import RedirectResponse
+from sqlalchemy.orm import Session
+
+from app.dependencies import get_current_lang, get_db, template_context, templates
+from app.models.settings import get_or_create_settings
+from app.models.worker import Worker
+from app.services.workers import get_worker_aggregates
+
+router = APIRouter(prefix="/workers", tags=["workers"])
+
+
+@router.get("/")
+async def list_workers(
+    request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang)
+):
+    workers = db.query(Worker).all()
+    settings = get_or_create_settings(db)
+    aggregates = get_worker_aggregates(db, workers, settings)
+
+    context = template_context(request, lang)
+    context.update({"workers": workers, "aggregates": aggregates})
+    return templates.TemplateResponse("workers/list.html", context)
+
+
+@router.get("/new")
+async def new_worker_form(
+    request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang)
+):
+    context = template_context(request, lang)
+    context["worker"] = None
+    return templates.TemplateResponse("workers/form.html", context)
+
+
+@router.post("/new")
+async def create_worker(
+    request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang)
+):
+    form = await request.form()
+    hourly_rate = form.get("hourly_rate")
+    worker = Worker(
+        name=form.get("name"),
+        role=form.get("role"),
+        hourly_rate=Decimal(hourly_rate) if hourly_rate else None,
+        is_active=bool(form.get("is_active")),
+    )
+    db.add(worker)
+    db.commit()
+    return RedirectResponse(url="/workers/", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.get("/{worker_id}/edit")
+async def edit_worker_form(
+    worker_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    lang: str = Depends(get_current_lang),
+):
+    worker = db.get(Worker, worker_id)
+    if not worker:
+        raise HTTPException(status_code=404, detail="Worker not found")
+
+    context = template_context(request, lang)
+    context["worker"] = worker
+    return templates.TemplateResponse("workers/form.html", context)
+
+
+@router.post("/{worker_id}/edit")
+async def update_worker(
+    worker_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    lang: str = Depends(get_current_lang),
+):
+    worker = db.get(Worker, worker_id)
+    if not worker:
+        raise HTTPException(status_code=404, detail="Worker not found")
+
+    form = await request.form()
+    hourly_rate = form.get("hourly_rate")
+    worker.name = form.get("name")
+    worker.role = form.get("role")
+    worker.hourly_rate = Decimal(hourly_rate) if hourly_rate else None
+    worker.is_active = bool(form.get("is_active"))
+
+    db.add(worker)
+    db.commit()
+
+    return RedirectResponse(url="/workers/", status_code=status.HTTP_303_SEE_OTHER)

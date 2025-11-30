@@ -11,6 +11,6 @@ class Worker(Base):
     name = Column(String(255), nullable=False)
     role = Column(String(100), nullable=True)
     hourly_rate = Column(Numeric(10, 2), nullable=True)
-    active = Column(Boolean, nullable=False, default=True)
+    is_active = Column(Boolean, nullable=False, server_default="1")
 
     assignments = relationship("ProjectWorkerAssignment", back_populates="worker")

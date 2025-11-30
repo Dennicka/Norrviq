@@ -6,7 +6,17 @@ from .db import Base, SessionLocal, engine
 from .dependencies import get_current_lang
 from .models import client, cost, legal_note, project, settings as settings_model, worker, worktype  # noqa: F401
 from .models.settings import get_or_create_settings
-from .routers import web_clients, web_costs, web_legal, web_projects, web_root, web_settings, web_worktypes
+from .routers import (
+    web_clients,
+    web_costs,
+    web_legal,
+    web_projects,
+    web_root,
+    web_settings,
+    web_stats,
+    web_worktypes,
+    web_workers,
+)
 from .services.bootstrap import ensure_default_cost_categories, ensure_default_legal_notes
 
 settings = get_settings()
@@ -44,3 +54,5 @@ app.include_router(web_projects.router)
 app.include_router(web_settings.router)
 app.include_router(web_costs.router)
 app.include_router(web_legal.router)
+app.include_router(web_workers.router)
+app.include_router(web_stats.router)
