@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ category and category.name_ru or t("cost_categories.new") }}</h1>
+<form method="post">
+    <div class="form-row">
+        <label for="code">{{ t("label.code") }}</label>
+        <input type="text" id="code" name="code" value="{{ category.code if category else '' }}" {% if code_readonly %}readonly{% endif %}>
+    </div>
+    <div class="form-row">
+        <label for="name_ru">{{ t("label.name_ru") }}</label>
+        <input type="text" id="name_ru" name="name_ru" value="{{ category.name_ru if category else '' }}">
+    </div>
+    <div class="form-row">
+        <label for="name_sv">{{ t("label.name_sv") }}</label>
+        <input type="text" id="name_sv" name="name_sv" value="{{ category.name_sv if category else '' }}">
+    </div>
+    <div class="form-row">
+        <button type="submit">{{ t("common.save") }}</button>
+    </div>
+</form>
+{% endblock %}

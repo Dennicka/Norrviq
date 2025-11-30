@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t("cost_categories.title") }}</h1>
+<a href="/cost-categories/new">{{ t("cost_categories.new") }}</a>
+<table>
+    <thead>
+        <tr>
+            <th>{{ t("label.code") }}</th>
+            <th>{{ t("label.name_ru") }}</th>
+            <th>{{ t("label.name_sv") }}</th>
+            <th>{{ t("label.actions") }}</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for category in categories %}
+        <tr>
+            <td>{{ category.code }}</td>
+            <td>{{ category.name_ru }}</td>
+            <td>{{ category.name_sv }}</td>
+            <td><a href="/cost-categories/{{ category.id }}/edit">{{ t("clients.edit") }}</a></td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

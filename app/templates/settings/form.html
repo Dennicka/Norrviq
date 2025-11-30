@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t("settings.title") }}</h1>
+<form method="post" class="form-grid">
+    <div class="form-row">
+        <label for="hourly_rate_company">{{ t("settings.hourly_rate_company") }}</label>
+        <input type="number" step="0.01" id="hourly_rate_company" name="hourly_rate_company" value="{{ settings_obj.hourly_rate_company }}">
+        <small>{{ t("settings.hourly_rate_company.help") }}</small>
+    </div>
+    <div class="form-row">
+        <label for="default_worker_hourly_rate">{{ t("settings.default_worker_hourly_rate") }}</label>
+        <input type="number" step="0.01" id="default_worker_hourly_rate" name="default_worker_hourly_rate" value="{{ settings_obj.default_worker_hourly_rate }}">
+        <small>{{ t("settings.default_worker_hourly_rate.help") }}</small>
+    </div>
+    <div class="form-row">
+        <label for="employer_contributions_percent">{{ t("settings.employer_contributions_percent") }}</label>
+        <input type="number" step="0.01" id="employer_contributions_percent" name="employer_contributions_percent" value="{{ settings_obj.employer_contributions_percent }}">
+    </div>
+    <div class="form-row">
+        <label for="moms_percent">{{ t("settings.moms_percent") }}</label>
+        <input type="number" step="0.01" id="moms_percent" name="moms_percent" value="{{ settings_obj.moms_percent }}">
+    </div>
+    <div class="form-row">
+        <label for="rot_percent">{{ t("settings.rot_percent") }}</label>
+        <input type="number" step="0.01" id="rot_percent" name="rot_percent" value="{{ settings_obj.rot_percent }}">
+    </div>
+    <div class="form-row">
+        <label for="fuel_price_per_liter">{{ t("settings.fuel_price_per_liter") }}</label>
+        <input type="number" step="0.01" id="fuel_price_per_liter" name="fuel_price_per_liter" value="{{ settings_obj.fuel_price_per_liter }}">
+    </div>
+    <div class="form-row">
+        <label for="transport_cost_per_km">{{ t("settings.transport_cost_per_km") }}</label>
+        <input type="number" step="0.01" id="transport_cost_per_km" name="transport_cost_per_km" value="{{ settings_obj.transport_cost_per_km }}">
+    </div>
+    <div class="form-row">
+        <label for="default_overhead_percent">{{ t("settings.default_overhead_percent") }}</label>
+        <input type="number" step="0.01" id="default_overhead_percent" name="default_overhead_percent" value="{{ settings_obj.default_overhead_percent }}">
+    </div>
+    <div class="form-row">
+        <label for="default_worker_tax_percent_for_net">{{ t("settings.default_worker_tax_percent_for_net") }}</label>
+        <input type="number" step="0.01" id="default_worker_tax_percent_for_net" name="default_worker_tax_percent_for_net" value="{{ settings_obj.default_worker_tax_percent_for_net }}">
+    </div>
+    <div class="form-row">
+        <button type="submit">{{ t("common.save") }}</button>
+    </div>
+</form>
+{% endblock %}
