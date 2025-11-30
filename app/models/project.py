@@ -1,0 +1,76 @@
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, Numeric, String, Text, func
+from sqlalchemy.orm import relationship
+
+from app.db import Base
+
+
+class Project(Base):
+    __tablename__ = "projects"
+
+    id = Column(Integer, primary_key=True, index=True)
+    client_id = Column(Integer, ForeignKey("clients.id"), nullable=True)
+    name = Column(String(255), nullable=False)
+    address = Column(String(255), nullable=True)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+    status = Column(String(50), nullable=False, default="draft")
+    use_rot = Column(Boolean, nullable=False, default=False)
+    billing_status = Column(String(50), nullable=False, default="not_billed")
+    work_sum_without_moms = Column(Numeric(12, 2), nullable=True)
+    moms_amount = Column(Numeric(12, 2), nullable=True)
+    rot_amount = Column(Numeric(12, 2), nullable=True)
+    client_pays_total = Column(Numeric(12, 2), nullable=True)
+
+    client = relationship("Client", back_populates="projects")
+    rooms = relationship("Room", back_populates="project", cascade="all, delete-orphan")
+    work_items = relationship("ProjectWorkItem", back_populates="project", cascade="all, delete-orphan")
+    worker_assignments = relationship(
+        "ProjectWorkerAssignment", back_populates="project", cascade="all, delete-orphan"
+    )
+    cost_items = relationship("ProjectCostItem", back_populates="project", cascade="all, delete-orphan")
+
+
+class Room(Base):
+    __tablename__ = "rooms"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    name = Column(String(255), nullable=False)
+    walls_area_m2 = Column(Numeric(10, 2), nullable=True)
+    ceiling_area_m2 = Column(Numeric(10, 2), nullable=True)
+    floor_area_m2 = Column(Numeric(10, 2), nullable=True)
+    plinth_length_m = Column(Numeric(10, 2), nullable=True)
+
+    project = relationship("Project", back_populates="rooms")
+    work_items = relationship("ProjectWorkItem", back_populates="room")
+
+
+class ProjectWorkItem(Base):
+    __tablename__ = "project_work_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    room_id = Column(Integer, ForeignKey("rooms.id"), nullable=True)
+    work_type_id = Column(Integer, ForeignKey("work_types.id"), nullable=False)
+    quantity = Column(Numeric(10, 2), nullable=False)
+    difficulty_factor = Column(Numeric(5, 2), nullable=False, default=1.0)
+    calculated_hours = Column(Numeric(10, 2), nullable=True)
+    calculated_cost_without_moms = Column(Numeric(12, 2), nullable=True)
+    comment = Column(Text, nullable=True)
+
+    project = relationship("Project", back_populates="work_items")
+    room = relationship("Room", back_populates="work_items")
+    work_type = relationship("WorkType", back_populates="project_work_items")
+
+
+class ProjectWorkerAssignment(Base):
+    __tablename__ = "project_worker_assignments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    worker_id = Column(Integer, ForeignKey("workers.id"), nullable=False)
+    planned_hours = Column(Numeric(10, 2), nullable=True)
+    actual_hours = Column(Numeric(10, 2), nullable=True)
+
+    project = relationship("Project", back_populates="worker_assignments")
+    worker = relationship("Worker", back_populates="assignments")
