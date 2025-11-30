@@ -1,20 +1,39 @@
-# Norrviq Måleri AB Estimator
+# Norrviq Måleri AB — сметы и финансы
 
-A bilingual (Russian/Swedish) FastAPI skeleton for Norrviq Måleri AB's future estimating and finance system. The project includes a minimal FastAPI backend with SQLite, SQLAlchemy, Alembic migrations, and Jinja2 templates for a starter web UI.
+Внутренняя двуязычная (RU/SV) система на FastAPI для расчёта смет, финансов и управления проектами компании Norrviq Måleri AB. Приложение использует SQLite, SQLAlchemy, Alembic и Jinja2-шаблоны с переключением языков.
 
-## Getting started
+## Installation & Run (local)
 
-1. Create and activate a virtual environment (example using `python -m venv .venv`).
-2. Install dependencies:
-
+1. Клонируйте репозиторий:
+   ```bash
+   git clone https://github.com/Dennicka/Norrviq.git
+   cd Norrviq
+   ```
+2. Создайте виртуальное окружение и активируйте его:
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate
+   ```
+3. Установите зависимости:
    ```bash
    pip install -r requirements.txt
    ```
-
-3. Run the development server:
-
+4. Примените миграции базы данных:
    ```bash
-   uvicorn app.main:app --reload
+   alembic upgrade head
    ```
+5. Установите переменные окружения для доступа:
+   ```bash
+   export ADMIN_USERNAME=admin
+   export ADMIN_PASSWORD=admin
+   export SECRET_KEY="your-secret-key"
+   ```
+6. Запустите сервер разработки:
+   ```bash
+   uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload
+   ```
+7. Откройте http://127.0.0.1:8001 и переключайте язык через ссылки RU/SV в верхнем меню.
 
-4. Open the app at http://127.0.0.1:8000 and switch languages via the RU/SV links in the top navigation.
+## Login
+
+По умолчанию используется пара admin/admin. Сразу смените эти значения через переменные окружения, чтобы избежать рисков для безопасности.
