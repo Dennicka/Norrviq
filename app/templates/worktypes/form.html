@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ worktype and t("worktypes.edit") or t("worktypes.new") }}</h1>
+<form method="post">
+    <div>
+        <label>{{ t("label.code") }}</label>
+        <input type="text" name="code" value="{{ worktype.code if worktype else '' }}" required>
+    </div>
+    <div>
+        <label>{{ t("label.category") }}</label>
+        <input type="text" name="category" value="{{ worktype.category if worktype else '' }}">
+    </div>
+    <div>
+        <label>{{ t("label.unit") }}</label>
+        <input type="text" name="unit" value="{{ worktype.unit if worktype else '' }}" required>
+    </div>
+    <div>
+        <label>{{ t("label.name_ru") }}</label>
+        <input type="text" name="name_ru" value="{{ worktype.name_ru if worktype else '' }}" required>
+    </div>
+    <div>
+        <label>{{ t("label.description_ru") }}</label>
+        <textarea name="description_ru">{{ worktype.description_ru if worktype else '' }}</textarea>
+    </div>
+    <div>
+        <label>{{ t("label.name_sv") }}</label>
+        <input type="text" name="name_sv" value="{{ worktype.name_sv if worktype else '' }}" required>
+    </div>
+    <div>
+        <label>{{ t("label.description_sv") }}</label>
+        <textarea name="description_sv">{{ worktype.description_sv if worktype else '' }}</textarea>
+    </div>
+    <div>
+        <label>{{ t("label.hours_per_unit") }}</label>
+        <input type="number" step="0.01" name="hours_per_unit" value="{{ worktype.hours_per_unit if worktype else '' }}" required>
+    </div>
+    <div>
+        <label>{{ t("label.difficulty") }}</label>
+        <input type="number" step="0.01" name="base_difficulty_factor" value="{{ worktype.base_difficulty_factor if worktype else '1.0' }}">
+    </div>
+    <div class="actions">
+        <button type="submit">{{ worktype and t("label.save") or t("label.create") }}</button>
+        <a href="/worktypes/">{{ t("label.back") }}</a>
+    </div>
+</form>
+{% endblock %}

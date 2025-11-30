@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t("projects.new") }}</h1>
+<form method="post">
+    <div>
+        <label>{{ t("label.name") }}</label>
+        <input type="text" name="name" required>
+    </div>
+    <div>
+        <label>{{ t("label.client") }}</label>
+        <select name="client_id">
+            <option value="">—</option>
+            {% for client in clients %}
+            <option value="{{ client.id }}">{{ client.name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div>
+        <label>{{ t("label.address") }}</label>
+        <input type="text" name="address">
+    </div>
+    <div>
+        <label>
+            <input type="checkbox" name="use_rot">
+            {{ t("label.use_rot") }}
+        </label>
+    </div>
+    <div>
+        <label>{{ t("label.status") }}</label>
+        <input type="text" name="status" value="draft">
+    </div>
+    <div class="actions">
+        <button type="submit">{{ t("label.create") }}</button>
+        <a href="/projects/">{{ t("label.back") }}</a>
+    </div>
+</form>
+{% endblock %}
