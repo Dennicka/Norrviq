@@ -5,6 +5,8 @@
     <a href="/projects/{{ project.id }}/offer?lang=sv" target="_blank">{{ t("offer.title") }} (SV)</a>
     |
     <a href="/projects/{{ project.id }}/offer?lang=ru" target="_blank">{{ t("offer.title") }} (RU)</a>
+    |
+    <a href="/projects/{{ project.id }}/edit">{{ t('projects.edit') }}</a>
 </p>
 <section>
     <h2>{{ t("projects.detail") }}</h2>
@@ -12,6 +14,10 @@
     <p><strong>{{ t("label.address") }}:</strong> {{ project.address or '' }}</p>
     <p><strong>{{ t("label.status") }}:</strong> {{ project.status }}</p>
     <p><strong>{{ t("label.use_rot") }}:</strong> {{ t("label.yes") if project.use_rot else t("label.no") }}</p>
+    <p><strong>{{ t('label.planned_start_date') }}:</strong> {{ project.planned_start_date or '' }}</p>
+    <p><strong>{{ t('label.planned_end_date') }}:</strong> {{ project.planned_end_date or '' }}</p>
+    <p><strong>{{ t('label.actual_start_date') }}:</strong> {{ project.actual_start_date or '' }}</p>
+    <p><strong>{{ t('label.actual_end_date') }}:</strong> {{ project.actual_end_date or '' }}</p>
 </section>
 
 <section>
@@ -93,6 +99,7 @@
             <tr>
                 <th>{{ t("label.category") }}</th>
                 <th>{{ t("label.title") }}</th>
+                <th>{{ t('materials.title') }}</th>
                 <th>{{ t("label.amount") }}</th>
             </tr>
         </thead>
@@ -101,10 +108,11 @@
             <tr>
                 <td>{{ item.category.name_ru if lang == 'ru' else item.category.name_sv }}</td>
                 <td>{{ item.title }}</td>
+                <td>{{ item.material.name_ru if item.material and lang == 'ru' else (item.material.name_sv if item.material else '') }}</td>
                 <td>{{ item.amount }}</td>
             </tr>
             {% else %}
-            <tr><td colspan="3">—</td></tr>
+            <tr><td colspan="4">—</td></tr>
             {% endfor %}
         </tbody>
     </table>
@@ -117,6 +125,15 @@
                 <option value="">—</option>
                 {% for category in cost_categories %}
                 <option value="{{ category.id }}">{{ category.name_ru if lang == 'ru' else category.name_sv }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label>{{ t('materials.title') }}</label>
+            <select name="material_id">
+                <option value="">—</option>
+                {% for material in materials %}
+                <option value="{{ material.id }}">{{ material.name_ru if lang == 'ru' else material.name_sv }}</option>
                 {% endfor %}
             </select>
         </div>

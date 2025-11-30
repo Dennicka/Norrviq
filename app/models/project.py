@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, Numeric, String, Text, func
+from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, func
 from sqlalchemy.orm import relationship
 
 from app.db import Base
@@ -14,6 +14,10 @@ class Project(Base):
     description = Column(Text, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
     status = Column(String(50), nullable=False, default="draft")
+    planned_start_date = Column(Date, nullable=True)
+    planned_end_date = Column(Date, nullable=True)
+    actual_start_date = Column(Date, nullable=True)
+    actual_end_date = Column(Date, nullable=True)
     use_rot = Column(Boolean, nullable=False, default=False)
     billing_status = Column(String(50), nullable=False, default="not_billed")
     work_sum_without_moms = Column(Numeric(12, 2), nullable=True)

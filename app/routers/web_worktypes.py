@@ -34,6 +34,7 @@ async def create_worktype(
     request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang)
 ):
     form = await request.form()
+    minutes = Decimal(form.get("minutes_per_unit") or "0")
     worktype = WorkType(
         code=form.get("code"),
         category=form.get("category"),
@@ -42,8 +43,9 @@ async def create_worktype(
         name_sv=form.get("name_sv"),
         description_ru=form.get("description_ru"),
         description_sv=form.get("description_sv"),
-        hours_per_unit=Decimal(form.get("hours_per_unit") or "0"),
+        hours_per_unit=minutes / Decimal(60),
         base_difficulty_factor=Decimal(form.get("base_difficulty_factor") or "1"),
+        is_active=bool(form.get("is_active")),
     )
     db.add(worktype)
     db.commit()
@@ -78,6 +80,7 @@ async def update_worktype(
         raise HTTPException(status_code=404, detail="WorkType not found")
 
     form = await request.form()
+    minutes = Decimal(form.get("minutes_per_unit") or "0")
     worktype.code = form.get("code")
     worktype.category = form.get("category")
     worktype.unit = form.get("unit")
@@ -85,10 +88,21 @@ async def update_worktype(
     worktype.name_sv = form.get("name_sv")
     worktype.description_ru = form.get("description_ru")
     worktype.description_sv = form.get("description_sv")
-    worktype.hours_per_unit = Decimal(form.get("hours_per_unit") or "0")
+    worktype.hours_per_unit = minutes / Decimal(60)
     worktype.base_difficulty_factor = Decimal(form.get("base_difficulty_factor") or "1")
+    worktype.is_active = bool(form.get("is_active"))
 
     db.add(worktype)
     db.commit()
 
+    return RedirectResponse(url="/worktypes/", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{worktype_id}/delete")
+async def delete_worktype(worktype_id: int, db: Session = Depends(get_db)):
+    worktype = db.get(WorkType, worktype_id)
+    if not worktype:
+        raise HTTPException(status_code=404, detail="WorkType not found")
+    db.delete(worktype)
+    db.commit()
     return RedirectResponse(url="/worktypes/", status_code=status.HTTP_303_SEE_OTHER)
