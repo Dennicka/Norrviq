@@ -11,8 +11,13 @@
         <input type="text" name="category" value="{{ worktype.category if worktype else '' }}">
     </div>
     <div>
-        <label>{{ t("label.unit") }}</label>
-        <input type="text" name="unit" value="{{ worktype.unit if worktype else '' }}" required>
+        <label>{{ t("worktypes.field.unit") }}</label>
+        <select name="unit" required>
+            {% for unit_code, _ in worktype_units %}
+            <option value="{{ unit_code }}" {% if worktype and worktype.unit == unit_code %}selected{% endif %}>{{ t('worktypes.units.' ~ unit_code) }}</option>
+            {% endfor %}
+        </select>
+        <small>{{ t('worktypes.help.unit') }}</small>
     </div>
     <div>
         <label>{{ t("label.name_ru") }}</label>
@@ -31,9 +36,10 @@
         <textarea name="description_sv">{{ worktype.description_sv if worktype else '' }}</textarea>
     </div>
     <div>
-        <label>{{ t("label.hours_per_unit") }}</label>
-        <input type="number" step="1" name="minutes_per_unit" value="{{ (worktype.hours_per_unit * 60) if worktype else '' }}" required>
-        <small>{{ t('worktypes.minutes_hint') }}</small>
+        <label>{{ t("worktypes.field.minutes_per_unit") }}</label>
+        <input type="number" step="1" min="0" name="minutes_per_unit" id="minutes_per_unit" value="{{ worktype.minutes_per_unit if worktype else '' }}" required>
+        <small>{{ t('worktypes.help.minutes_vs_hours') }}</small>
+        <div class="muted">{{ t("worktypes.field.hours_per_unit") }}: <span id="hours_preview">{{ worktype and worktype.hours_per_unit is not none and ("%.2f"|format(worktype.hours_per_unit)) or "0.00" }}</span></div>
     </div>
     <div>
         <label>{{ t("label.difficulty") }}</label>
@@ -49,4 +55,17 @@
         <a href="/worktypes/">{{ t("label.back") }}</a>
     </div>
 </form>
+<script>
+const minutesInput = document.getElementById("minutes_per_unit");
+const hoursPreview = document.getElementById("hours_preview");
+function updateHoursPreview() {
+  if (!minutesInput || !hoursPreview) return;
+  const minutes = parseFloat(minutesInput.value || "0");
+  hoursPreview.textContent = (minutes / 60).toFixed(2);
+}
+if (minutesInput) {
+  minutesInput.addEventListener("input", updateHoursPreview);
+  updateHoursPreview();
+}
+</script>
 {% endblock %}

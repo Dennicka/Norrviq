@@ -1,7 +1,20 @@
+from decimal import Decimal
+
 from sqlalchemy import Boolean, Column, Integer, Numeric, String, Text
 from sqlalchemy.orm import relationship
 
 from app.db import Base
+
+
+WORKTYPE_UNITS = [
+    ("m2", "Square meters"),
+    ("m", "Meters"),
+    ("piece", "Piece"),
+    ("room", "Room"),
+    ("window", "Window"),
+    ("door", "Door"),
+    ("radiator", "Radiator"),
+]
 
 
 class WorkType(Base):
@@ -20,3 +33,15 @@ class WorkType(Base):
     is_active = Column(Boolean, nullable=False, default=True)
 
     project_work_items = relationship("ProjectWorkItem", back_populates="work_type")
+
+    @property
+    def minutes_per_unit(self) -> int | None:
+        if self.hours_per_unit is None:
+            return None
+        return int(round(float(self.hours_per_unit) * 60))
+
+    def set_minutes_per_unit(self, minutes: int | None) -> None:
+        if minutes is None:
+            self.hours_per_unit = None
+            return
+        self.hours_per_unit = Decimal(minutes) / Decimal(60)

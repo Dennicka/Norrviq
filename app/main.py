@@ -21,7 +21,11 @@ from .routers import (
     web_workers,
 )
 from .security import require_auth
-from .services.bootstrap import ensure_default_cost_categories, ensure_default_legal_notes
+from .services.bootstrap import (
+    ensure_default_cost_categories,
+    ensure_default_legal_notes,
+    ensure_default_worktypes,
+)
 
 settings = get_settings()
 
@@ -45,6 +49,7 @@ def startup_event():
         get_or_create_settings(db)
         ensure_default_cost_categories(db)
         ensure_default_legal_notes(db)
+        ensure_default_worktypes(db)
     finally:
         db.close()
 

@@ -6,8 +6,13 @@ from app.db import SessionLocal
 from app.main import app
 from app.models.cost import CostCategory
 from app.models.legal_note import LegalNote
+from app.models.worktype import WorkType
 from app.models.settings import get_or_create_settings
-from app.services.bootstrap import ensure_default_cost_categories, ensure_default_legal_notes
+from app.services.bootstrap import (
+    ensure_default_cost_categories,
+    ensure_default_legal_notes,
+    ensure_default_worktypes,
+)
 
 client = TestClient(app)
 settings = get_settings()
@@ -25,12 +30,16 @@ def test_bootstrap_creates_defaults():
     try:
         ensure_default_cost_categories(db)
         ensure_default_legal_notes(db)
+        ensure_default_worktypes(db)
 
         codes = {c.code for c in db.query(CostCategory).all()}
         assert {"MATERIALS", "FUEL", "PARKING", "RENT", "OTHER"}.issubset(codes)
 
         note_codes = {n.code for n in db.query(LegalNote).all()}
         assert {"ROT_BASICS", "MOMS_BASICS"}.issubset(note_codes)
+
+        worktype_codes = {wt.code for wt in db.query(WorkType).all()}
+        assert {"COVER_FLOOR_PAPER", "ROOM_CLEANUP_BASIC"}.issubset(worktype_codes)
     finally:
         db.close()
 
