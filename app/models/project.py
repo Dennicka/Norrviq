@@ -50,21 +50,6 @@ class Project(Base):
     cost_items = relationship("ProjectCostItem", back_populates="project", cascade="all, delete-orphan")
 
 
-class Room(Base):
-    __tablename__ = "rooms"
-
-    id = Column(Integer, primary_key=True, index=True)
-    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
-    name = Column(String(255), nullable=False)
-    walls_area_m2 = Column(Numeric(10, 2), nullable=True)
-    ceiling_area_m2 = Column(Numeric(10, 2), nullable=True)
-    floor_area_m2 = Column(Numeric(10, 2), nullable=True)
-    plinth_length_m = Column(Numeric(10, 2), nullable=True)
-
-    project = relationship("Project", back_populates="rooms")
-    work_items = relationship("ProjectWorkItem", back_populates="room")
-
-
 class ProjectWorkItem(Base):
     __tablename__ = "project_work_items"
 

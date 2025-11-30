@@ -5,7 +5,6 @@ from starlette.middleware.sessions import SessionMiddleware
 from .config import get_settings
 from .db import Base, SessionLocal, engine
 from .dependencies import get_current_lang
-from .models import client, cost, legal_note, material, project, settings as settings_model, worker, worktype  # noqa: F401
 from .models.settings import get_or_create_settings
 from .routers import (
     web_auth,
@@ -17,6 +16,7 @@ from .routers import (
     web_settings,
     web_stats,
     web_materials,
+    web_rooms,
     web_worktypes,
     web_workers,
 )
@@ -66,5 +66,6 @@ app.include_router(web_settings.router, dependencies=[Depends(require_auth)])
 app.include_router(web_costs.router, dependencies=[Depends(require_auth)])
 app.include_router(web_legal.router, dependencies=[Depends(require_auth)])
 app.include_router(web_materials.router, dependencies=[Depends(require_auth)])
+app.include_router(web_rooms.router, dependencies=[Depends(require_auth)])
 app.include_router(web_workers.router, dependencies=[Depends(require_auth)])
 app.include_router(web_stats.router, dependencies=[Depends(require_auth)])

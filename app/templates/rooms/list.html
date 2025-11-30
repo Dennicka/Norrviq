@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t("rooms.section_title") }}</h1>
+<p>{{ t("rooms.help") }}</p>
+<p>
+    <a href="/projects/{{ project.id }}">{{ project.name }}</a> |
+    <a href="/projects/{{ project.id }}/rooms/create">{{ t("label.create") }}</a>
+</p>
+<table>
+    <thead>
+        <tr>
+            <th>{{ t("label.name") }}</th>
+            <th>{{ t("rooms.field.floor_area") }}</th>
+            <th>{{ t("rooms.field.wall_perimeter") }}</th>
+            <th>{{ t("rooms.field.wall_height") }}</th>
+            <th>{{ t("rooms.field.wall_area") }}</th>
+            <th>{{ t("rooms.field.ceiling_area") }}</th>
+            <th>{{ t("rooms.field.baseboard_length") }}</th>
+            <th>{{ t("label.actions") }}</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for room in rooms %}
+        <tr>
+            <td>{{ room.name }}</td>
+            <td>{{ room.floor_area_m2 or '' }}</td>
+            <td>{{ room.wall_perimeter_m or '' }}</td>
+            <td>{{ room.wall_height_m or '' }}</td>
+            <td>{{ room.wall_area_m2 or '' }}</td>
+            <td>{{ room.ceiling_area_m2 or '' }}</td>
+            <td>{{ room.baseboard_length_m or '' }}</td>
+            <td>
+                <a href="/projects/{{ project.id }}/rooms/{{ room.id }}/edit">{{ t("projects.edit") }}</a>
+                <form method="post" action="/projects/{{ project.id }}/rooms/{{ room.id }}/delete" style="display:inline;">
+                    <button type="submit" onclick="return confirm('{{ t("label.delete") }}?');">{{ t("label.delete") }}</button>
+                </form>
+            </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8">—</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}
