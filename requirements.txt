@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+alembic
+jinja2
+pydantic
+pydantic-settings
+pytest
+ruff
