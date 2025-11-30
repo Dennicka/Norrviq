@@ -1,18 +1,21 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>{{ t("worktypes.title") }}</h1>
+<h1>{{ t("worktypes.list.title") }}</h1>
 <div class="actions">
     <a class="button" href="/worktypes/new">{{ t("worktypes.new") }}</a>
 </div>
+{% if error_message %}
+<div class="alert alert-warning">{{ t(error_message) }}</div>
+{% endif %}
 <table>
     <thead>
         <tr>
             <th>{{ t("label.code") }}</th>
             <th>{{ t("label.category") }}</th>
-            <th>{{ t("label.unit") }}</th>
+            <th>{{ t("worktypes.field.unit") }}</th>
             <th>{{ t("label.name_ru") }}</th>
             <th>{{ t("label.name_sv") }}</th>
-            <th>{{ t("label.hours_per_unit") }}</th>
+            <th>{{ t("worktypes.field.minutes_per_unit") }}<br><small>({{ t("worktypes.field.hours_per_unit") }})</small></th>
             <th>{{ t('label.active') }}</th>
             <th>{{ t("label.actions") }}</th>
         </tr>
@@ -22,20 +25,32 @@
         <tr>
             <td>{{ wt.code }}</td>
             <td>{{ wt.category or '' }}</td>
-            <td>{{ wt.unit }}</td>
+            <td>{{ t('worktypes.units.' ~ wt.unit) }}</td>
             <td>{{ wt.name_ru }}</td>
             <td>{{ wt.name_sv }}</td>
-            <td>{{ wt.hours_per_unit }}</td>
+            <td>
+                {% if wt.minutes_per_unit is not none and wt.hours_per_unit is not none %}
+                    {{ wt.minutes_per_unit }} ({{ "%.2f"|format(wt.hours_per_unit) }})
+                {% else %}
+                    —
+                {% endif %}
+            </td>
             <td>{{ t('label.yes') if wt.is_active else t('label.no') }}</td>
             <td>
                 <a href="/worktypes/{{ wt.id }}/edit">{{ t("worktypes.edit") }}</a>
-                <form method="post" action="/worktypes/{{ wt.id }}/delete" style="display:inline" onsubmit="return confirm('Delete?')">
+                |
+                <a href="/worktypes/{{ wt.id }}/copy">{{ t("worktypes.action.copy") }}</a>
+                |
+                <form method="post" action="/worktypes/{{ wt.id }}/toggle-active" style="display:inline">
+                    <button type="submit">{{ wt.is_active and t('worktypes.action.deactivate') or t('worktypes.action.activate') }}</button>
+                </form>
+                <form method="post" action="/worktypes/{{ wt.id }}/delete" style="display:inline" onsubmit="return confirm('{{ t('label.delete') }}?')">
                     <button type="submit">{{ t('label.delete') }}</button>
                 </form>
             </td>
         </tr>
         {% else %}
-        <tr><td colspan="7">—</td></tr>
+        <tr><td colspan="8">—</td></tr>
         {% endfor %}
     </tbody>
 </table>

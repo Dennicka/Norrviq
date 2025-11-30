@@ -69,12 +69,22 @@
     <form method="post" action="/projects/{{ project.id }}/add-work-item">
         <div>
             <label>{{ t("label.work_type") }}</label>
-            <select name="work_type_id" required>
+            <select name="work_type_id" id="work-type-select" required>
                 <option value="">—</option>
                 {% for wt in worktypes %}
-                <option value="{{ wt.id }}">{{ wt.name_ru if lang == 'ru' else wt.name_sv }}</option>
+                <option
+                    value="{{ wt.id }}"
+                    data-unit="{{ wt.unit }}"
+                    data-unit-label="{{ t('worktypes.units.' ~ wt.unit) }}"
+                    data-minutes-per-unit="{{ wt.minutes_per_unit or '' }}"
+                    data-hours-per-unit="{{ wt.hours_per_unit or '' }}"
+                    data-base-difficulty-factor="{{ wt.base_difficulty_factor or '' }}"
+                >
+                    {{ wt.name_ru if lang == 'ru' else wt.name_sv }}
+                </option>
                 {% endfor %}
             </select>
+            <div id="worktype-info" class="muted"></div>
         </div>
         <div>
             <label>{{ t("label.room") }}</label>
@@ -304,6 +314,10 @@
     </ul>
 </section>
 <script>
+const unitTemplate = "{{ t('worktypes.info.unit_prefix') }}";
+const normTemplate = "{{ t('worktypes.info.base_norm') }}";
+const difficultyTemplate = "{{ t('worktypes.info.base_difficulty') }}";
+
 function updateRoomInfo() {
   const select = document.getElementById("room-select");
   const info = document.getElementById("room-info");
@@ -341,6 +355,42 @@ function updateRoomInfo() {
   });
 }
 
+function updateWorktypeInfo() {
+  const select = document.getElementById("work-type-select");
+  const info = document.getElementById("worktype-info");
+  const option = select ? select.options[select.selectedIndex] : null;
+
+  if (!info) return;
+  if (!option || !option.value) {
+    info.textContent = "";
+    return;
+  }
+
+  const unitLabel = option.getAttribute("data-unit-label") || option.getAttribute("data-unit") || "";
+  const minutes = option.getAttribute("data-minutes-per-unit");
+  const hours = option.getAttribute("data-hours-per-unit");
+  const difficulty = option.getAttribute("data-base-difficulty-factor");
+
+  const parts = [];
+  if (unitLabel) {
+    parts.push(unitTemplate.replace("{unit}", unitLabel));
+  }
+  if (minutes) {
+    const hoursValue = hours ? parseFloat(hours).toFixed(2) : "0.00";
+    parts.push(
+      normTemplate
+        .replace("{minutes}", minutes)
+        .replace("{hours}", hoursValue)
+        .replace("{unit}", unitLabel)
+    );
+  }
+  if (difficulty) {
+    parts.push(difficultyTemplate.replace("{difficulty}", difficulty));
+  }
+
+  info.textContent = parts.join(". ");
+}
+
 document.addEventListener("click", function (event) {
   const btn = event.target.closest("[data-fill-target]");
   if (!btn) return;
@@ -357,10 +407,14 @@ document.addEventListener("change", function (event) {
   if (event.target && event.target.id === "room-select") {
     updateRoomInfo();
   }
+  if (event.target && event.target.id === "work-type-select") {
+    updateWorktypeInfo();
+  }
 });
 
 document.addEventListener("DOMContentLoaded", function () {
   updateRoomInfo();
+  updateWorktypeInfo();
 });
 </script>
 {% endblock %}
