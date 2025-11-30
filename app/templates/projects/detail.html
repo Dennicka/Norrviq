@@ -1,6 +1,11 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>{{ project.name }}</h1>
+<p>
+    <a href="/projects/{{ project.id }}/offer?lang=sv" target="_blank">{{ t("offer.title") }} (SV)</a>
+    |
+    <a href="/projects/{{ project.id }}/offer?lang=ru" target="_blank">{{ t("offer.title") }} (RU)</a>
+</p>
 <section>
     <h2>{{ t("projects.detail") }}</h2>
     <p><strong>{{ t("label.client") }}:</strong> {{ project.client.name if project.client else "" }}</p>

@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', path='css/offer.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="offer-wrapper">
+    <div class="offer-toolbar">
+        <a class="secondary" href="/projects/{{ project.id }}/offer?lang=sv">{{ t("offer.language.sv") }}</a>
+        <a class="secondary" href="/projects/{{ project.id }}/offer?lang=ru">{{ t("offer.language.ru") }}</a>
+        <button type="button" onclick="window.print()">{{ t("offer.print") }}</button>
+    </div>
+    <div class="offer-page">
+        <div class="offer-header">
+            <div class="offer-company">
+                <h1>{{ t("offer.title") }}</h1>
+                <p><strong>Norrviq Måleri AB</strong></p>
+                <p>Kvarnbacksvägen 74, 174 63 Sundbyberg</p>
+                <p>info@norrviq.se · +46 70 123 45 67</p>
+            </div>
+            <div class="offer-meta">
+                <div>{{ t("offer.project_no") }} {{ project.id }}</div>
+                <div>{{ offer_date }}</div>
+                {% if project.name %}<div>{{ project.name }}</div>{% endif %}
+            </div>
+        </div>
+
+        <div class="offer-section">
+            <h2>{{ t("offer.client") }}</h2>
+            <p><strong>{{ client.name if client else '' }}</strong></p>
+            <p>{{ t("offer.site_address") }}: {{ project.address or (client.address if client else '') }}</p>
+        </div>
+
+        <div class="offer-section">
+            <h2>{{ t("offer.table.header.description") }}</h2>
+            <table class="offer-table">
+                <thead>
+                    <tr>
+                        <th style="width: 32px;">{{ t("offer.table.header.no") }}</th>
+                        <th>{{ t("offer.table.header.description") }}</th>
+                        <th style="width: 64px;">{{ t("offer.table.header.unit") }}</th>
+                        <th style="width: 80px;">{{ t("offer.table.header.quantity") }}</th>
+                        <th style="width: 120px;">{{ t("offer.table.header.unit_price") }}</th>
+                        <th style="width: 140px;">{{ t("offer.table.header.total") }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in work_items %}
+                    <tr>
+                        <td class="number">{{ loop.index }}</td>
+                        <td>
+                            {{ (item.work_type.description_ru if lang == 'ru' else item.work_type.description_sv) or (item.work_type.name_ru if lang == 'ru' else item.work_type.name_sv) }}
+                        </td>
+                        <td>{{ item.work_type.unit }}</td>
+                        <td class="number">{{ item.quantity }}</td>
+                        <td class="number">
+                            {% if item.quantity %}
+                                {{ (item.calculated_cost_without_moms or 0) / item.quantity }}
+                            {% else %}
+                                0
+                            {% endif %}
+                        </td>
+                        <td class="total">{{ item.calculated_cost_without_moms or 0 }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6">—</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <div class="offer-summary" style="margin-top: 8px;">
+                <div><span>{{ t("offer.summary.work_sum") }}</span><span>{{ project.work_sum_without_moms or 0 }}</span></div>
+                <div><span>{{ t("offer.summary.moms") }}</span><span>{{ project.moms_amount or 0 }}</span></div>
+                {% if project.use_rot and client and client.is_rot_eligible %}
+                <div><span>{{ t("offer.summary.rot") }}</span><span>{{ project.rot_amount or 0 }}</span></div>
+                {% endif %}
+                <div><strong>{{ t("offer.summary.total") }}</strong><strong>{{ project.client_pays_total or 0 }}</strong></div>
+            </div>
+        </div>
+
+        <div class="offer-section offer-notes">
+            <h2>{{ t("legal_notes.title") }}</h2>
+            {% if legal_notes.get("ROT_BASICS") %}
+            <h3>{{ legal_notes["ROT_BASICS"].title_ru if lang == 'ru' else legal_notes["ROT_BASICS"].title_sv }}</h3>
+            <p>{{ legal_notes["ROT_BASICS"].text_ru if lang == 'ru' else legal_notes["ROT_BASICS"].text_sv }}</p>
+            {% endif %}
+            {% if legal_notes.get("MOMS_BASICS") %}
+            <h3>{{ legal_notes["MOMS_BASICS"].title_ru if lang == 'ru' else legal_notes["MOMS_BASICS"].title_sv }}</h3>
+            <p>{{ legal_notes["MOMS_BASICS"].text_ru if lang == 'ru' else legal_notes["MOMS_BASICS"].text_sv }}</p>
+            {% endif %}
+        </div>
+
+        <div class="offer-section offer-signatures">
+            <div>
+                <div class="line"></div>
+                <p>{{ t("offer.signature.company") }}</p>
+            </div>
+            <div>
+                <div class="line"></div>
+                <p>{{ t("offer.signature.client") }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

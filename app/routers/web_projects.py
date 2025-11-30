@@ -1,17 +1,21 @@
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import RedirectResponse
+from datetime import date
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session, selectinload
 
 from app.dependencies import get_current_lang, get_db, template_context, templates
 from app.models.client import Client
 from app.models.cost import CostCategory, ProjectCostItem
+from app.models.legal_note import LegalNote
 from app.models.project import Project, ProjectWorkItem, ProjectWorkerAssignment
 from app.models.worker import Worker
 from app.models.worktype import WorkType
 from app.services.estimates import calculate_project_totals, recalculate_project_work_items
 from app.services.finance import calculate_project_financials
+from app.security import require_auth
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -82,6 +86,57 @@ async def project_detail(
     context = template_context(request, lang)
     context.update({"project": project, "worktypes": worktypes, "cost_categories": cost_categories, "workers": workers})
     return templates.TemplateResponse("projects/detail.html", context)
+
+
+@router.get("/{project_id}/offer", response_class=HTMLResponse)
+def project_offer(
+    project_id: int,
+    request: Request,
+    lang: str = Query("sv"),
+    db: Session = Depends(get_db),
+    current_user: str = Depends(require_auth),
+):
+    """
+    Показывает чистый оферт-документ для клиента.
+    """
+
+    if lang not in ("ru", "sv"):
+        lang = "sv"
+
+    project = (
+        db.query(Project)
+        .options(
+            selectinload(Project.client),
+            selectinload(Project.work_items).selectinload(ProjectWorkItem.work_type),
+        )
+        .filter(Project.id == project_id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    recalculate_project_work_items(db, project)
+    calculate_project_totals(db, project)
+
+    legal_notes = {
+        note.code: note
+        for note in db.query(LegalNote)
+        .filter(LegalNote.code.in_(["ROT_BASICS", "MOMS_BASICS"]))
+        .all()
+    }
+
+    context = template_context(request, lang)
+    context.update(
+        {
+            "project": project,
+            "client": project.client,
+            "work_items": project.work_items,
+            "offer_date": project.created_at.date() if project.created_at else date.today(),
+            "legal_notes": legal_notes,
+        }
+    )
+
+    return templates.TemplateResponse("projects/offer.html", context)
 
 
 @router.post("/{project_id}/add-work-item")
