@@ -21,6 +21,22 @@ class Project(Base):
     rot_amount = Column(Numeric(12, 2), nullable=True)
     client_pays_total = Column(Numeric(12, 2), nullable=True)
 
+    salary_fund = Column(Numeric(12, 2), nullable=True)
+    employer_taxes = Column(Numeric(12, 2), nullable=True)
+    total_salary_cost = Column(Numeric(12, 2), nullable=True)
+
+    materials_cost = Column(Numeric(12, 2), nullable=True)
+    fuel_cost = Column(Numeric(12, 2), nullable=True)
+    parking_cost = Column(Numeric(12, 2), nullable=True)
+    rent_cost = Column(Numeric(12, 2), nullable=True)
+    other_cost = Column(Numeric(12, 2), nullable=True)
+
+    overhead_amount = Column(Numeric(12, 2), nullable=True)
+
+    total_cost = Column(Numeric(12, 2), nullable=True)
+    profit = Column(Numeric(12, 2), nullable=True)
+    margin_percent = Column(Numeric(6, 2), nullable=True)
+
     client = relationship("Client", back_populates="projects")
     rooms = relationship("Room", back_populates="project", cascade="all, delete-orphan")
     work_items = relationship("ProjectWorkItem", back_populates="project", cascade="all, delete-orphan")
