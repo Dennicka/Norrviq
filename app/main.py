@@ -1,5 +1,6 @@
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.sessions import SessionMiddleware
 
 from .config import get_settings
 from .db import Base, SessionLocal, engine
@@ -7,6 +8,7 @@ from .dependencies import get_current_lang
 from .models import client, cost, legal_note, project, settings as settings_model, worker, worktype  # noqa: F401
 from .models.settings import get_or_create_settings
 from .routers import (
+    web_auth,
     web_clients,
     web_costs,
     web_legal,
@@ -17,11 +19,18 @@ from .routers import (
     web_worktypes,
     web_workers,
 )
+from .security import require_auth
 from .services.bootstrap import ensure_default_cost_categories, ensure_default_legal_notes
 
 settings = get_settings()
 
 app = FastAPI(title=settings.app_name)
+
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=settings.secret_key,
+    session_cookie=settings.session_cookie_name,
+)
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
@@ -48,11 +57,12 @@ async def add_lang_to_request(request: Request, call_next):
 
 
 app.include_router(web_root.router)
-app.include_router(web_clients.router)
-app.include_router(web_worktypes.router)
-app.include_router(web_projects.router)
-app.include_router(web_settings.router)
-app.include_router(web_costs.router)
-app.include_router(web_legal.router)
-app.include_router(web_workers.router)
-app.include_router(web_stats.router)
+app.include_router(web_auth.router)
+app.include_router(web_clients.router, dependencies=[Depends(require_auth)])
+app.include_router(web_worktypes.router, dependencies=[Depends(require_auth)])
+app.include_router(web_projects.router, dependencies=[Depends(require_auth)])
+app.include_router(web_settings.router, dependencies=[Depends(require_auth)])
+app.include_router(web_costs.router, dependencies=[Depends(require_auth)])
+app.include_router(web_legal.router, dependencies=[Depends(require_auth)])
+app.include_router(web_workers.router, dependencies=[Depends(require_auth)])
+app.include_router(web_stats.router, dependencies=[Depends(require_auth)])

@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.db import SessionLocal
 from app.main import app
 from app.models.cost import CostCategory
@@ -9,6 +10,14 @@ from app.models.settings import get_or_create_settings
 from app.services.bootstrap import ensure_default_cost_categories, ensure_default_legal_notes
 
 client = TestClient(app)
+settings = get_settings()
+
+
+def login():
+    client.post(
+        "/login",
+        data={"username": settings.admin_username, "password": settings.admin_password},
+    )
 
 
 def test_bootstrap_creates_defaults():
@@ -27,6 +36,7 @@ def test_bootstrap_creates_defaults():
 
 
 def test_settings_page_works():
+    login()
     response = client.get("/settings/")
     assert response.status_code == 200
 

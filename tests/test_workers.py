@@ -10,6 +10,7 @@ from app.main import app
 from app.models import Project, ProjectWorkerAssignment, Worker
 from app.models.settings import get_or_create_settings
 from app.services.workers import get_worker_aggregates
+from app.config import get_settings
 
 
 @pytest.fixture()
@@ -44,5 +45,10 @@ def test_workers_aggregation_uses_default_rate(db_session):
 
 def test_workers_page_returns_200():
     client = TestClient(app)
+    settings = get_settings()
+    client.post(
+        "/login",
+        data={"username": settings.admin_username, "password": settings.admin_password},
+    )
     response = client.get("/workers/")
     assert response.status_code == 200

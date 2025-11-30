@@ -21,7 +21,14 @@ async def get_current_lang(request: Request) -> str:
 
 def template_context(request: Request, lang: str) -> dict:
     translator: Callable[[str], str] = make_t(lang)
-    return {"request": request, "lang": lang, "t": translator, "app_name": settings.app_name}
+    current_user = request.session.get("user") if hasattr(request, "session") else None
+    return {
+        "request": request,
+        "lang": lang,
+        "t": translator,
+        "app_name": settings.app_name,
+        "current_user": current_user,
+    }
 
 
 def get_db() -> Session:
