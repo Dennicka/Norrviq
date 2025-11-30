@@ -8,3 +8,4 @@ pydantic-settings
 pytest
 ruff
 httpx
+python-multipart

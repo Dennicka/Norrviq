@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ note and note.title_ru or t("legal_notes.new") }}</h1>
+<form method="post">
+    <div class="form-row">
+        <label for="code">{{ t("label.code") }}</label>
+        <input type="text" id="code" name="code" value="{{ note.code if note else '' }}">
+    </div>
+    <div class="form-row">
+        <label for="title_ru">{{ t("label.name_ru") }}</label>
+        <input type="text" id="title_ru" name="title_ru" value="{{ note.title_ru if note else '' }}">
+    </div>
+    <div class="form-row">
+        <label for="text_ru">{{ t("label.description_ru") }}</label>
+        <textarea id="text_ru" name="text_ru">{{ note.text_ru if note else '' }}</textarea>
+    </div>
+    <div class="form-row">
+        <label for="title_sv">{{ t("label.name_sv") }}</label>
+        <input type="text" id="title_sv" name="title_sv" value="{{ note.title_sv if note else '' }}">
+    </div>
+    <div class="form-row">
+        <label for="text_sv">{{ t("label.description_sv") }}</label>
+        <textarea id="text_sv" name="text_sv">{{ note.text_sv if note else '' }}</textarea>
+    </div>
+    <div class="form-row">
+        <button type="submit">{{ t("common.save") }}</button>
+    </div>
+</form>
+{% endblock %}
