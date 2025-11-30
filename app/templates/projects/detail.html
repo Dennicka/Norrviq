@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ project.name }}</h1>
+<section>
+    <h2>{{ t("projects.detail") }}</h2>
+    <p><strong>{{ t("label.client") }}:</strong> {{ project.client.name if project.client else "" }}</p>
+    <p><strong>{{ t("label.address") }}:</strong> {{ project.address or '' }}</p>
+    <p><strong>{{ t("label.status") }}:</strong> {{ project.status }}</p>
+    <p><strong>{{ t("label.use_rot") }}:</strong> {{ t("label.yes") if project.use_rot else t("label.no") }}</p>
+</section>
+
+<section>
+    <h2>{{ t("label.add_work_item") }}</h2>
+    <form method="post" action="/projects/{{ project.id }}/add-work-item">
+        <div>
+            <label>{{ t("label.work_type") }}</label>
+            <select name="work_type_id" required>
+                <option value="">—</option>
+                {% for wt in worktypes %}
+                <option value="{{ wt.id }}">{{ wt.name_ru if lang == 'ru' else wt.name_sv }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label>{{ t("label.quantity") }}</label>
+            <input type="number" step="0.01" name="quantity" required>
+        </div>
+        <div>
+            <label>{{ t("label.difficulty") }}</label>
+            <input type="number" step="0.01" name="difficulty_factor" value="1.0">
+        </div>
+        <div>
+            <label>{{ t("label.comment") }}</label>
+            <textarea name="comment"></textarea>
+        </div>
+        <button type="submit">{{ t("label.add_work_item") }}</button>
+    </form>
+</section>
+
+<section>
+    <h2>{{ t("label.work_type") }}</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>{{ t("label.work_type") }}</th>
+                <th>{{ t("label.quantity") }}</th>
+                <th>{{ t("label.difficulty") }}</th>
+                <th>{{ t("label.hours") }}</th>
+                <th>{{ t("label.cost_without_moms") }}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in project.work_items %}
+            <tr>
+                <td>{{ item.work_type.name_ru if lang == 'ru' else item.work_type.name_sv }}</td>
+                <td>{{ item.quantity }}</td>
+                <td>{{ item.difficulty_factor }}</td>
+                <td>{{ item.calculated_hours or '' }}</td>
+                <td>{{ item.calculated_cost_without_moms or '' }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5">—</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+
+<section>
+    <h2>{{ t("projects.recalculate") }}</h2>
+    <div>
+        <p>{{ t("label.work_sum_without_moms") }}: {{ project.work_sum_without_moms or '' }}</p>
+        <p>{{ t("label.moms_amount") }}: {{ project.moms_amount or '' }}</p>
+        <p>{{ t("label.rot_amount") }}: {{ project.rot_amount or '' }}</p>
+        <p>{{ t("label.client_pays_total") }}: {{ project.client_pays_total or '' }}</p>
+    </div>
+    <form method="post" action="/projects/{{ project.id }}/recalculate">
+        <button type="submit">{{ t("projects.recalculate") }}</button>
+    </form>
+</section>
+{% endblock %}

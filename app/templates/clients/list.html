@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t("clients.title") }}</h1>
+<div class="actions">
+    <a class="button" href="/clients/new">{{ t("clients.new") }}</a>
+</div>
+<table>
+    <thead>
+        <tr>
+            <th>{{ t("label.name") }}</th>
+            <th>{{ t("label.phone") }}</th>
+            <th>{{ t("label.email") }}</th>
+            <th>{{ t("label.is_private_person") }}</th>
+            <th>{{ t("label.actions") }}</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for client in clients %}
+        <tr>
+            <td>{{ client.name }}</td>
+            <td>{{ client.phone or '' }}</td>
+            <td>{{ client.email or '' }}</td>
+            <td>{{ t("label.private_person") if client.is_private_person else t("label.company") }}</td>
+            <td><a href="/clients/{{ client.id }}/edit">{{ t("clients.edit") }}</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5">—</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

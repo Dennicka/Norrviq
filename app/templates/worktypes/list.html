@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t("worktypes.title") }}</h1>
+<div class="actions">
+    <a class="button" href="/worktypes/new">{{ t("worktypes.new") }}</a>
+</div>
+<table>
+    <thead>
+        <tr>
+            <th>{{ t("label.code") }}</th>
+            <th>{{ t("label.category") }}</th>
+            <th>{{ t("label.unit") }}</th>
+            <th>{{ t("label.name_ru") }}</th>
+            <th>{{ t("label.name_sv") }}</th>
+            <th>{{ t("label.hours_per_unit") }}</th>
+            <th>{{ t("label.actions") }}</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for wt in worktypes %}
+        <tr>
+            <td>{{ wt.code }}</td>
+            <td>{{ wt.category or '' }}</td>
+            <td>{{ wt.unit }}</td>
+            <td>{{ wt.name_ru }}</td>
+            <td>{{ wt.name_sv }}</td>
+            <td>{{ wt.hours_per_unit }}</td>
+            <td><a href="/worktypes/{{ wt.id }}/edit">{{ t("worktypes.edit") }}</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7">—</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}
