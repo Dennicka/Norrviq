@@ -41,7 +41,7 @@ def test_settings_page_works():
         "default_overhead_percent": "10",
         "default_worker_tax_percent_for_net": "30",
     }
-    post_response = client.post("/settings/", data=form_data, allow_redirects=False)
+    post_response = client.post("/settings/", data=form_data, follow_redirects=False)
     assert post_response.status_code in (302, 303)
 
     db: Session = SessionLocal()
