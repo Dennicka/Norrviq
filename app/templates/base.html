@@ -16,6 +16,14 @@
             <a href="/stats/">{{ t("menu.stats") }}</a>
             <a href="/settings/">{{ t("menu.settings") }}</a>
         </div>
+        <div class="auth-links">
+            {% if current_user %}
+                <span>{{ t("auth.logged_in_as") }} {{ current_user }}</span>
+                <a href="/logout">{{ t("auth.logout") }}</a>
+            {% else %}
+                <a href="/login">{{ t("auth.login_button") }}</a>
+            {% endif %}
+        </div>
         <div class="lang-switcher">
             <a href="/lang/ru" class="{{ 'active' if lang == 'ru' else '' }}">RU</a>
             <span>|</span>

@@ -9,6 +9,7 @@ from app.db import Base
 from app.main import app
 from app.models import Client, Project
 from app.services.stats import get_profit_by_client, get_profit_by_month
+from app.config import get_settings
 
 
 def create_session():
@@ -78,5 +79,10 @@ def test_profit_by_client_basic():
 
 def test_stats_page_returns_200():
     client = TestClient(app)
+    settings = get_settings()
+    client.post(
+        "/login",
+        data={"username": settings.admin_username, "password": settings.admin_password},
+    )
     response = client.get("/stats/")
     assert response.status_code == 200
