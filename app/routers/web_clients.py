@@ -2,8 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
-from app.dependencies import get_current_lang, get_db, template_context, templates
+from app.dependencies import add_flash_message, get_current_lang, get_db, template_context, templates
+from app.i18n import make_t
 from app.models.client import Client
+from app.models.project import Project
 
 router = APIRouter(prefix="/clients", tags=["clients"])
 
@@ -16,6 +18,23 @@ async def list_clients(
     context = template_context(request, lang)
     context["clients"] = clients
     return templates.TemplateResponse("clients/list.html", context)
+
+
+@router.get("/{client_id}")
+async def client_detail(
+    client_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    lang: str = Depends(get_current_lang),
+):
+    client = db.query(Client).filter(Client.id == client_id).first()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    projects = db.query(Project).filter(Project.client_id == client_id).all()
+    context = template_context(request, lang)
+    context.update({"client": client, "projects": projects})
+    return templates.TemplateResponse("clients/detail.html", context)
 
 
 @router.get("/new")
@@ -87,4 +106,29 @@ async def update_client(
     db.add(client)
     db.commit()
 
+    return RedirectResponse(url="/clients/", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{client_id}/delete")
+async def delete_client(
+    client_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    lang: str = Depends(get_current_lang),
+):
+    translator = make_t(lang)
+    client = db.get(Client, client_id)
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    project_count = db.query(Project).filter(Project.client_id == client_id).count()
+    if project_count:
+        add_flash_message(request, translator("clients.delete.blocked"), "error")
+        return RedirectResponse(
+            url=f"/clients/{client_id}", status_code=status.HTTP_303_SEE_OTHER
+        )
+
+    db.delete(client)
+    db.commit()
+    add_flash_message(request, translator("clients.delete.success"), "success")
     return RedirectResponse(url="/clients/", status_code=status.HTTP_303_SEE_OTHER)

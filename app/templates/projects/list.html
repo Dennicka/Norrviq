@@ -25,10 +25,17 @@
             <td>{{ project.planned_start_date or '' }}</td>
             <td>{{ project.planned_end_date or '' }}</td>
             <td>{{ project.client_pays_total or '' }}</td>
-            <td><a href="/projects/{{ project.id }}">{{ t("projects.detail") }}</a></td>
+            <td>
+                <a href="/projects/{{ project.id }}">{{ t("projects.detail") }}</a>
+                |
+                <a href="/projects/{{ project.id }}/edit">{{ t('projects.edit') }}</a>
+                <form method="post" action="/projects/{{ project.id }}/delete" style="display:inline;">
+                    <button type="submit" onclick="return confirm('{{ t("label.delete") }}?');">{{ t('label.delete') }}</button>
+                </form>
+            </td>
         </tr>
         {% else %}
-        <tr><td colspan="5">—</td></tr>
+        <tr><td colspan="7">—</td></tr>
         {% endfor %}
     </tbody>
 </table>

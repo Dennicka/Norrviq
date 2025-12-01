@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t('projects.edit') }}: {{ t('label.work_type') }}</h1>
+<p><a href="/projects/{{ project.id }}">{{ t('projects.detail') }}</a></p>
+<form method="post" action="/projects/{{ project.id }}/items/{{ item.id }}/edit">
+    <div>
+        <label>{{ t("label.room") }}</label>
+        <select name="room_id">
+            <option value="">{{ t('rooms.no_room') }}</option>
+            {% for room in rooms %}
+            <option value="{{ room.id }}" {% if item.room_id == room.id %}selected{% endif %}>{{ room.name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div>
+        <label>{{ t("label.work_type") }}</label>
+        <select name="work_type_id" required>
+            <option value="">—</option>
+            {% for wt in worktypes %}
+            <option value="{{ wt.id }}" {% if item.work_type_id == wt.id %}selected{% endif %}>
+                {{ wt.name_ru if lang == 'ru' else wt.name_sv }}
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+    <div>
+        <label>{{ t("label.quantity") }}</label>
+        <input type="number" step="0.01" name="quantity" value="{{ item.quantity }}" required>
+    </div>
+    <div>
+        <label>{{ t("label.difficulty") }}</label>
+        <input type="number" step="0.01" name="difficulty_factor" value="{{ item.difficulty_factor }}">
+    </div>
+    <div>
+        <label>{{ t("label.comment") }}</label>
+        <textarea name="comment">{{ item.comment or '' }}</textarea>
+    </div>
+    <div class="actions">
+        <button type="submit">{{ t('label.save') }}</button>
+        <a href="/projects/{{ project.id }}">{{ t('label.back') }}</a>
+    </div>
+</form>
+{% endblock %}

@@ -21,7 +21,13 @@
             <td>{{ client.phone or '' }}</td>
             <td>{{ client.email or '' }}</td>
             <td>{{ t("label.private_person") if client.is_private_person else t("label.company") }}</td>
-            <td><a href="/clients/{{ client.id }}/edit">{{ t("clients.edit") }}</a></td>
+            <td>
+                <a href="/clients/{{ client.id }}">{{ t('clients.detail') }}</a> |
+                <a href="/clients/{{ client.id }}/edit">{{ t("clients.edit") }}</a>
+                <form method="post" action="/clients/{{ client.id }}/delete" style="display:inline;">
+                    <button type="submit" onclick="return confirm('{{ t("label.delete") }}?');">{{ t('label.delete') }}</button>
+                </form>
+            </td>
         </tr>
         {% else %}
         <tr><td colspan="5">—</td></tr>

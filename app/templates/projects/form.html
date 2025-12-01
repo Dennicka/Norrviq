@@ -20,34 +20,53 @@
         <input type="text" name="address" value="{{ project.address if project else '' }}">
     </div>
     <div>
+        <label>{{ t("label.comment") }}</label>
+        <textarea name="description">{{ project.description if project else '' }}</textarea>
+    </div>
+    <div>
         <label>
             <input type="checkbox" name="use_rot" {% if project and project.use_rot %}checked{% endif %}>
             {{ t("label.use_rot") }}
         </label>
     </div>
     <div>
-        <label>{{ t("label.status") }}</label>
+        <label>
+            {{ t("label.status") }}
+            <span class="help" title="{{ t('project.status.help') }}">?</span>
+        </label>
         <select name="status">
             {% set current_status = project.status if project else 'draft' %}
-            {% for st in ['draft','sent','accepted','in_progress','completed'] %}
+            {% for st in ['draft','sent','accepted','in_progress','done'] %}
             <option value="{{ st }}" {% if current_status == st %}selected{% endif %}>{{ st }}</option>
             {% endfor %}
         </select>
     </div>
     <div>
-        <label>{{ t('label.planned_start_date') }}</label>
+        <label>
+            {{ t('label.planned_start_date') }}
+            <span class="help" title="{{ t('project.dates.help') }}">?</span>
+        </label>
         <input type="date" name="planned_start_date" value="{{ project.planned_start_date }}">
     </div>
     <div>
-        <label>{{ t('label.planned_end_date') }}</label>
+        <label>
+            {{ t('label.planned_end_date') }}
+            <span class="help" title="{{ t('project.dates.help') }}">?</span>
+        </label>
         <input type="date" name="planned_end_date" value="{{ project.planned_end_date }}">
     </div>
     <div>
-        <label>{{ t('label.actual_start_date') }}</label>
+        <label>
+            {{ t('label.actual_start_date') }}
+            <span class="help" title="{{ t('project.dates.help') }}">?</span>
+        </label>
         <input type="date" name="actual_start_date" value="{{ project.actual_start_date }}">
     </div>
     <div>
-        <label>{{ t('label.actual_end_date') }}</label>
+        <label>
+            {{ t('label.actual_end_date') }}
+            <span class="help" title="{{ t('project.dates.help') }}">?</span>
+        </label>
         <input type="date" name="actual_end_date" value="{{ project.actual_end_date }}">
     </div>
     <div class="actions">
