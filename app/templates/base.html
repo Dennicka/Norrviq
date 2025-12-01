@@ -33,6 +33,9 @@
         </div>
     </nav>
     <main>
+        {% if flash_message %}
+        <div class="flash {{ flash_message.category }}">{{ flash_message.text }}</div>
+        {% endif %}
         {% block content %}{% endblock %}
     </main>
 </body>

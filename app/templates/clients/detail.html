@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ client.name }}</h1>
+<p>
+    <a href="/clients/">{{ t('clients.title') }}</a> |
+    <a href="/clients/{{ client.id }}/edit">{{ t('clients.edit') }}</a>
+    <form method="post" action="/clients/{{ client.id }}/delete" style="display:inline;">
+        <button type="submit" onclick="return confirm('{{ t('label.delete') }}?');">{{ t('label.delete') }}</button>
+    </form>
+</p>
+<div>
+    <p><strong>{{ t('label.contact_person') }}:</strong> {{ client.contact_person or '' }}</p>
+    <p><strong>{{ t('label.phone') }}:</strong> {{ client.phone or '' }}</p>
+    <p><strong>{{ t('label.email') }}:</strong> {{ client.email or '' }}</p>
+    <p><strong>{{ t('label.address') }}:</strong> {{ client.address or '' }}</p>
+    <p><strong>{{ t('label.comment') }}:</strong> {{ client.comment or '' }}</p>
+    <p><strong>{{ t('label.is_private_person') }}:</strong> {{ t('label.yes') if client.is_private_person else t('label.no') }}</p>
+    <p><strong>{{ t('label.is_rot_eligible') }}:</strong> {{ t('label.yes') if client.is_rot_eligible else t('label.no') }}</p>
+</div>
+<section>
+    <h2>{{ t('projects.title') }}</h2>
+    {% if projects %}
+    <ul>
+        {% for project in projects %}
+        <li><a href="/projects/{{ project.id }}">{{ project.name }}</a></li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p>{{ t('label.none') }}</p>
+    {% endif %}
+</section>
+{% endblock %}
