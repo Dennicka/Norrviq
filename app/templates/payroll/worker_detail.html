@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t("payroll.worker_detail.title") }}</h1>
+<p>{{ t("payroll.worker_detail.help") }}</p>
+
+<form method="get" class="filters">
+    <label>
+        {{ t("reports.period.from_date") }}
+        <input type="date" name="from_date" value="{{ from_date }}">
+    </label>
+    <label>
+        {{ t("reports.period.to_date") }}
+        <input type="date" name="to_date" value="{{ to_date }}">
+    </label>
+    <button type="submit">{{ t("common.show") if t("common.show") else t("label.save") }}</button>
+</form>
+
+<section class="worker-card">
+    <h2>{{ worker.name }}</h2>
+    <p>{{ worker.role }}</p>
+    <p>{{ t("payroll.field.hourly_rate") }}: {{ summary.gross_hourly_rate }}</p>
+    <p>{{ t("payroll.field.net_tax_percent") }}: {{ summary.net_tax_percent }}</p>
+</section>
+
+<section class="summary">
+    <h3>{{ t("payroll.summary.title") }}</h3>
+    <table>
+        <tbody>
+            <tr><th>{{ t("payroll.field.planned_hours") }}</th><td>{{ summary.total_planned_hours }}</td></tr>
+            <tr><th>{{ t("payroll.field.actual_hours") }}</th><td>{{ summary.total_actual_hours }}</td></tr>
+            <tr><th>{{ t("payroll.field.gross_pay") }}</th><td>{{ summary.gross_pay }}</td></tr>
+            <tr><th>{{ t("payroll.field.employer_taxes") }}</th><td>{{ summary.employer_taxes }}</td></tr>
+            <tr><th>{{ t("payroll.field.total_employer_cost") }}</th><td>{{ summary.total_employer_cost }}</td></tr>
+            <tr><th>{{ t("payroll.field.net_pay_approx") }}</th><td>{{ summary.net_pay_approx }}</td></tr>
+        </tbody>
+    </table>
+</section>
+
+<section>
+    <h3>{{ t("payroll.worker_detail.title") }}</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>{{ t("projects.name") }}</th>
+                <th>{{ t("clients.title") }}</th>
+                <th>{{ t("projects.status") }}</th>
+                <th>{{ t("projects.dates") }}</th>
+                <th>{{ t("payroll.field.planned_hours") }}</th>
+                <th>{{ t("payroll.field.actual_hours") }}</th>
+                <th>{{ t("payroll.field.gross_pay") }}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for assignment in assignments %}
+            <tr>
+                <td>{{ assignment.project.name }}</td>
+                <td>{{ assignment.project.client.name if assignment.project.client else '' }}</td>
+                <td>{{ assignment.project.status }}</td>
+                <td>{{ assignment.project.planned_start_date }} - {{ assignment.project.planned_end_date }}</td>
+                <td>{{ assignment.planned_hours }}</td>
+                <td>{{ assignment.actual_hours }}</td>
+                <td>{{ (assignment.actual_hours or 0) * summary.gross_hourly_rate }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endblock %}

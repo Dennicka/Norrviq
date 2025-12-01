@@ -17,6 +17,7 @@ from .routers import (
     web_root,
     web_settings,
     web_stats,
+    web_payroll,
     web_materials,
     web_reports,
     web_rooms,
@@ -81,4 +82,5 @@ app.include_router(web_rooms.router, dependencies=[Depends(require_auth)])
 app.include_router(web_workers.router, dependencies=[Depends(require_auth)])
 app.include_router(web_stats.router, dependencies=[Depends(require_auth)])
 app.include_router(web_analytics.router, dependencies=[Depends(require_auth)])
+app.include_router(web_payroll.router, dependencies=[Depends(require_auth)])
 app.include_router(web_help.router, dependencies=[Depends(require_auth)])
