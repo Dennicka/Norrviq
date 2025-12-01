@@ -48,6 +48,11 @@ class Project(Base):
         "ProjectWorkerAssignment", back_populates="project", cascade="all, delete-orphan"
     )
     cost_items = relationship("ProjectCostItem", back_populates="project", cascade="all, delete-orphan")
+    invoices = relationship(
+        "Invoice",
+        back_populates="project",
+        cascade="all, delete-orphan",
+    )
 
 
 class ProjectWorkItem(Base):

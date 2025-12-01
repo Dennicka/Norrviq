@@ -92,6 +92,7 @@ async def project_detail(
             selectinload(Project.work_items).selectinload(ProjectWorkItem.work_type),
             selectinload(Project.worker_assignments).selectinload(ProjectWorkerAssignment.worker),
             selectinload(Project.cost_items).selectinload(ProjectCostItem.category),
+            selectinload(Project.invoices),
         )
         .filter(Project.id == project_id)
         .first()
@@ -106,6 +107,9 @@ async def project_detail(
     rooms = sorted(project.rooms, key=lambda room: room.name.lower() if room.name else "")
     settings = get_or_create_settings(db)
     finance_summary = compute_project_finance(db, project, settings=settings)
+    recent_invoices = sorted(
+        project.invoices, key=lambda inv: inv.issue_date or inv.created_at or date.min, reverse=True
+    )[:2]
     context = template_context(request, lang)
     context.update(
         {
@@ -116,6 +120,7 @@ async def project_detail(
             "materials": materials,
             "rooms": rooms,
             "finance_summary": finance_summary,
+            "recent_invoices": recent_invoices,
         }
     )
     return templates.TemplateResponse("projects/detail.html", context)
