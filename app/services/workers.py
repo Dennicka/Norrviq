@@ -43,7 +43,12 @@ def get_worker_aggregates(
         total_hours = aggregates[worker.id]["total_hours"]
         hourly_rate = worker.hourly_rate or settings.default_worker_hourly_rate or Decimal("0")
         total_gross = total_hours * Decimal(hourly_rate)
-        tax_percent = Decimal(settings.default_worker_tax_percent_for_net or 0)
+        tax_percent = Decimal(
+            worker.default_tax_percent_for_net
+            if worker.default_tax_percent_for_net is not None
+            else settings.default_worker_tax_percent_for_net
+            or 0
+        )
         approx_net = total_gross * (Decimal(1) - tax_percent / Decimal(100))
 
         aggregates[worker.id]["total_gross"] = _quantize(total_gross)

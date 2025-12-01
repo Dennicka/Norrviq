@@ -40,10 +40,14 @@ async def create_worker(
 ):
     form = await request.form()
     hourly_rate = form.get("hourly_rate")
+    default_tax_percent_for_net = form.get("default_tax_percent_for_net")
     worker = Worker(
         name=form.get("name"),
         role=form.get("role"),
         hourly_rate=Decimal(hourly_rate) if hourly_rate else None,
+        default_tax_percent_for_net=Decimal(default_tax_percent_for_net)
+        if default_tax_percent_for_net
+        else None,
         is_active=bool(form.get("is_active")),
     )
     db.add(worker)
@@ -80,9 +84,13 @@ async def update_worker(
 
     form = await request.form()
     hourly_rate = form.get("hourly_rate")
+    default_tax_percent_for_net = form.get("default_tax_percent_for_net")
     worker.name = form.get("name")
     worker.role = form.get("role")
     worker.hourly_rate = Decimal(hourly_rate) if hourly_rate else None
+    worker.default_tax_percent_for_net = (
+        Decimal(default_tax_percent_for_net) if default_tax_percent_for_net else None
+    )
     worker.is_active = bool(form.get("is_active"))
 
     db.add(worker)
