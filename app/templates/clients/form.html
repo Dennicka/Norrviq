@@ -1,7 +1,11 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>{{ client and t("clients.edit") or t("clients.new") }}</h1>
-<form method="post">
+{% set action_url = form_action or (client and '/clients/' ~ client.id ~ '/edit' or '/clients/new') %}
+<form method="post" action="{{ action_url }}">
+    {% if client and client.id %}
+    <input type="hidden" name="id" value="{{ client.id }}">
+    {% endif %}
     <div>
         <label>{{ t("label.name") }}</label>
         <input type="text" name="name" value="{{ client.name if client else '' }}" required>
