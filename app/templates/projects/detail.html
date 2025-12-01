@@ -225,6 +225,7 @@
                 <th>{{ t("label.title") }}</th>
                 <th>{{ t('materials.title') }}</th>
                 <th>{{ t("label.amount") }}</th>
+                <th>{{ t('label.actions') }}</th>
             </tr>
         </thead>
         <tbody>
@@ -234,9 +235,15 @@
                 <td>{{ item.title }}</td>
                 <td>{{ item.material.name_ru if item.material and lang == 'ru' else (item.material.name_sv if item.material else '') }}</td>
                 <td>{{ item.amount }}</td>
+                <td>
+                    <a href="/projects/{{ project.id }}/costs/{{ item.id }}/edit">✏ {{ t('label.edit') }}</a>
+                    <form method="post" action="/projects/{{ project.id }}/costs/{{ item.id }}/delete" style="display:inline;">
+                        <button type="submit" onclick="return confirm('{{ t("label.delete") }}?');">🗑 {{ t('label.delete') }}</button>
+                    </form>
+                </td>
             </tr>
             {% else %}
-            <tr><td colspan="4">—</td></tr>
+            <tr><td colspan="5">—</td></tr>
             {% endfor %}
         </tbody>
     </table>
@@ -286,6 +293,7 @@
                 <th>{{ t("label.worker") }}</th>
                 <th>{{ t("label.planned_hours") }} <span class="help" title="{{ t('project.worker.planned_hours.help') }}">?</span></th>
                 <th>{{ t("label.actual_hours") }} <span class="help" title="{{ t('project.worker.actual_hours.help') }}">?</span></th>
+                <th>{{ t('label.actions') }}</th>
             </tr>
         </thead>
         <tbody>
@@ -294,6 +302,12 @@
                 <td>{{ assignment.worker.name if assignment.worker else assignment.worker_id }}</td>
                 <td>{{ assignment.planned_hours or '' }}</td>
                 <td>{{ assignment.actual_hours or '' }}</td>
+                <td>
+                    <a href="/projects/{{ project.id }}/hours/{{ assignment.id }}/edit">✏ {{ t('label.edit') }}</a>
+                    <form method="post" action="/projects/{{ project.id }}/hours/{{ assignment.id }}/delete" style="display:inline;">
+                        <button type="submit" onclick="return confirm('{{ t("label.delete") }}?');">🗑 {{ t('label.delete') }}</button>
+                    </form>
+                </td>
             </tr>
             {% endfor %}
         </tbody>

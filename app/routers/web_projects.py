@@ -477,6 +477,8 @@ async def add_cost_item(
     db.add(cost_item)
     db.commit()
 
+    calculate_project_financials(db, project)
+
     return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
@@ -503,5 +505,190 @@ async def add_worker_assignment(
     )
     db.add(assignment)
     db.commit()
+
+    calculate_project_financials(db, project)
+
+    return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.get("/{project_id}/costs/{cost_id}/edit")
+async def edit_cost_item_form(
+    project_id: int,
+    cost_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    lang: str = Depends(get_current_lang),
+):
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    cost_item = db.get(ProjectCostItem, cost_id)
+    if not cost_item or cost_item.project_id != project.id:
+        raise HTTPException(status_code=404, detail="Cost item not found")
+
+    cost_categories = db.query(CostCategory).all()
+    materials = db.query(Material).filter(Material.is_active).all()
+    context = template_context(request, lang)
+    context.update(
+        {
+            "project": project,
+            "cost_item": cost_item,
+            "cost_categories": cost_categories,
+            "materials": materials,
+        }
+    )
+    return templates.TemplateResponse("projects/cost_item_form.html", context)
+
+
+@router.post("/{project_id}/costs/{cost_id}/save")
+async def save_cost_item(
+    project_id: int,
+    cost_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    lang: str = Depends(get_current_lang),
+):
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    cost_item = db.get(ProjectCostItem, cost_id)
+    if not cost_item or cost_item.project_id != project.id:
+        raise HTTPException(status_code=404, detail="Cost item not found")
+
+    form = await request.form()
+    category_id = form.get("cost_category_id")
+    if not category_id:
+        raise HTTPException(status_code=400, detail="Category required")
+
+    material_id = form.get("material_id") or None
+    material = db.get(Material, int(material_id)) if material_id else None
+
+    cost_item.cost_category_id = int(category_id)
+    cost_item.material = material
+    cost_item.title = form.get("title") or (material.name_ru if material else cost_item.title)
+    cost_item.amount = Decimal(form.get("amount") or "0")
+    cost_item.comment = form.get("comment")
+
+    db.add(cost_item)
+    db.commit()
+
+    calculate_project_financials(db, project)
+
+    translator = make_t(lang)
+    add_flash_message(request, translator("projects.cost_items.updated"), "success")
+
+    return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{project_id}/costs/{cost_id}/delete")
+async def delete_cost_item(
+    project_id: int,
+    cost_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    lang: str = Depends(get_current_lang),
+):
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    cost_item = db.get(ProjectCostItem, cost_id)
+    if not cost_item or cost_item.project_id != project.id:
+        raise HTTPException(status_code=404, detail="Cost item not found")
+
+    db.delete(cost_item)
+    db.commit()
+
+    calculate_project_financials(db, project)
+
+    translator = make_t(lang)
+    add_flash_message(request, translator("projects.cost_items.deleted"), "success")
+
+    return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.get("/{project_id}/hours/{assignment_id}/edit")
+async def edit_assignment_form(
+    project_id: int,
+    assignment_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    lang: str = Depends(get_current_lang),
+):
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    assignment = db.get(ProjectWorkerAssignment, assignment_id)
+    if not assignment or assignment.project_id != project.id:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+
+    workers = db.query(Worker).all()
+    context = template_context(request, lang)
+    context.update({"project": project, "assignment": assignment, "workers": workers})
+    return templates.TemplateResponse("projects/worker_assignment_form.html", context)
+
+
+@router.post("/{project_id}/hours/{assignment_id}/save")
+async def save_assignment(
+    project_id: int,
+    assignment_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    lang: str = Depends(get_current_lang),
+):
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    assignment = db.get(ProjectWorkerAssignment, assignment_id)
+    if not assignment or assignment.project_id != project.id:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+
+    form = await request.form()
+    worker_id = form.get("worker_id")
+    if not worker_id:
+        raise HTTPException(status_code=400, detail="Worker required")
+
+    assignment.worker_id = int(worker_id)
+    assignment.planned_hours = Decimal(form.get("planned_hours") or "0")
+    assignment.actual_hours = Decimal(form.get("actual_hours") or "0")
+
+    db.add(assignment)
+    db.commit()
+
+    calculate_project_financials(db, project)
+
+    translator = make_t(lang)
+    add_flash_message(request, translator("projects.worker_assignments.updated"), "success")
+
+    return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{project_id}/hours/{assignment_id}/delete")
+async def delete_assignment(
+    project_id: int,
+    assignment_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    lang: str = Depends(get_current_lang),
+):
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    assignment = db.get(ProjectWorkerAssignment, assignment_id)
+    if not assignment or assignment.project_id != project.id:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+
+    db.delete(assignment)
+    db.commit()
+
+    calculate_project_financials(db, project)
+
+    translator = make_t(lang)
+    add_flash_message(request, translator("projects.worker_assignments.deleted"), "success")
 
     return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
