@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>
+    {% if invoice %}
+        {{ t("projects.edit") }}: {{ invoice.invoice_number }}
+    {% else %}
+        {{ t("label.create") }} {{ t("menu.invoices") | lower }}
+    {% endif %}
+</h1>
+<form method="post" action="{{ action_url }}">
+    <div>
+        <label>{{ t("invoice.field.number") }}</label>
+        <input type="text" name="invoice_number" value="{{ invoice.invoice_number if invoice else defaults.invoice_number }}" required>
+    </div>
+    <div>
+        <label>{{ t("invoice.field.issue_date") }}</label>
+        <input type="date" name="issue_date" value="{{ (invoice.issue_date if invoice else defaults.issue_date) }}" required>
+    </div>
+    <div>
+        <label>{{ t("invoice.field.due_date") }}</label>
+        <input type="date" name="due_date" value="{{ (invoice.due_date if invoice and invoice.due_date else (defaults.due_date or '')) }}">
+    </div>
+    <div>
+        <label>{{ t("invoice.field.paid_date") }}</label>
+        <input type="date" name="paid_date" value="{{ invoice.paid_date if invoice and invoice.paid_date else '' }}">
+    </div>
+    <div>
+        <label>{{ t("invoice.field.status") }}</label>
+        <select name="status">
+            {% for status_value in statuses %}
+            <option value="{{ status_value }}" {% if (invoice and invoice.status == status_value) or (not invoice and defaults.status == status_value) %}selected{% endif %}>
+                {{ t('invoice.status.' ~ status_value) }}
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+    <div>
+        <label>{{ t("label.work_sum_without_moms") }}</label>
+        <input type="number" step="0.01" name="work_sum_without_moms" value="{{ invoice.work_sum_without_moms if invoice else defaults.work_sum_without_moms }}" required>
+    </div>
+    <div>
+        <label>{{ t("label.moms_amount") }}</label>
+        <input type="number" step="0.01" name="moms_amount" value="{{ invoice.moms_amount if invoice else defaults.moms_amount }}" required>
+    </div>
+    <div>
+        <label>{{ t("label.rot_amount") }}</label>
+        <input type="number" step="0.01" name="rot_amount" value="{{ invoice.rot_amount if invoice else defaults.rot_amount }}" required>
+    </div>
+    <div>
+        <label>{{ t("label.client_pays_total") }}</label>
+        <input type="number" step="0.01" name="client_pays_total" value="{{ invoice.client_pays_total if invoice else defaults.client_pays_total }}" required>
+    </div>
+    <div>
+        <label>{{ t("label.comment") }}</label>
+        <textarea name="comment">{{ invoice.comment if invoice and invoice.comment else (defaults.comment or '') }}</textarea>
+    </div>
+    <button type="submit">{{ t("label.save") }}</button>
+</form>
+{% endblock %}

@@ -7,6 +7,7 @@ from .cost import CostCategory, ProjectCostItem
 from .material import Material
 from .settings import Settings
 from .legal_note import LegalNote
+from .invoice import Invoice
 
 __all__ = [
     "Client",
@@ -21,4 +22,5 @@ __all__ = [
     "Material",
     "Settings",
     "LegalNote",
+    "Invoice",
 ]

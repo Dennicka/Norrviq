@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t("invoice.list.title") }} — {{ project.name }}</h1>
+<div class="actions">
+    <a class="button" href="/projects/{{ project.id }}/invoices/create">{{ t("label.create") }}</a>
+    <a class="button" href="/projects/{{ project.id }}">{{ t("projects.detail") }}</a>
+</div>
+<table>
+    <thead>
+        <tr>
+            <th>{{ t("invoice.field.number") }}</th>
+            <th>{{ t("invoice.field.issue_date") }}</th>
+            <th>{{ t("invoice.field.status") }}</th>
+            <th>{{ t("invoice.field.amount_total") }}</th>
+            <th>{{ t("invoice.field.paid_date") }}</th>
+            <th>{{ t("label.actions") }}</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for invoice in invoices %}
+        <tr>
+            <td>{{ invoice.invoice_number }}</td>
+            <td>{{ invoice.issue_date }}</td>
+            <td>{{ t('invoice.status.' ~ invoice.status) }}</td>
+            <td>{{ invoice.client_pays_total }}</td>
+            <td>
+                {% if invoice.paid_date %}
+                    {{ invoice.paid_date }}
+                {% else %}
+                    {{ t("label.no") }}
+                {% endif %}
+            </td>
+            <td>
+                <a href="/projects/{{ project.id }}/invoices/{{ invoice.id }}/edit">{{ t("projects.edit") }}</a>
+                <form method="post" action="/projects/{{ project.id }}/invoices/{{ invoice.id }}/delete" style="display:inline;">
+                    <button type="submit" onclick="return confirm('{{ t("label.delete") }}?');">{{ t("label.delete") }}</button>
+                </form>
+            </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6">—</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

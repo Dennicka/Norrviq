@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t("reports.period.title") }}</h1>
+<p>{{ t("reports.period.help") }}</p>
+<form method="get" class="filters">
+    <label>
+        {{ t("reports.period.from_date") }}
+        <input type="date" name="from_date" value="{{ from_date }}">
+    </label>
+    <label>
+        {{ t("reports.period.to_date") }}
+        <input type="date" name="to_date" value="{{ to_date }}">
+    </label>
+    <button type="submit">{{ t("label.save") }}</button>
+    <a class="button" href="/reports/period/export.csv?from_date={{ from_date }}&to_date={{ to_date }}">{{ t("stats.export_monthly_csv") }}</a>
+</form>
+<section>
+    <h2>{{ t("menu.invoices") }}</h2>
+    <table>
+        <tbody>
+            <tr>
+                <th>{{ t("finance.work_sum_without_moms") }}</th>
+                <td>{{ summary.total_work_sum_without_moms }}</td>
+            </tr>
+            <tr>
+                <th>{{ t("finance.moms") }}</th>
+                <td>{{ summary.total_moms_amount }}</td>
+            </tr>
+            <tr>
+                <th>{{ t("finance.rot") }}</th>
+                <td>{{ summary.total_rot_amount }}</td>
+            </tr>
+            <tr>
+                <th>{{ t("finance.client_pays") }}</th>
+                <td>{{ summary.total_client_pays }}</td>
+            </tr>
+        </tbody>
+    </table>
+</section>
+<section>
+    <h2>{{ t("reports.period.expenses_title") }}</h2>
+    <table>
+        <tbody>
+            <tr>
+                <th>{{ t("finance.materials") }}</th>
+                <td>{{ summary.total_materials_cost }}</td>
+            </tr>
+            <tr>
+                <th>{{ t("finance.transport") }}</th>
+                <td>{{ summary.total_transport_cost }}</td>
+            </tr>
+            <tr>
+                <th>{{ t("finance.other_costs") }}</th>
+                <td>{{ summary.total_other_cost }}</td>
+            </tr>
+            <tr>
+                <th>{{ t("finance.salary_fund") }}</th>
+                <td>{{ summary.total_salary_fund }}</td>
+            </tr>
+            <tr>
+                <th>{{ t("finance.employer_taxes") }}</th>
+                <td>{{ summary.total_employer_taxes }}</td>
+            </tr>
+            <tr>
+                <th>{{ t("finance.overhead") }}</th>
+                <td>{{ summary.total_overhead_cost }}</td>
+            </tr>
+            <tr>
+                <th>{{ t("finance.total_expenses") }}</th>
+                <td>{{ summary.total_expenses }}</td>
+            </tr>
+            <tr>
+                <th>{{ t("finance.profit") }}</th>
+                <td>{{ summary.total_profit }}</td>
+            </tr>
+        </tbody>
+    </table>
+</section>
+{% endblock %}

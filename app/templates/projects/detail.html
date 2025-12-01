@@ -25,6 +25,37 @@
 </section>
 
 <section>
+    <h2>{{ t("menu.invoices") }}</h2>
+    <p>
+        <a href="/projects/{{ project.id }}/invoices/">{{ t("invoice.list.title") }}</a>
+        |
+        <a href="/projects/{{ project.id }}/invoices/create">{{ t("label.create") }}</a>
+    </p>
+    <table>
+        <thead>
+            <tr>
+                <th>{{ t("invoice.field.number") }}</th>
+                <th>{{ t("invoice.field.issue_date") }}</th>
+                <th>{{ t("invoice.field.status") }}</th>
+                <th>{{ t("invoice.field.amount_total") }}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for invoice in recent_invoices %}
+            <tr>
+                <td>{{ invoice.invoice_number }}</td>
+                <td>{{ invoice.issue_date }}</td>
+                <td>{{ t('invoice.status.' ~ invoice.status) }}</td>
+                <td>{{ invoice.client_pays_total }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4">—</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+
+<section>
     <h2>{{ t("rooms.section_title") }}</h2>
     <p>{{ t("rooms.help") }}</p>
     <p>
