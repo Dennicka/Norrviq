@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t("analytics.title") }}</h1>
+<form method="get" class="filters">
+    <label>
+        {{ t("analytics.status") }}
+        <select name="status">
+            <option value="">—</option>
+            {% for st in statuses %}
+            <option value="{{ st }}" {% if st == status_filter %}selected{% endif %}>{{ st }}</option>
+            {% endfor %}
+        </select>
+    </label>
+    <label>
+        {{ t("analytics.from_date") }}
+        <input type="date" name="from_date" value="{{ from_date }}">
+    </label>
+    <label>
+        {{ t("analytics.to_date") }}
+        <input type="date" name="to_date" value="{{ to_date }}">
+    </label>
+    <button type="submit">{{ t("analytics.apply") }}</button>
+    <p class="muted">{{ t("analytics.date_hint") }}</p>
+</form>
+
+<table>
+    <thead>
+        <tr>
+            <th>{{ t("analytics.project") }}</th>
+            <th>{{ t("analytics.client") }}</th>
+            <th>{{ t("analytics.status_col") }}</th>
+            <th>{{ t("analytics.dates") }}</th>
+            <th>{{ t("analytics.revenue") }}</th>
+            <th>{{ t("analytics.expenses") }}</th>
+            <th>{{ t("analytics.profit") }}</th>
+            <th>{{ t("analytics.margin") }}</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in projects_data %}
+        <tr>
+            <td><a href="/projects/{{ row.project.id }}">{{ row.project.name }}</a></td>
+            <td>{{ row.client_name }}</td>
+            <td>{{ row.status }}</td>
+            <td>{{ row.start_date or '' }} – {{ row.end_date or '' }}</td>
+            <td>{{ row.revenue }}</td>
+            <td>{{ row.total_expenses }}</td>
+            <td>{{ row.profit }}</td>
+            <td>
+                {% if row.margin_percent is not none %}
+                    {{ row.margin_percent }}%
+                {% else %}
+                    —
+                {% endif %}
+            </td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="8">—</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

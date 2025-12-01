@@ -15,8 +15,9 @@ from app.models.project import Project, ProjectWorkItem, ProjectWorkerAssignment
 from app.models.room import Room
 from app.models.worker import Worker
 from app.models.worktype import WorkType
+from app.models.settings import get_or_create_settings
 from app.services.estimates import calculate_project_totals, recalculate_project_work_items
-from app.services.finance import calculate_project_financials
+from app.services.finance import calculate_project_financials, compute_project_finance
 from app.security import require_auth
 from app.i18n import make_t
 
@@ -103,6 +104,8 @@ async def project_detail(
     workers = db.query(Worker).all()
     materials = db.query(Material).filter(Material.is_active).all()
     rooms = sorted(project.rooms, key=lambda room: room.name.lower() if room.name else "")
+    settings = get_or_create_settings(db)
+    finance_summary = compute_project_finance(db, project, settings=settings)
     context = template_context(request, lang)
     context.update(
         {
@@ -112,6 +115,7 @@ async def project_detail(
             "workers": workers,
             "materials": materials,
             "rooms": rooms,
+            "finance_summary": finance_summary,
         }
     )
     return templates.TemplateResponse("projects/detail.html", context)

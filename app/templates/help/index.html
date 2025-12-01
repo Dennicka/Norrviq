@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t("help.title") }}</h1>
+
+<section>
+    <h2>{{ t("help.section.entities") }}</h2>
+    <ul>
+        <li>{{ t("help.entities.project") }}</li>
+        <li>{{ t("help.entities.client") }}</li>
+        <li>{{ t("help.entities.room") }}</li>
+        <li>{{ t("help.entities.work_type") }}</li>
+        <li>{{ t("help.entities.material") }}</li>
+        <li>{{ t("help.entities.worker") }}</li>
+        <li>{{ t("help.entities.work_item") }}</li>
+        <li>{{ t("help.entities.cost_item") }}</li>
+        <li>{{ t("help.entities.assignment") }}</li>
+    </ul>
+</section>
+
+<section>
+    <h2>{{ t("help.section.statuses") }}</h2>
+    <ul>
+        <li>{{ t("help.status.draft") }}</li>
+        <li>{{ t("help.status.sent") }}</li>
+        <li>{{ t("help.status.accepted") }}</li>
+        <li>{{ t("help.status.in_progress") }}</li>
+        <li>{{ t("help.status.done") }}</li>
+    </ul>
+</section>
+
+<section>
+    <h2>{{ t("help.section.hours") }}</h2>
+    <p>{{ t("help.hours.planned") }}</p>
+    <p>{{ t("help.hours.actual") }}</p>
+</section>
+
+<section>
+    <h2>{{ t("help.section.rot_moms") }}</h2>
+    <p>{{ t("help.rot_moms.text") }}</p>
+</section>
+
+<section>
+    <h2>{{ t("help.section.norms") }}</h2>
+    <p>{{ t("help.norms.text") }}</p>
+</section>
+
+<section>
+    <h2>{{ t("help.section.guide") }}</h2>
+    <ol>
+        <li>{{ t("help.steps.1") }}</li>
+        <li>{{ t("help.steps.2") }}</li>
+        <li>{{ t("help.steps.3") }}</li>
+        <li>{{ t("help.steps.4") }}</li>
+        <li>{{ t("help.steps.5") }}</li>
+        <li>{{ t("help.steps.6") }}</li>
+        <li>{{ t("help.steps.7") }}</li>
+        <li>{{ t("help.steps.8") }}</li>
+    </ol>
+</section>
+{% endblock %}

@@ -8,9 +8,11 @@ from .dependencies import get_current_lang
 from .models.settings import get_or_create_settings
 from .routers import (
     web_auth,
+    web_analytics,
     web_clients,
     web_costs,
     web_legal,
+    web_help,
     web_projects,
     web_root,
     web_settings,
@@ -74,3 +76,5 @@ app.include_router(web_materials.router, dependencies=[Depends(require_auth)])
 app.include_router(web_rooms.router, dependencies=[Depends(require_auth)])
 app.include_router(web_workers.router, dependencies=[Depends(require_auth)])
 app.include_router(web_stats.router, dependencies=[Depends(require_auth)])
+app.include_router(web_analytics.router, dependencies=[Depends(require_auth)])
+app.include_router(web_help.router, dependencies=[Depends(require_auth)])
