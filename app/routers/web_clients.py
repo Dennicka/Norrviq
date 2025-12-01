@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
@@ -8,6 +10,79 @@ from app.models.client import Client
 from app.models.project import Project
 
 router = APIRouter(prefix="/clients", tags=["clients"])
+
+
+def _parse_client_form(form_data: dict) -> dict:
+    def _clean(value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        return value or None
+
+    return {
+        "name": (form_data.get("name") or "").strip(),
+        "contact_person": _clean(form_data.get("contact_person")),
+        "phone": _clean(form_data.get("phone")),
+        "email": _clean(form_data.get("email")),
+        "address": _clean(form_data.get("address")),
+        "comment": _clean(form_data.get("comment")),
+        "is_private_person": bool(form_data.get("is_private_person")),
+        "is_rot_eligible": bool(form_data.get("is_rot_eligible")),
+    }
+
+
+def _apply_client_data(client: Client, data: dict) -> None:
+    client.name = data["name"]
+    client.contact_person = data["contact_person"]
+    client.phone = data["phone"]
+    client.email = data["email"]
+    client.address = data["address"]
+    client.comment = data["comment"]
+    client.is_private_person = data["is_private_person"]
+    client.is_rot_eligible = data["is_rot_eligible"]
+
+
+async def _save_client(
+    request: Request,
+    db: Session,
+    lang: str,
+    client_id: int | None,
+    form_action: str,
+):
+    translator = make_t(lang)
+    form_data = await request.form()
+    data = _parse_client_form(form_data)
+
+    resolved_client_id = client_id
+    if resolved_client_id is None:
+        raw_id = form_data.get("id")
+        try:
+            resolved_client_id = int(raw_id) if raw_id else None
+        except (TypeError, ValueError):
+            resolved_client_id = None
+
+    client: Client | None = None
+    if resolved_client_id is not None:
+        client = db.get(Client, resolved_client_id)
+        if not client:
+            raise HTTPException(status_code=404, detail="Client not found")
+    else:
+        client = Client()
+
+    if not data["name"]:
+        add_flash_message(request, translator("clients.validation.name_required"), "error")
+        context = template_context(request, lang)
+        placeholder = SimpleNamespace(**{**data, "id": resolved_client_id})
+        context.update({"client": placeholder, "form_action": form_action})
+        return templates.TemplateResponse("clients/form.html", context, status_code=400)
+
+    _apply_client_data(client, data)
+    db.add(client)
+    db.commit()
+    db.refresh(client)
+
+    add_flash_message(request, translator("clients.save.success"), "success")
+    return RedirectResponse(url=f"/clients/{client.id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.get("/")
@@ -42,7 +117,7 @@ async def new_client_form(
     request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang)
 ):
     context = template_context(request, lang)
-    context["client"] = None
+    context.update({"client": None, "form_action": "/clients/save"})
     return templates.TemplateResponse("clients/form.html", context)
 
 
@@ -50,20 +125,26 @@ async def new_client_form(
 async def create_client(
     request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang)
 ):
-    form = await request.form()
-    client = Client(
-        name=form.get("name"),
-        contact_person=form.get("contact_person"),
-        phone=form.get("phone"),
-        email=form.get("email"),
-        address=form.get("address"),
-        comment=form.get("comment"),
-        is_private_person=bool(form.get("is_private_person")),
-        is_rot_eligible=bool(form.get("is_rot_eligible")),
+    return await _save_client(
+        request=request,
+        db=db,
+        lang=lang,
+        client_id=None,
+        form_action="/clients/new",
     )
-    db.add(client)
-    db.commit()
-    return RedirectResponse(url="/clients/", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/save")
+async def save_client(
+    request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang)
+):
+    return await _save_client(
+        request=request,
+        db=db,
+        lang=lang,
+        client_id=None,
+        form_action="/clients/save",
+    )
 
 
 @router.get("/{client_id}/edit")
@@ -78,7 +159,7 @@ async def edit_client_form(
         raise HTTPException(status_code=404, detail="Client not found")
 
     context = template_context(request, lang)
-    context["client"] = client
+    context.update({"client": client, "form_action": f"/clients/{client_id}/edit"})
     return templates.TemplateResponse("clients/form.html", context)
 
 
@@ -89,24 +170,13 @@ async def update_client(
     db: Session = Depends(get_db),
     lang: str = Depends(get_current_lang),
 ):
-    client = db.get(Client, client_id)
-    if not client:
-        raise HTTPException(status_code=404, detail="Client not found")
-
-    form = await request.form()
-    client.name = form.get("name")
-    client.contact_person = form.get("contact_person")
-    client.phone = form.get("phone")
-    client.email = form.get("email")
-    client.address = form.get("address")
-    client.comment = form.get("comment")
-    client.is_private_person = bool(form.get("is_private_person"))
-    client.is_rot_eligible = bool(form.get("is_rot_eligible"))
-
-    db.add(client)
-    db.commit()
-
-    return RedirectResponse(url="/clients/", status_code=status.HTTP_303_SEE_OTHER)
+    return await _save_client(
+        request=request,
+        db=db,
+        lang=lang,
+        client_id=client_id,
+        form_action=f"/clients/{client_id}/edit",
+    )
 
 
 @router.post("/{client_id}/delete")
