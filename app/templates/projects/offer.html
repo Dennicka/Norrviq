@@ -12,14 +12,20 @@
         <button type="button" onclick="window.print()">{{ t("offer.print") }}</button>
     </div>
     <div class="offer-page">
+        {% if not company_profile.is_document_ready() %}
+        <div class="flash error">{{ t("company.document_not_ready") }}</div>
+        {% endif %}
+
         <div class="offer-header">
             <div class="offer-company">
                 <h1>{{ t("offer.title") }}</h1>
-                <p><strong>Norrviq Måleri AB</strong></p>
-                <p>Kvarnbacksvägen 74, 174 63 Sundbyberg</p>
-                <p>info@norrviq.se · +46 70 123 45 67</p>
+                <p><strong>{{ company_profile.legal_name }}</strong></p>
+                <p>{{ company_profile.address_line1 }}{% if company_profile.address_line2 %}, {{ company_profile.address_line2 }}{% endif %}</p>
+                <p>{{ company_profile.postal_code }} {{ company_profile.city }}, {{ company_profile.country }}</p>
+                <p>{{ company_profile.email }}{% if company_profile.phone %} · {{ company_profile.phone }}{% endif %}</p>
             </div>
             <div class="offer-meta">
+                <div>{{ t("offer.number") }}: {{ offer_number if offer_number else t("label.draft") }}</div>
                 <div>{{ t("offer.project_no") }} {{ project.id }}</div>
                 <div>{{ offer_date }}</div>
                 {% if project.name %}<div>{{ project.name }}</div>{% endif %}

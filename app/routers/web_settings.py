@@ -1,14 +1,17 @@
 from decimal import Decimal
-from urllib.parse import parse_qs
-
 from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_current_lang, get_db, template_context, templates
+from app.models.company_profile import get_or_create_company_profile
 from app.models.settings import get_or_create_settings
 
 router = APIRouter(prefix="/settings", tags=["settings"])
+
+
+def _load_form_data(form) -> dict:
+    return dict(form)
 
 
 @router.get("/")
@@ -27,10 +30,7 @@ async def update_settings(
 ):
     settings_obj = get_or_create_settings(db)
     form = await request.form()
-    form_data = dict(form)
-    if not form_data:
-        body = (await request.body()).decode()
-        form_data = {k: v[0] if isinstance(v, list) else v for k, v in parse_qs(body).items()}
+    form_data = _load_form_data(form)
 
     settings_obj.hourly_rate_company = Decimal(form_data.get("hourly_rate_company") or settings_obj.hourly_rate_company)
     settings_obj.default_worker_hourly_rate = Decimal(
@@ -57,3 +57,75 @@ async def update_settings(
     db.refresh(settings_obj)
 
     return RedirectResponse(url="/settings/", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.get("/company")
+async def company_form(request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang)):
+    profile = get_or_create_company_profile(db)
+    context = template_context(request, lang)
+    context.update({"company": profile, "errors": []})
+    return templates.TemplateResponse("settings/company_form.html", context)
+
+
+@router.post("/company")
+async def update_company(request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang)):
+    profile = get_or_create_company_profile(db)
+    form = await request.form()
+    data = _load_form_data(form)
+
+    errors: list[str] = []
+    org_number = (data.get("org_number") or "").replace("-", "").strip()
+    if not org_number.isdigit() or len(org_number) not in (10, 12):
+        errors.append("company.validation.org_number")
+
+    vat_number = (data.get("vat_number") or "").strip()
+    if vat_number and (len(vat_number) < 8 or not any(ch.isdigit() for ch in vat_number)):
+        errors.append("company.validation.vat_number")
+
+    email = (data.get("email") or "").strip()
+    if "@" not in email or "." not in email:
+        errors.append("company.validation.email")
+
+    payment_terms_days_raw = (data.get("payment_terms_days") or "10").strip()
+    try:
+        payment_terms_days = int(payment_terms_days_raw)
+        if payment_terms_days <= 0:
+            errors.append("company.validation.payment_terms_days")
+    except ValueError:
+        errors.append("company.validation.payment_terms_days")
+        payment_terms_days = profile.payment_terms_days
+
+    bankgiro = (data.get("bankgiro") or "").strip()
+    plusgiro = (data.get("plusgiro") or "").strip()
+    iban = (data.get("iban") or "").strip()
+    if not (bankgiro or plusgiro or iban):
+        errors.append("company.validation.payment_method")
+
+    if errors:
+        context = template_context(request, lang)
+        context.update({"company": profile, "errors": errors, "form_data": data})
+        return templates.TemplateResponse("settings/company_form.html", context, status_code=400)
+
+    profile.legal_name = (data.get("legal_name") or "").strip()
+    profile.org_number = org_number
+    profile.vat_number = vat_number or None
+    profile.address_line1 = (data.get("address_line1") or "").strip()
+    profile.address_line2 = (data.get("address_line2") or "").strip() or None
+    profile.postal_code = (data.get("postal_code") or "").strip()
+    profile.city = (data.get("city") or "").strip()
+    profile.country = (data.get("country") or "").strip()
+    profile.email = email
+    profile.phone = (data.get("phone") or "").strip() or None
+    profile.website = (data.get("website") or "").strip() or None
+    profile.bankgiro = bankgiro or None
+    profile.plusgiro = plusgiro or None
+    profile.iban = iban or None
+    profile.bic = (data.get("bic") or "").strip() or None
+    profile.payment_terms_days = payment_terms_days
+    profile.invoice_prefix = (data.get("invoice_prefix") or "TR-").strip() or "TR-"
+    profile.offer_prefix = (data.get("offer_prefix") or "OF-").strip() or "OF-"
+
+    db.add(profile)
+    db.commit()
+
+    return RedirectResponse(url="/settings/company", status_code=status.HTTP_303_SEE_OTHER)

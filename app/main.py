@@ -13,6 +13,7 @@ from .config import get_settings
 from .db import SessionLocal, ensure_schema_up_to_date
 from .dependencies import enforce_csrf
 from .models.settings import get_or_create_settings
+from .models.company_profile import get_or_create_company_profile
 from .observability import (
     REQUEST_ID_HEADER,
     configure_logging,
@@ -84,6 +85,7 @@ def startup_event():
     db = SessionLocal()
     try:
         get_or_create_settings(db)
+        get_or_create_company_profile(db)
         ensure_default_cost_categories(db)
         ensure_default_legal_notes(db)
         ensure_default_worktypes(db)

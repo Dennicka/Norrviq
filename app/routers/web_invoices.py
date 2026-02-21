@@ -6,6 +6,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session, selectinload
 
 from app.dependencies import get_current_lang, get_db, template_context, templates
+from app.models.company_profile import get_or_create_company_profile
 from app.models.invoice import Invoice
 from app.models.project import Project
 from app.models.settings import get_or_create_settings
@@ -40,7 +41,7 @@ def _get_project(db: Session, project_id: int) -> Project:
 def _get_invoice(db: Session, project_id: int, invoice_id: int) -> Invoice:
     invoice = (
         db.query(Invoice)
-        .options(selectinload(Invoice.project))
+        .options(selectinload(Invoice.project).selectinload(Project.client))
         .filter(Invoice.id == invoice_id, Invoice.project_id == project_id)
         .first()
     )
@@ -71,8 +72,9 @@ async def list_invoices(
         reverse=True,
     )
 
+    company_profile = get_or_create_company_profile(db)
     context = template_context(request, lang)
-    context.update({"project": project, "invoices": invoices})
+    context.update({"project": project, "invoices": invoices, "company_profile": company_profile})
     return templates.TemplateResponse("invoices/list.html", context)
 
 
@@ -86,9 +88,10 @@ async def create_invoice_form(
     project = _get_project(db, project_id)
     settings = get_or_create_settings(db)
     finance_summary = compute_project_finance(db, project, settings=settings)
+    company_profile = get_or_create_company_profile(db)
 
     defaults = {
-        "invoice_number": "",
+        "invoice_number": f"{company_profile.invoice_prefix}",
         "issue_date": date.today(),
         "due_date": None,
         "status": "draft",
@@ -107,6 +110,7 @@ async def create_invoice_form(
             "statuses": INVOICE_STATUSES,
             "defaults": defaults,
             "action_url": f"/projects/{project.id}/invoices/create",
+            "company_profile": company_profile,
         }
     )
     return templates.TemplateResponse("invoices/form.html", context)
@@ -148,6 +152,21 @@ async def create_invoice(
     )
 
 
+@router.get("/{invoice_id}", response_class=HTMLResponse)
+async def invoice_document(
+    project_id: int,
+    invoice_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    lang: str = Depends(get_current_lang),
+):
+    invoice = _get_invoice(db, project_id, invoice_id)
+    company_profile = get_or_create_company_profile(db)
+    context = template_context(request, lang)
+    context.update({"project": invoice.project, "invoice": invoice, "company_profile": company_profile})
+    return templates.TemplateResponse("invoices/document.html", context)
+
+
 @router.get("/{invoice_id}/edit", response_class=HTMLResponse)
 async def edit_invoice_form(
     project_id: int,
@@ -158,6 +177,7 @@ async def edit_invoice_form(
 ):
     project = _get_project(db, project_id)
     invoice = _get_invoice(db, project_id, invoice_id)
+    company_profile = get_or_create_company_profile(db)
 
     context = template_context(request, lang)
     context.update(
@@ -167,6 +187,7 @@ async def edit_invoice_form(
             "statuses": INVOICE_STATUSES,
             "defaults": None,
             "action_url": f"/projects/{project.id}/invoices/{invoice.id}/edit",
+            "company_profile": company_profile,
         }
     )
     return templates.TemplateResponse("invoices/form.html", context)

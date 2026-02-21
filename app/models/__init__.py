@@ -9,6 +9,7 @@ from .settings import Settings
 from .legal_note import LegalNote
 from .invoice import Invoice
 from .user import User
+from .company_profile import CompanyProfile
 
 __all__ = [
     "Client",
@@ -25,4 +26,5 @@ __all__ = [
     "LegalNote",
     "Invoice",
     "User",
+    "CompanyProfile",
 ]

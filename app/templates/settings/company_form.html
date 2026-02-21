@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t("company.title") }}</h1>
+
+{% if errors %}
+<div class="flash error">
+    <ul>
+        {% for error in errors %}
+        <li>{{ t(error) }}</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+<form method="post" action="/settings/company" class="form-grid">
+    {{ csrf_input(request) }}
+    {% set src = form_data if form_data else company %}
+    <label>{{ t("company.legal_name") }}</label>
+    <input type="text" name="legal_name" value="{{ src.legal_name }}" required>
+
+    <label>{{ t("company.org_number") }} <span class="help" title="{{ t('company.tooltip.org_number') }}">?</span></label>
+    <input type="text" name="org_number" value="{{ src.org_number }}" required>
+
+    <label>{{ t("company.vat_number") }} <span class="help" title="{{ t('company.tooltip.vat_number') }}">?</span></label>
+    <input type="text" name="vat_number" value="{{ src.vat_number or '' }}">
+
+    <label>{{ t("company.address_line1") }}</label>
+    <input type="text" name="address_line1" value="{{ src.address_line1 }}" required>
+
+    <label>{{ t("company.address_line2") }}</label>
+    <input type="text" name="address_line2" value="{{ src.address_line2 or '' }}">
+
+    <label>{{ t("company.postal_code") }}</label>
+    <input type="text" name="postal_code" value="{{ src.postal_code }}" required>
+
+    <label>{{ t("company.city") }}</label>
+    <input type="text" name="city" value="{{ src.city }}" required>
+
+    <label>{{ t("company.country") }}</label>
+    <input type="text" name="country" value="{{ src.country }}" required>
+
+    <label>{{ t("company.email") }}</label>
+    <input type="email" name="email" value="{{ src.email }}" required>
+
+    <label>{{ t("company.phone") }}</label>
+    <input type="text" name="phone" value="{{ src.phone or '' }}">
+
+    <label>{{ t("company.website") }}</label>
+    <input type="text" name="website" value="{{ src.website or '' }}">
+
+    <label>{{ t("company.bankgiro") }} <span class="help" title="{{ t('company.tooltip.bankgiro') }}">?</span></label>
+    <input type="text" name="bankgiro" value="{{ src.bankgiro or '' }}">
+
+    <label>{{ t("company.plusgiro") }}</label>
+    <input type="text" name="plusgiro" value="{{ src.plusgiro or '' }}">
+
+    <label>{{ t("company.iban") }} <span class="help" title="{{ t('company.tooltip.iban') }}">?</span></label>
+    <input type="text" name="iban" value="{{ src.iban or '' }}">
+
+    <label>{{ t("company.bic") }}</label>
+    <input type="text" name="bic" value="{{ src.bic or '' }}">
+
+    <label>{{ t("company.payment_terms_days") }} <span class="help" title="{{ t('company.tooltip.payment_terms') }}">?</span></label>
+    <input type="number" min="1" name="payment_terms_days" value="{{ src.payment_terms_days }}" required>
+
+    <label>{{ t("company.invoice_prefix") }} <span class="help" title="{{ t('company.tooltip.prefixes') }}">?</span></label>
+    <input type="text" name="invoice_prefix" value="{{ src.invoice_prefix }}" required>
+
+    <label>{{ t("company.offer_prefix") }}</label>
+    <input type="text" name="offer_prefix" value="{{ src.offer_prefix }}" required>
+
+    <button type="submit">{{ t("label.save") }}</button>
+</form>
+{% endblock %}

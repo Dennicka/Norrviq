@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    app_name: str = "Norrviq Måleri AB Estimator"
+    app_name: str = "Estimator"
     default_lang: str = "ru"
     database_url: str = "sqlite:///./norrviq.db"
 
