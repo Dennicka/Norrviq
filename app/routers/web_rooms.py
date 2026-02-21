@@ -41,7 +41,7 @@ async def list_rooms(
     rooms = sorted(project.rooms, key=lambda r: r.name.lower() if r.name else "")
     context = template_context(request, lang)
     context.update({"project": project, "rooms": rooms})
-    return templates.TemplateResponse("rooms/list.html", context)
+    return templates.TemplateResponse(request, "rooms/list.html", context)
 
 
 @router.get("/create")
@@ -57,7 +57,7 @@ async def create_room_form(
 
     context = template_context(request, lang)
     context.update({"project": project, "room": None})
-    return templates.TemplateResponse("rooms/form.html", context)
+    return templates.TemplateResponse(request, "rooms/form.html", context)
 
 
 @router.post("/create")
@@ -104,7 +104,7 @@ async def edit_room_form(
 
     context = template_context(request, lang)
     context.update({"project": room.project, "room": room})
-    return templates.TemplateResponse("rooms/form.html", context)
+    return templates.TemplateResponse(request, "rooms/form.html", context)
 
 
 @router.post("/{room_id}/edit")

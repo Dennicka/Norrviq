@@ -22,7 +22,7 @@ async def list_workers(
 
     context = template_context(request, lang)
     context.update({"workers": workers, "aggregates": aggregates})
-    return templates.TemplateResponse("workers/list.html", context)
+    return templates.TemplateResponse(request, "workers/list.html", context)
 
 
 @router.get("/new")
@@ -31,7 +31,7 @@ async def new_worker_form(
 ):
     context = template_context(request, lang)
     context["worker"] = None
-    return templates.TemplateResponse("workers/form.html", context)
+    return templates.TemplateResponse(request, "workers/form.html", context)
 
 
 @router.post("/new")
@@ -68,7 +68,7 @@ async def edit_worker_form(
 
     context = template_context(request, lang)
     context["worker"] = worker
-    return templates.TemplateResponse("workers/form.html", context)
+    return templates.TemplateResponse(request, "workers/form.html", context)
 
 
 @router.post("/{worker_id}/edit")

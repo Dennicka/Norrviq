@@ -62,7 +62,7 @@ def payroll_summary(
             "include_inactive": include_inactive,
         }
     )
-    return templates.TemplateResponse("payroll/summary.html", context)
+    return templates.TemplateResponse(request, "payroll/summary.html", context)
 
 
 @router.get("/worker/{worker_id}/", response_class=HTMLResponse)
@@ -94,7 +94,7 @@ def payroll_worker_detail(
             "to_date": period_to,
         }
     )
-    return templates.TemplateResponse("payroll/worker_detail.html", context)
+    return templates.TemplateResponse(request, "payroll/worker_detail.html", context)
 
 
 @router.get("/summary/export.csv")

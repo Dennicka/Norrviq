@@ -35,7 +35,7 @@ async def list_worktypes(
     context = template_context(request, lang)
     context["worktypes"] = worktypes
     context["worktype_units"] = WORKTYPE_UNITS
-    return templates.TemplateResponse("worktypes/list.html", context)
+    return templates.TemplateResponse(request, "worktypes/list.html", context)
 
 
 @router.get("/new")
@@ -45,7 +45,7 @@ async def new_worktype_form(
     context = template_context(request, lang)
     context["worktype"] = None
     context["worktype_units"] = WORKTYPE_UNITS
-    return templates.TemplateResponse("worktypes/form.html", context)
+    return templates.TemplateResponse(request, "worktypes/form.html", context)
 
 
 @router.post("/new")
@@ -90,7 +90,7 @@ async def edit_worktype_form(
     context = template_context(request, lang)
     context["worktype"] = worktype
     context["worktype_units"] = WORKTYPE_UNITS
-    return templates.TemplateResponse("worktypes/form.html", context)
+    return templates.TemplateResponse(request, "worktypes/form.html", context)
 
 
 @router.post("/{worktype_id}/edit")
@@ -152,7 +152,7 @@ async def delete_worktype(
                 "error_message": "worktypes.error.cannot_delete_in_use",
             }
         )
-        return templates.TemplateResponse("worktypes/list.html", context, status_code=400)
+        return templates.TemplateResponse(request, "worktypes/list.html", context, status_code=400)
 
     db.delete(worktype)
     db.commit()
@@ -185,7 +185,7 @@ async def copy_worktype_form(
     )
     context = template_context(request, lang)
     context.update({"worktype": prefilled, "worktype_units": WORKTYPE_UNITS})
-    return templates.TemplateResponse("worktypes/form.html", context)
+    return templates.TemplateResponse(request, "worktypes/form.html", context)
 
 
 @router.post("/{worktype_id}/toggle-active")

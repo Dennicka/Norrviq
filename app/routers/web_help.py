@@ -9,4 +9,4 @@ router = APIRouter(prefix="/help", tags=["help"])
 @router.get("/", response_class=HTMLResponse)
 def help_page(request: Request, lang: str = Depends(get_current_lang)):
     context = template_context(request, lang)
-    return templates.TemplateResponse("help/index.html", context)
+    return templates.TemplateResponse(request, "help/index.html", context)

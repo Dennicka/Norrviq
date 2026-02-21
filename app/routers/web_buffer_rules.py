@@ -195,7 +195,7 @@ async def buffer_rules_page(
             "history_rows": history_rows,
         }
     )
-    return templates.TemplateResponse("buffer_rules.html", context)
+    return templates.TemplateResponse(request, "buffer_rules.html", context)
 
 
 @router.post("")
@@ -228,7 +228,7 @@ async def create_or_update_rule(request: Request, db: Session = Depends(get_db),
                 "history_rows": _load_history(db, project_id=None, rule_id=None),
             }
         )
-        return templates.TemplateResponse("buffer_rules.html", context, status_code=400)
+        return templates.TemplateResponse(request, "buffer_rules.html", context, status_code=400)
 
     before = _rule_to_dict(rule) if is_update else None
     rule.kind = parsed["kind"]

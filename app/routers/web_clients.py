@@ -80,7 +80,7 @@ async def _save_client(
         context = template_context(request, lang)
         placeholder = SimpleNamespace(**{**data, "id": resolved_client_id})
         context.update({"client": placeholder, "form_action": form_action})
-        return templates.TemplateResponse("clients/form.html", context, status_code=400)
+        return templates.TemplateResponse(request, "clients/form.html", context, status_code=400)
 
     _apply_client_data(client, data)
     db.add(client)
@@ -98,7 +98,7 @@ async def list_clients(
     clients = db.query(Client).all()
     context = template_context(request, lang)
     context["clients"] = clients
-    return templates.TemplateResponse("clients/list.html", context)
+    return templates.TemplateResponse(request, "clients/list.html", context)
 
 
 @router.get("/{client_id}")
@@ -115,7 +115,7 @@ async def client_detail(
     projects = db.query(Project).filter(Project.client_id == client_id).all()
     context = template_context(request, lang)
     context.update({"client": client, "projects": projects})
-    return templates.TemplateResponse("clients/detail.html", context)
+    return templates.TemplateResponse(request, "clients/detail.html", context)
 
 
 @router.get("/new")
@@ -124,7 +124,7 @@ async def new_client_form(
 ):
     context = template_context(request, lang)
     context.update({"client": None, "form_action": "/clients/save"})
-    return templates.TemplateResponse("clients/form.html", context)
+    return templates.TemplateResponse(request, "clients/form.html", context)
 
 
 @router.post("/new")
@@ -166,7 +166,7 @@ async def edit_client_form(
 
     context = template_context(request, lang)
     context.update({"client": client, "form_action": f"/clients/{client_id}/edit"})
-    return templates.TemplateResponse("clients/form.html", context)
+    return templates.TemplateResponse(request, "clients/form.html", context)
 
 
 @router.post("/{client_id}/edit")

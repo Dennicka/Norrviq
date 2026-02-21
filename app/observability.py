@@ -141,6 +141,7 @@ def _error_template_response(request: Request, status_code: int, title: str, mes
         }
     )
     return templates.TemplateResponse(
+        request,
         f"errors/{status_code}.html",
         context,
         status_code=status_code,

@@ -175,7 +175,7 @@ async def list_projects(
     projects = db.query(Project).options(selectinload(Project.client)).all()
     context = template_context(request, lang)
     context["projects"] = projects
-    return templates.TemplateResponse("projects/list.html", context)
+    return templates.TemplateResponse(request, "projects/list.html", context)
 
 
 @router.get("/new")
@@ -185,7 +185,7 @@ async def new_project_form(
     clients = db.query(Client).all()
     context = template_context(request, lang)
     context.update({"clients": clients, "project": None})
-    return templates.TemplateResponse("projects/form.html", context)
+    return templates.TemplateResponse(request, "projects/form.html", context)
 
 
 @router.post("/new")
@@ -261,7 +261,7 @@ async def project_detail(
             "baseline": baseline,
         }
     )
-    return templates.TemplateResponse("projects/detail.html", context)
+    return templates.TemplateResponse(request, "projects/detail.html", context)
 
 
 @router.get("/{project_id}/edit")
@@ -278,7 +278,7 @@ async def edit_project_form(
     clients = db.query(Client).all()
     context = template_context(request, lang)
     context.update({"clients": clients, "project": project})
-    return templates.TemplateResponse("projects/form.html", context)
+    return templates.TemplateResponse(request, "projects/form.html", context)
 
 
 @router.post("/{project_id}/edit")
@@ -415,7 +415,7 @@ def project_offer(
         }
     )
 
-    return templates.TemplateResponse("projects/offer.html", context)
+    return templates.TemplateResponse(request, "projects/offer.html", context)
 
 
 @router.post("/{project_id}/add-work-item")
@@ -477,7 +477,7 @@ async def edit_work_item_form(
 
     context = template_context(request, lang)
     context.update({"project": project, "item": item, "rooms": rooms, "worktypes": worktypes})
-    return templates.TemplateResponse("projects/work_item_form.html", context)
+    return templates.TemplateResponse(request, "projects/work_item_form.html", context)
 
 
 @router.post("/{project_id}/items/{item_id}/edit")
@@ -695,7 +695,7 @@ async def edit_cost_item_form(
             "materials": materials,
         }
     )
-    return templates.TemplateResponse("projects/cost_item_form.html", context)
+    return templates.TemplateResponse(request, "projects/cost_item_form.html", context)
 
 
 @router.post("/{project_id}/costs/{cost_id}/save")
@@ -785,7 +785,7 @@ async def edit_assignment_form(
     workers = db.query(Worker).all()
     context = template_context(request, lang)
     context.update({"project": project, "assignment": assignment, "workers": workers})
-    return templates.TemplateResponse("projects/worker_assignment_form.html", context)
+    return templates.TemplateResponse(request, "projects/worker_assignment_form.html", context)
 
 
 @router.post("/{project_id}/hours/{assignment_id}/save")
@@ -950,7 +950,7 @@ async def project_pricing_screen(
             "pricing_policy": policy,
         }
     )
-    return templates.TemplateResponse("projects/pricing.html", context)
+    return templates.TemplateResponse(request, "projects/pricing.html", context)
 
 
 @router.post("/{project_id}/pricing")
@@ -1039,7 +1039,7 @@ async def update_project_pricing_screen(
                 "pricing_policy": policy,
             }
         )
-        return templates.TemplateResponse("projects/pricing.html", context)
+        return templates.TemplateResponse(request, "projects/pricing.html", context)
 
     if intent == "apply_recommended":
         apply_mode = (payload.get("apply_mode") or "").upper()
@@ -1127,7 +1127,7 @@ async def update_project_pricing_screen(
                 "pricing_policy": policy,
             }
         )
-        return templates.TemplateResponse("projects/pricing.html", context, status_code=400)
+        return templates.TemplateResponse(request, "projects/pricing.html", context, status_code=400)
 
     return RedirectResponse(
         url=f"/projects/{project_id}/pricing", status_code=status.HTTP_303_SEE_OTHER
@@ -1152,7 +1152,7 @@ async def project_buffers_page(
     baseline, _ = compute_pricing_scenarios(db, project_id, request_id=getattr(request.state, "request_id", None))
     context = template_context(request, lang)
     context.update({"project": project, "buffer_settings": buffer_settings, "baseline": baseline})
-    return templates.TemplateResponse("projects/buffers.html", context)
+    return templates.TemplateResponse(request, "projects/buffers.html", context)
 
 
 @router.post("/{project_id}/buffers")

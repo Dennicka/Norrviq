@@ -76,7 +76,7 @@ async def list_invoices(
     company_profile = get_or_create_company_profile(db)
     context = template_context(request, lang)
     context.update({"project": project, "invoices": invoices, "company_profile": company_profile})
-    return templates.TemplateResponse("invoices/list.html", context)
+    return templates.TemplateResponse(request, "invoices/list.html", context)
 
 
 @router.get("/create", response_class=HTMLResponse)
@@ -114,7 +114,7 @@ async def create_invoice_form(
             "company_profile": company_profile,
         }
     )
-    return templates.TemplateResponse("invoices/form.html", context)
+    return templates.TemplateResponse(request, "invoices/form.html", context)
 
 
 @router.post("/create")
@@ -174,7 +174,7 @@ async def invoice_document(
         terms_body = terms_template.body_text
     context = template_context(request, lang)
     context.update({"project": invoice.project, "invoice": invoice, "company_profile": company_profile, "terms_title": terms_title, "terms_body": terms_body})
-    return templates.TemplateResponse("invoices/document.html", context)
+    return templates.TemplateResponse(request, "invoices/document.html", context)
 
 
 @router.get("/{invoice_id}/edit", response_class=HTMLResponse)
@@ -200,7 +200,7 @@ async def edit_invoice_form(
             "company_profile": company_profile,
         }
     )
-    return templates.TemplateResponse("invoices/form.html", context)
+    return templates.TemplateResponse(request, "invoices/form.html", context)
 
 
 @router.post("/{invoice_id}/edit")

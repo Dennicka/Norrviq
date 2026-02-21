@@ -44,7 +44,7 @@ async def settings_form(
     settings_obj = get_or_create_settings(db)
     context = template_context(request, lang)
     context["settings_obj"] = settings_obj
-    return templates.TemplateResponse("settings/form.html", context)
+    return templates.TemplateResponse(request, "settings/form.html", context)
 
 
 @router.post("/")
@@ -87,7 +87,7 @@ async def pricing_policy_form(request: Request, db: Session = Depends(get_db), l
     policy = get_or_create_pricing_policy(db)
     context = template_context(request, lang)
     context.update({"policy": policy, "errors": {}, "form_data": {}})
-    return templates.TemplateResponse("settings/pricing_policy.html", context)
+    return templates.TemplateResponse(request, "settings/pricing_policy.html", context)
 
 
 @router.post("/pricing-policy")
@@ -120,7 +120,7 @@ async def update_pricing_policy(request: Request, db: Session = Depends(get_db),
     if errors:
         context = template_context(request, lang)
         context.update({"policy": policy, "errors": errors, "form_data": data})
-        return templates.TemplateResponse("settings/pricing_policy.html", context, status_code=400)
+        return templates.TemplateResponse(request, "settings/pricing_policy.html", context, status_code=400)
 
     policy.min_margin_pct = min_margin_pct.quantize(Decimal("0.01"))
     policy.min_profit_sek = min_profit_sek.quantize(Decimal("0.01"))
@@ -154,7 +154,7 @@ async def company_form(request: Request, db: Session = Depends(get_db), lang: st
     context = template_context(request, lang)
     templates_list = db.query(TermsTemplate).filter(TermsTemplate.is_active.is_(True)).order_by(TermsTemplate.id.desc()).all()
     context.update({"company": profile, "errors": [], "terms_templates": templates_list})
-    return templates.TemplateResponse("settings/company_form.html", context)
+    return templates.TemplateResponse(request, "settings/company_form.html", context)
 
 
 @router.post("/company")
@@ -204,7 +204,7 @@ async def update_company(request: Request, db: Session = Depends(get_db), lang: 
         context = template_context(request, lang)
         templates_list = db.query(TermsTemplate).filter(TermsTemplate.is_active.is_(True)).order_by(TermsTemplate.id.desc()).all()
         context.update({"company": profile, "errors": errors, "form_data": data, "terms_templates": templates_list})
-        return templates.TemplateResponse("settings/company_form.html", context, status_code=400)
+        return templates.TemplateResponse(request, "settings/company_form.html", context, status_code=400)
 
     profile.legal_name = (data.get("legal_name") or "").strip()
     profile.org_number = org_number
@@ -260,7 +260,7 @@ async def terms_templates_page(request: Request, db: Session = Depends(get_db), 
     context = template_context(request, lang)
     templates_list = db.query(TermsTemplate).order_by(TermsTemplate.created_at.desc()).all()
     context.update({"terms_templates": templates_list, "segments": SEGMENTS, "doc_types": DOC_TYPES, "langs": LANGS})
-    return templates.TemplateResponse("settings/terms_templates.html", context)
+    return templates.TemplateResponse(request, "settings/terms_templates.html", context)
 
 
 @router.post("/terms")
@@ -310,7 +310,7 @@ async def buffers_settings_page(request: Request, db: Session = Depends(get_db),
     rules = db.query(BufferRule).order_by(BufferRule.scope_type.asc(), BufferRule.priority.desc(), BufferRule.id.desc()).all()
     context = template_context(request, lang)
     context.update({"rules": rules})
-    return templates.TemplateResponse("settings/buffers.html", context)
+    return templates.TemplateResponse(request, "settings/buffers.html", context)
 
 
 @router.post("/buffers")
