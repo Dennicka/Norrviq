@@ -1,5 +1,7 @@
 import json
 import logging
+import random
+import time
 from datetime import date
 
 from sqlalchemy.exc import IntegrityError
@@ -33,6 +35,9 @@ class FloorPolicyViolationError(RuntimeError):
         self.doc_id = doc_id
         self.project_id = project_id
         self.reasons = reasons
+
+
+MAX_NUMBERING_RETRIES = 10
 
 
 def _check_floor_policy_for_project(db: Session, *, project_id: int, user_id: str | None, doc_type: str, doc_id: int) -> None:
@@ -112,6 +117,16 @@ def _create_audit_event(db: Session, *, event_type: str, user_id: str | None, en
     )
 
 
+def _is_numbering_integrity_error(exc: IntegrityError) -> bool:
+    text = str(exc).lower()
+    return (
+        "invoice_number" in text
+        or "offer_number" in text
+        or "uq_document_sequences_type_year" in text
+        or "document_sequences.doc_type" in text
+    )
+
+
 def finalize_offer(db: Session, project_id: int, user_id: str | None, profile: CompanyProfile, lang: str | None = None) -> Project:
     try:
         _lock_for_issuance(db)
@@ -174,67 +189,74 @@ def finalize_offer(db: Session, project_id: int, user_id: str | None, profile: C
 
 
 def finalize_invoice(db: Session, invoice_id: int, user_id: str | None, profile: CompanyProfile, lang: str | None = None) -> Invoice:
-    try:
-        _lock_for_issuance(db)
-        invoice = db.get(Invoice, invoice_id)
-        if not invoice:
-            raise ValueError("Invoice not found")
+    for attempt in range(MAX_NUMBERING_RETRIES):
+        try:
+            _lock_for_issuance(db)
+            invoice = db.get(Invoice, invoice_id)
+            if not invoice:
+                raise ValueError("Invoice not found")
 
-        if invoice.status == STATUS_ISSUED and invoice.invoice_number:
-            db.commit()
-            return invoice
+            if invoice.status == STATUS_ISSUED and invoice.invoice_number:
+                db.commit()
+                return invoice
 
-        _check_floor_policy_for_project(db, project_id=invoice.project_id, user_id=user_id, doc_type="invoice", doc_id=invoice.id)
+            _check_floor_policy_for_project(db, project_id=invoice.project_id, user_id=user_id, doc_type="invoice", doc_id=invoice.id)
 
-        year = date.today().year
-        seq = _next_sequence(db, DOC_TYPE_INVOICE_NUMBERING, year)
-        invoice.invoice_number = format_document_number(
-            profile.invoice_prefix,
-            year,
-            seq,
-            profile.document_number_padding,
-        )
-        invoice.issue_date = invoice.issue_date or date.today()
-        if not invoice.invoice_terms_snapshot_title or not invoice.invoice_terms_snapshot_body:
-            template = resolve_terms_template(
-                db,
-                profile=profile,
-                client=invoice.project.client,
-                doc_type=DOC_TYPE_INVOICE,
-                lang=lang,
+            year = date.today().year
+            seq = _next_sequence(db, DOC_TYPE_INVOICE_NUMBERING, year)
+            invoice.invoice_number = format_document_number(
+                profile.invoice_prefix,
+                year,
+                seq,
+                profile.document_number_padding,
             )
-            invoice.invoice_terms_snapshot_title = template.title
-            invoice.invoice_terms_snapshot_body = template.body_text
+            invoice.issue_date = invoice.issue_date or date.today()
+            if not invoice.invoice_terms_snapshot_title or not invoice.invoice_terms_snapshot_body:
+                template = resolve_terms_template(
+                    db,
+                    profile=profile,
+                    client=invoice.project.client,
+                    doc_type=DOC_TYPE_INVOICE,
+                    lang=lang,
+                )
+                invoice.invoice_terms_snapshot_title = template.title
+                invoice.invoice_terms_snapshot_body = template.body_text
+                _create_audit_event(
+                    db,
+                    event_type="invoice_terms_snapshotted_on_issue",
+                    user_id=user_id,
+                    entity_type="invoice",
+                    entity_id=invoice.id,
+                    details={"template_id": template.id, "version": template.version},
+                )
+            invoice.status = STATUS_ISSUED
+            db.add(invoice)
+
             _create_audit_event(
                 db,
-                event_type="invoice_terms_snapshotted_on_issue",
+                event_type="invoice_issued",
                 user_id=user_id,
                 entity_type="invoice",
                 entity_id=invoice.id,
-                details={"template_id": template.id, "version": template.version},
+                details={"doc_number": invoice.invoice_number, "year": year, "seq": seq},
             )
-        invoice.status = STATUS_ISSUED
-        db.add(invoice)
+            logger.info(
+                "event=invoice_issued doc_id=%s doc_number=%s user_id=%s year=%s seq=%s",
+                invoice.id,
+                invoice.invoice_number,
+                user_id,
+                year,
+                seq,
+            )
+            db.commit()
+            db.refresh(invoice)
+            return invoice
+        except IntegrityError as exc:
+            db.rollback()
+            if not _is_numbering_integrity_error(exc):
+                raise
+            if attempt == MAX_NUMBERING_RETRIES - 1:
+                raise NumberingConflictError("Could not allocate unique invoice number after retries") from exc
+            time.sleep(0.002 + random.random() * 0.01)
 
-        _create_audit_event(
-            db,
-            event_type="invoice_issued",
-            user_id=user_id,
-            entity_type="invoice",
-            entity_id=invoice.id,
-            details={"doc_number": invoice.invoice_number, "year": year, "seq": seq},
-        )
-        logger.info(
-            "event=invoice_issued doc_id=%s doc_number=%s user_id=%s year=%s seq=%s",
-            invoice.id,
-            invoice.invoice_number,
-            user_id,
-            year,
-            seq,
-        )
-        db.commit()
-        db.refresh(invoice)
-        return invoice
-    except IntegrityError as exc:
-        db.rollback()
-        raise NumberingConflictError("Invoice number already issued") from exc
+    raise NumberingConflictError("Could not allocate unique invoice number after retries")

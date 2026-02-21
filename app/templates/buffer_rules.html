@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Buffer rules</h1>
+
+<section>
+  <h2>Filters</h2>
+  <form method="get" action="/web/buffer-rules">
+    <label>Project</label>
+    <select name="project_id">
+      <option value="">All</option>
+      {% for p in projects %}
+      <option value="{{ p.id }}" {% if filters.project_id == p.id %}selected{% endif %}>{{ p.name }}</option>
+      {% endfor %}
+    </select>
+
+    <label>Enabled</label>
+    <select name="active">
+      <option value="all" {% if filters.active == 'all' %}selected{% endif %}>All</option>
+      <option value="true" {% if filters.active == 'true' %}selected{% endif %}>Enabled</option>
+      <option value="false" {% if filters.active == 'false' %}selected{% endif %}>Disabled</option>
+    </select>
+
+    <label>Scope</label>
+    <select name="scope">
+      <option value="all" {% if filters.scope == 'all' %}selected{% endif %}>All</option>
+      <option value="GLOBAL" {% if filters.scope == 'GLOBAL' %}selected{% endif %}>GLOBAL</option>
+      <option value="PROJECT" {% if filters.scope == 'PROJECT' %}selected{% endif %}>PROJECT</option>
+      <option value="WORKTYPE" {% if filters.scope == 'WORKTYPE' %}selected{% endif %}>WORKTYPE</option>
+    </select>
+
+    <label>Rule ID</label>
+    <input type="number" name="rule_id" value="{{ filters.rule_id or '' }}">
+
+    <label>Search</label>
+    <input type="text" name="q" value="{{ filters.q or '' }}">
+
+    <button type="submit">Apply</button>
+  </form>
+</section>
+
+<section>
+  <h2>Rules</h2>
+  <table>
+    <thead>
+      <tr><th>Rule ID</th><th>Kind</th><th>Scope</th><th>Project</th><th>Worktype</th><th>Buffer</th><th>Priority</th><th>Enabled</th><th>Created</th><th>Updated</th><th>Actions</th></tr>
+    </thead>
+    <tbody>
+      {% for r in rules %}
+      <tr>
+        <td>{{ r.id }}</td>
+        <td>{{ r.kind }}</td>
+        <td>{{ r.scope_type }}</td>
+        <td>{% if r.scope_type == 'PROJECT' %}{{ r.scope_id }}{% else %}—{% endif %}</td>
+        <td>{% if r.scope_type == 'WORKTYPE' %}{{ r.scope_id }}{% else %}—{% endif %}</td>
+        <td>{{ r.value }} {{ r.unit }}</td>
+        <td>{{ r.priority }}</td>
+        <td>{{ 'yes' if r.is_active else 'no' }}</td>
+        <td>{{ r.created_at }}</td>
+        <td>{{ r.updated_at }}</td>
+        <td>
+          <a href="/web/buffer-rules?edit_rule_id={{ r.id }}">Edit</a>
+          <form style="display:inline" method="post" action="/web/buffer-rules/{{ r.id }}/delete">
+            {{ csrf_input(request) }}
+            <button type="submit" onclick="return confirm('Delete rule?')">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="11">No rules</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <h2>{% if form_data.get('rule_id') %}Edit rule #{{ form_data.get('rule_id') }}{% else %}Create rule{% endif %}</h2>
+  <form method="post" action="/web/buffer-rules" class="form-grid">
+    {{ csrf_input(request) }}
+    <input type="hidden" name="rule_id" value="{{ form_data.get('rule_id', '') }}">
+
+    <label>Kind</label>
+    <select name="kind">
+      {% for item in ['SETUP','CLEANUP','TRAVEL','RISK'] %}
+      <option value="{{ item }}" {% if form_data.get('kind', 'SETUP') == item %}selected{% endif %}>{{ item }}</option>
+      {% endfor %}
+    </select>
+    {% if errors.get('kind') %}<p class="error">{{ errors['kind'] }}</p>{% endif %}
+
+    <label>Basis</label>
+    <select name="basis">
+      {% for item in ['LABOR_HOURS','INTERNAL_COST'] %}
+      <option value="{{ item }}" {% if form_data.get('basis', 'LABOR_HOURS') == item %}selected{% endif %}>{{ item }}</option>
+      {% endfor %}
+    </select>
+
+    <label>Unit</label>
+    <select name="unit">
+      {% for item in ['PERCENT','FIXED_HOURS','FIXED_SEK'] %}
+      <option value="{{ item }}" {% if form_data.get('unit', 'PERCENT') == item %}selected{% endif %}>{{ item }}</option>
+      {% endfor %}
+    </select>
+    {% if errors.get('unit') %}<p class="error">{{ errors['unit'] }}</p>{% endif %}
+
+    <label>Value</label>
+    <input type="number" step="0.01" name="value" value="{{ form_data.get('value', '') }}" required>
+    {% if errors.get('value') %}<p class="error">{{ errors['value'] }}</p>{% endif %}
+
+    <label>Scope</label>
+    <select name="scope_type">
+      {% for item in ['GLOBAL','PROJECT','WORKTYPE'] %}
+      <option value="{{ item }}" {% if form_data.get('scope_type', 'GLOBAL') == item %}selected{% endif %}>{{ item }}</option>
+      {% endfor %}
+    </select>
+
+    <label>Scope ID</label>
+    <input type="number" name="scope_id" value="{{ form_data.get('scope_id', '') }}">
+    {% if errors.get('scope_id') %}<p class="error">{{ errors['scope_id'] }}</p>{% endif %}
+
+    <label>Priority</label>
+    <input type="number" name="priority" value="{{ form_data.get('priority', '0') }}">
+
+    <label><input type="checkbox" name="is_active" {% if form_data.get('is_active', 'on') in ['on', True, 'true', '1', 1] %}checked{% endif %}> Enabled</label>
+
+    <button type="submit">Save rule</button>
+  </form>
+</section>
+
+<section>
+  <h2>Effective preview</h2>
+  <label>Project</label>
+  <select id="preview-project-id">
+    <option value="">Select project</option>
+    {% for p in projects %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
+  </select>
+  <label>Worktype (optional)</label>
+  <select id="preview-worktype-id">
+    <option value="">None</option>
+    {% for wt in worktypes %}<option value="{{ wt.id }}">{{ wt.name_sv or wt.code or wt.id }}</option>{% endfor %}
+  </select>
+  <button id="preview-btn" type="button">Preview</button>
+  <pre id="preview-result">No preview yet.</pre>
+</section>
+
+<section>
+  <h2>History</h2>
+  <table>
+    <thead><tr><th>When</th><th>Actor</th><th>Action</th><th>Entity</th><th>ID</th><th>Before</th><th>After</th></tr></thead>
+    <tbody>
+      {% for row in history_rows %}
+      <tr>
+        <td>{{ row.event.created_at }}</td>
+        <td>{{ row.event.user_id or 'system' }}</td>
+        <td>{{ row.details.get('action', row.event.event_type) }}</td>
+        <td>{{ row.event.entity_type }}</td>
+        <td>{{ row.event.entity_id }}</td>
+        <td><code>{{ row.details.get('before_json') }}</code></td>
+        <td><code>{{ row.details.get('after_json') }}</code></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7">No history.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<script>
+document.getElementById('preview-btn').addEventListener('click', async () => {
+  const projectId = document.getElementById('preview-project-id').value;
+  const worktypeId = document.getElementById('preview-worktype-id').value;
+  const resultBox = document.getElementById('preview-result');
+  if (!projectId) {
+    resultBox.textContent = 'Select a project first.';
+    return;
+  }
+  let url = `/api/ui/buffer-rules/effective?project_id=${encodeURIComponent(projectId)}`;
+  if (worktypeId) {
+    url += `&worktype_id=${encodeURIComponent(worktypeId)}`;
+  }
+  const resp = await window.appFetch(url);
+  const data = await resp.json();
+  if (!data.applied_rule_id) {
+    resultBox.textContent = `No rule -> no buffer. Reason: ${data.reason}`;
+    return;
+  }
+  resultBox.textContent = `Rule #${data.applied_rule_id}\nScope: ${data.scope}\nValue: ${data.buffer_value} ${data.buffer_unit}\nBasis: ${data.buffer_basis}\nReason: ${data.reason}`;
+});
+</script>
+{% endblock %}
