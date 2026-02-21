@@ -22,16 +22,20 @@
    ```bash
    pip install -r requirements.txt
    ```
-4. Примените миграции базы данных:
+4. Скопируйте пример окружения и заполните переменные:
+   ```bash
+   cp .env.example .env
+   ```
+5. Примените миграции базы данных:
    ```bash
    alembic upgrade head
    ```
-5. Установите переменные окружения для доступа:
-   ```bash
-   export ADMIN_USERNAME=admin
-   export ADMIN_PASSWORD=admin
-   export SECRET_KEY="your-secret-key"
-   ```
+
+## Environment variables
+
+- `APP_SECRET_KEY` — обязательный секрет для сессий в production (`ALLOW_DEV_DEFAULTS=false`), минимум 32 байта (raw/hex/base64).
+- `ADMIN_EMAIL` / `ADMIN_PASSWORD` — учётные данные для bootstrap admin-пользователя при первом запуске (idempotent).
+- `ALLOW_DEV_DEFAULTS` — только для локальной разработки; по умолчанию `false`.
 
 ## Run locally
 
@@ -41,13 +45,14 @@ uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload
 
 Откройте http://127.0.0.1:8001 и переключайте язык через ссылки RU/SV в верхнем меню.
 
+## Admin bootstrap
+
+При старте приложение создаёт admin-пользователя из `ADMIN_EMAIL`/`ADMIN_PASSWORD`, если такого пользователя ещё нет.
+Если admin уже существует, запись не изменяется.
+
 ## How to run tests
 
 ```bash
 ruff check .
 pytest
 ```
-
-## Login
-
-По умолчанию используется пара admin/admin. Сразу смените эти значения через переменные окружения, чтобы избежать рисков для безопасности.

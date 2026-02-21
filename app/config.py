@@ -7,10 +7,22 @@ class Settings(BaseSettings):
     app_name: str = "Norrviq Måleri AB Estimator"
     default_lang: str = "ru"
     database_url: str = "sqlite:///./norrviq.db"
-    admin_username: str = "admin"
-    admin_password: str = "admin"
-    secret_key: str = "change-me"
+
+    app_secret_key: str = ""
+    admin_email: str = ""
+    admin_password: str = ""
+    allow_dev_defaults: bool = False
+
     session_cookie_name: str = "norrviq_session"
+    session_max_age_seconds: int = 60 * 60 * 24 * 7
+
+    @property
+    def admin_username(self) -> str:
+        return self.admin_email
+
+    @property
+    def secret_key(self) -> str:
+        return self.app_secret_key
 
     class Config:
         env_file = ".env"

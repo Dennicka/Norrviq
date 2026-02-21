@@ -21,7 +21,7 @@ async def get_current_lang(request: Request) -> str:
 
 def template_context(request: Request, lang: str) -> dict:
     translator: Callable[[str], str] = make_t(lang)
-    current_user = request.session.get("user") if hasattr(request, "session") else None
+    current_user = request.session.get("user_email") if hasattr(request, "session") else None
     flash_message: Optional[dict] = None
     if hasattr(request, "session"):
         flash_message = request.session.pop("flash_message", None)

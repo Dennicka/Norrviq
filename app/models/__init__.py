@@ -8,6 +8,7 @@ from .material import Material
 from .settings import Settings
 from .legal_note import LegalNote
 from .invoice import Invoice
+from .user import User
 
 __all__ = [
     "Client",
@@ -23,4 +24,5 @@ __all__ = [
     "Settings",
     "LegalNote",
     "Invoice",
+    "User",
 ]
