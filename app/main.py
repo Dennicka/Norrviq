@@ -6,6 +6,7 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
+from . import models  # noqa: F401
 from .config import get_settings
 from .db import Base, SessionLocal, engine
 from .dependencies import get_current_lang
@@ -29,7 +30,8 @@ from .routers import (
     web_worktypes,
     web_workers,
 )
-from .security import require_auth
+from .security import require_auth, require_role, validate_security_settings
+from .services.auth import ensure_admin_user
 from .services.bootstrap import (
     ensure_default_cost_categories,
     ensure_default_legal_notes,
@@ -41,10 +43,17 @@ logger = logging.getLogger("uvicorn.error")
 
 app = FastAPI(title=settings.app_name)
 
+validate_security_settings()
+
+resolved_secret = settings.app_secret_key or "dev-insecure-secret-key"
+
 app.add_middleware(
     SessionMiddleware,
-    secret_key=settings.secret_key,
+    secret_key=resolved_secret,
     session_cookie=settings.session_cookie_name,
+    https_only=not settings.allow_dev_defaults,
+    same_site="lax",
+    max_age=settings.session_max_age_seconds,
 )
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
@@ -62,6 +71,7 @@ def startup_event():
         ensure_default_cost_categories(db)
         ensure_default_legal_notes(db)
         ensure_default_worktypes(db)
+        ensure_admin_user(db)
     finally:
         db.close()
 
@@ -79,7 +89,7 @@ app.include_router(web_auth.router)
 app.include_router(web_clients.router, dependencies=[Depends(require_auth)])
 app.include_router(web_worktypes.router, dependencies=[Depends(require_auth)])
 app.include_router(web_projects.router, dependencies=[Depends(require_auth)])
-app.include_router(web_settings.router, dependencies=[Depends(require_auth)])
+app.include_router(web_settings.router, dependencies=[Depends(require_role("admin"))])
 app.include_router(web_costs.router, dependencies=[Depends(require_auth)])
 app.include_router(web_legal.router, dependencies=[Depends(require_auth)])
 app.include_router(web_materials.router, dependencies=[Depends(require_auth)])
