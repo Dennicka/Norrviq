@@ -4,6 +4,7 @@
 from app.db import SessionLocal
 from app.models.settings import get_or_create_settings
 from app.services.auth import ensure_admin_user
+from scripts.seed_terms_templates import seed_terms_templates
 from app.services.bootstrap import (
     ensure_default_cost_categories,
     ensure_default_legal_notes,
@@ -19,6 +20,7 @@ def main() -> None:
         ensure_default_legal_notes(db)
         ensure_default_worktypes(db)
         ensure_admin_user(db)
+        seed_terms_templates(db)
     finally:
         db.close()
 

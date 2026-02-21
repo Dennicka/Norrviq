@@ -72,6 +72,25 @@
     <label>{{ t("company.document_number_padding") }}</label>
     <input type="number" min="2" max="8" name="document_number_padding" value="{{ src.document_number_padding or 4 }}" required>
 
+
+    <label>Default offer terms template</label>
+    <select name="default_offer_terms_template_id">
+        <option value="">-- auto by segment --</option>
+        {% for item in terms_templates %}
+        {% set selected_offer = (form_data.default_offer_terms_template_id if form_data else company.default_offer_terms_template_id) %}
+        <option value="{{ item.id }}" {% if selected_offer and selected_offer|string == item.id|string %}selected{% endif %}>{{ item.segment }}/{{ item.doc_type }}/{{ item.lang }} v{{ item.version }} — {{ item.title }}</option>
+        {% endfor %}
+    </select>
+
+    <label>Default invoice terms template</label>
+    <select name="default_invoice_terms_template_id">
+        <option value="">-- auto by segment --</option>
+        {% for item in terms_templates %}
+        {% set selected_invoice = (form_data.default_invoice_terms_template_id if form_data else company.default_invoice_terms_template_id) %}
+        <option value="{{ item.id }}" {% if selected_invoice and selected_invoice|string == item.id|string %}selected{% endif %}>{{ item.segment }}/{{ item.doc_type }}/{{ item.lang }} v{{ item.version }} — {{ item.title }}</option>
+        {% endfor %}
+    </select>
+
     <button type="submit">{{ t("label.save") }}</button>
 </form>
 {% endblock %}

@@ -22,6 +22,8 @@ class Project(Base):
     billing_status = Column(String(50), nullable=False, default="not_billed")
     offer_status = Column(String(20), nullable=False, default="draft")
     offer_number = Column(String(64), unique=True, index=True, nullable=True)
+    offer_terms_snapshot_title = Column(Text, nullable=True)
+    offer_terms_snapshot_body = Column(Text, nullable=True)
     work_sum_without_moms = Column(Numeric(12, 2), nullable=True)
     moms_amount = Column(Numeric(12, 2), nullable=True)
     rot_amount = Column(Numeric(12, 2), nullable=True)

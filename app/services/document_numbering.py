@@ -10,11 +10,12 @@ from app.models.company_profile import CompanyProfile
 from app.models.document_sequence import DocumentSequence
 from app.models.invoice import Invoice
 from app.models.project import Project
+from app.services.terms_templates import DOC_TYPE_INVOICE, DOC_TYPE_OFFER, resolve_terms_template
 
 logger = logging.getLogger("uvicorn.error")
 
-DOC_TYPE_OFFER = "offer"
-DOC_TYPE_INVOICE = "invoice"
+DOC_TYPE_OFFER_NUMBERING = "offer"
+DOC_TYPE_INVOICE_NUMBERING = "invoice"
 STATUS_DRAFT = "draft"
 STATUS_ISSUED = "issued"
 
@@ -65,7 +66,7 @@ def _create_audit_event(db: Session, *, event_type: str, user_id: str | None, en
     )
 
 
-def finalize_offer(db: Session, project_id: int, user_id: str | None, profile: CompanyProfile) -> Project:
+def finalize_offer(db: Session, project_id: int, user_id: str | None, profile: CompanyProfile, lang: str | None = None) -> Project:
     try:
         _lock_for_issuance(db)
         project = db.get(Project, project_id)
@@ -77,8 +78,26 @@ def finalize_offer(db: Session, project_id: int, user_id: str | None, profile: C
             return project
 
         year = date.today().year
-        seq = _next_sequence(db, DOC_TYPE_OFFER, year)
+        seq = _next_sequence(db, DOC_TYPE_OFFER_NUMBERING, year)
         project.offer_number = format_document_number(profile.offer_prefix, year, seq, profile.document_number_padding)
+        if not project.offer_terms_snapshot_title or not project.offer_terms_snapshot_body:
+            template = resolve_terms_template(
+                db,
+                profile=profile,
+                client=project.client,
+                doc_type=DOC_TYPE_OFFER,
+                lang=lang,
+            )
+            project.offer_terms_snapshot_title = template.title
+            project.offer_terms_snapshot_body = template.body_text
+            _create_audit_event(
+                db,
+                event_type="offer_terms_snapshotted_on_issue",
+                user_id=user_id,
+                entity_type="project",
+                entity_id=project.id,
+                details={"template_id": template.id, "version": template.version},
+            )
         project.offer_status = STATUS_ISSUED
         db.add(project)
 
@@ -106,7 +125,7 @@ def finalize_offer(db: Session, project_id: int, user_id: str | None, profile: C
         raise NumberingConflictError("Offer number already issued") from exc
 
 
-def finalize_invoice(db: Session, invoice_id: int, user_id: str | None, profile: CompanyProfile) -> Invoice:
+def finalize_invoice(db: Session, invoice_id: int, user_id: str | None, profile: CompanyProfile, lang: str | None = None) -> Invoice:
     try:
         _lock_for_issuance(db)
         invoice = db.get(Invoice, invoice_id)
@@ -118,15 +137,33 @@ def finalize_invoice(db: Session, invoice_id: int, user_id: str | None, profile:
             return invoice
 
         year = date.today().year
-        seq = _next_sequence(db, DOC_TYPE_INVOICE, year)
+        seq = _next_sequence(db, DOC_TYPE_INVOICE_NUMBERING, year)
         invoice.invoice_number = format_document_number(
             profile.invoice_prefix,
             year,
             seq,
             profile.document_number_padding,
         )
-        invoice.status = STATUS_ISSUED
         invoice.issue_date = invoice.issue_date or date.today()
+        if not invoice.invoice_terms_snapshot_title or not invoice.invoice_terms_snapshot_body:
+            template = resolve_terms_template(
+                db,
+                profile=profile,
+                client=invoice.project.client,
+                doc_type=DOC_TYPE_INVOICE,
+                lang=lang,
+            )
+            invoice.invoice_terms_snapshot_title = template.title
+            invoice.invoice_terms_snapshot_body = template.body_text
+            _create_audit_event(
+                db,
+                event_type="invoice_terms_snapshotted_on_issue",
+                user_id=user_id,
+                entity_type="invoice",
+                entity_id=invoice.id,
+                details={"template_id": template.id, "version": template.version},
+            )
+        invoice.status = STATUS_ISSUED
         db.add(invoice)
 
         _create_audit_event(

@@ -9,6 +9,7 @@
         {% if invoice.status != 'issued' %}
         <form method="post" action="/invoices/{{ invoice.id }}/finalize" onsubmit="finalizeInvoice(this)">
             {{ csrf_input(request) }}
+            <input type="hidden" name="terms_lang" value="{{ lang }}">
             <button type="submit" class="js-finalize-btn">Issue</button>
         </form>
         {% endif %}
@@ -24,6 +25,9 @@
                 <div>{{ t("label.status") }}: {{ invoice.status|upper }}</div>
                 <div>{{ t("invoice.field.issue_date") }}: {{ invoice.issue_date }}</div>
             </div>
+                <div class="offer-section">
+            <h2>{{ terms_title or "Terms / Villkor" }}</h2>
+            <pre style="white-space: pre-wrap;">{{ terms_body }}</pre>
         </div>
     </div>
 </div>
