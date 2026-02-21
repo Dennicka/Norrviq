@@ -1,3 +1,4 @@
+from decimal import Decimal
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -5,11 +6,22 @@ from fastapi.testclient import TestClient
 from app.config import get_settings
 from app.db import SessionLocal
 from app.main import app
-from app.models.project import Project
+from app.models.cost import CostCategory, ProjectCostItem
+from app.models.project import Project, ProjectWorkItem
 from app.models.project_pricing import ProjectPricing
+from app.models.room import Room
 from app.models.user import User
+from app.models.worker import Worker
+from app.models.worktype import WorkType
 from app.security import hash_password
-from app.services.pricing import PRICING_MODES, PricingValidationError, get_or_create_project_pricing, update_project_pricing
+from app.services.estimates import calculate_work_item
+from app.services.pricing import (
+    PRICING_MODES,
+    PricingValidationError,
+    compute_pricing_scenarios,
+    get_or_create_project_pricing,
+    update_project_pricing,
+)
 
 client = TestClient(app)
 settings = get_settings()
@@ -30,6 +42,96 @@ def ensure_user(email: str, role: str, password: str = "test-password"):
         if not user:
             db.add(User(email=email, password_hash=hash_password(password), role=role))
             db.commit()
+    finally:
+        db.close()
+
+
+def _make_golden_project() -> int:
+    db = SessionLocal()
+    try:
+        project = Project(name=f"Golden pricing {uuid4().hex[:8]}")
+        db.add(project)
+        db.commit()
+        db.refresh(project)
+
+        wt = WorkType(
+            code=f"WT-{uuid4().hex[:6]}",
+            category="paint",
+            unit="m2",
+            name_ru="Тест",
+            name_sv="Test",
+            description_ru=None,
+            description_sv=None,
+            hours_per_unit=Decimal("2.00"),
+            base_difficulty_factor=Decimal("1.00"),
+            is_active=True,
+        )
+        db.add(wt)
+
+        room1 = Room(project_id=project.id, name="R1", floor_area_m2=Decimal("20.00"))
+        room2 = Room(project_id=project.id, name="R2", floor_area_m2=Decimal("30.00"))
+        db.add_all([room1, room2])
+        db.flush()
+
+        item1 = ProjectWorkItem(
+            project_id=project.id,
+            room_id=room1.id,
+            work_type_id=wt.id,
+            quantity=Decimal("3.00"),
+            difficulty_factor=Decimal("1.00"),
+        )
+        item2 = ProjectWorkItem(
+            project_id=project.id,
+            room_id=room2.id,
+            work_type_id=wt.id,
+            quantity=Decimal("2.00"),
+            difficulty_factor=Decimal("1.00"),
+        )
+        calculate_work_item(item1, wt, Decimal("550.00"))
+        calculate_work_item(item2, wt, Decimal("550.00"))
+        db.add_all([item1, item2])
+
+        worker = Worker(name=f"Worker {uuid4().hex[:5]}", hourly_rate=Decimal("200.00"), is_active=True)
+        db.add(worker)
+        db.flush()
+
+        from app.models.project import ProjectWorkerAssignment
+
+        db.add(
+            ProjectWorkerAssignment(
+                project_id=project.id,
+                worker_id=worker.id,
+                actual_hours=Decimal("10.00"),
+                planned_hours=Decimal("10.00"),
+            )
+        )
+
+        materials = db.query(CostCategory).filter(CostCategory.code == "MATERIALS").first()
+        if not materials:
+            materials = CostCategory(code="MATERIALS", name_ru="Материалы", name_sv="Material")
+            db.add(materials)
+            db.flush()
+        overhead = db.query(CostCategory).filter(CostCategory.code == "OTHER").first()
+        if not overhead:
+            overhead = CostCategory(code="OTHER", name_ru="Прочее", name_sv="Other")
+            db.add(overhead)
+            db.flush()
+
+        db.add(ProjectCostItem(project_id=project.id, cost_category_id=materials.id, title="M", amount=Decimal("100.00"), is_material=True))
+        db.add(ProjectCostItem(project_id=project.id, cost_category_id=overhead.id, title="O", amount=Decimal("50.00"), is_material=False))
+        db.commit()
+
+        pricing = get_or_create_project_pricing(db, project.id)
+        pricing.hourly_rate_override = Decimal("600.00")
+        pricing.fixed_total_price = Decimal("9000.00")
+        pricing.rate_per_m2 = Decimal("200.00")
+        pricing.rate_per_room = Decimal("3000.00")
+        pricing.rate_per_piece = Decimal("1100.00")
+        pricing.target_margin_pct = Decimal("30.00")
+        pricing.include_materials = True
+        pricing.include_travel_setup_buffers = True
+        db.commit()
+        return project.id
     finally:
         db.close()
 
@@ -83,6 +185,84 @@ def test_pricing_validation_by_mode():
                 assert required_field in exc.errors
 
         assert "HOURLY" in PRICING_MODES
+    finally:
+        db.close()
+
+
+def test_pricing_scenarios_values_golden():
+    project_id = _make_golden_project()
+    db = SessionLocal()
+    try:
+        baseline, scenarios = compute_pricing_scenarios(db, project_id)
+    finally:
+        db.close()
+
+    assert baseline.labor_hours_total == Decimal("10.00")
+    assert baseline.internal_total_cost == Decimal("3056.24")
+
+    by_mode = {scenario.mode: scenario for scenario in scenarios}
+    assert by_mode["HOURLY"].price_ex_vat == Decimal("6100.00")
+    assert by_mode["FIXED_TOTAL"].price_ex_vat == Decimal("9000.00")
+    assert by_mode["PER_M2"].price_ex_vat == Decimal("10000.00")
+    assert by_mode["PER_ROOM"].price_ex_vat == Decimal("6000.00")
+    assert by_mode["PIECEWORK"].price_ex_vat == Decimal("2200.00")
+
+
+def test_per_m2_requires_units_warning():
+    db = SessionLocal()
+    try:
+        project = Project(name=f"No m2 {uuid4().hex[:8]}")
+        db.add(project)
+        db.commit()
+        pricing = get_or_create_project_pricing(db, project.id)
+        pricing.mode = "PER_M2"
+        pricing.rate_per_m2 = Decimal("50.00")
+        db.commit()
+        _, scenarios = compute_pricing_scenarios(db, project.id)
+    finally:
+        db.close()
+
+    scenario = next(s for s in scenarios if s.mode == "PER_M2")
+    assert scenario.invalid is True
+    assert any("m²" in warning or "m2" in warning.lower() for warning in scenario.warnings)
+
+
+def test_effective_hourly_computed():
+    project_id = _make_golden_project()
+    db = SessionLocal()
+    try:
+        _, scenarios = compute_pricing_scenarios(db, project_id)
+    finally:
+        db.close()
+    hourly = next(s for s in scenarios if s.mode == "HOURLY")
+    assert hourly.effective_hourly_sell_rate == Decimal("610.00")
+
+
+def test_pricing_comparison_renders_table():
+    login(settings.admin_email, settings.admin_password)
+    project_id = _make_golden_project()
+    page = client.get(f"/projects/{project_id}/pricing")
+    assert page.status_code == 200
+    assert "Сравнение режимов" in page.text
+    assert "Use this mode" in page.text
+    assert "Details" in page.text
+
+
+def test_select_mode_persists():
+    login(settings.admin_email, settings.admin_password)
+    project_id = _make_golden_project()
+    response = client.post(
+        f"/projects/{project_id}/pricing",
+        data={"intent": "select_mode", "selected_mode": "PER_ROOM"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+
+    db = SessionLocal()
+    try:
+        pricing = db.query(ProjectPricing).filter(ProjectPricing.project_id == project_id).first()
+        assert pricing is not None
+        assert pricing.mode == "PER_ROOM"
     finally:
         db.close()
 

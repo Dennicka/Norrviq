@@ -1,3 +1,4 @@
+import json
 from decimal import Decimal
 
 from datetime import date
@@ -12,6 +13,7 @@ from app.models.company_profile import get_or_create_company_profile
 from app.models.cost import CostCategory, ProjectCostItem
 from app.models.legal_note import LegalNote
 from app.models.material import Material
+from app.models.audit_event import AuditEvent
 from app.models.project import Project, ProjectWorkItem, ProjectWorkerAssignment
 from app.models.room import Room
 from app.models.worker import Worker
@@ -19,7 +21,13 @@ from app.models.worktype import WorkType
 from app.models.settings import get_or_create_settings
 from app.services.estimates import calculate_project_totals, recalculate_project_work_items
 from app.services.finance import calculate_project_financials, compute_project_finance
-from app.services.pricing import PricingValidationError, get_or_create_project_pricing, update_project_pricing
+from app.services.pricing import (
+    PricingValidationError,
+    compute_pricing_scenarios,
+    get_or_create_project_pricing,
+    select_pricing_mode,
+    update_project_pricing,
+)
 from app.security import OPERATOR_ROLE, ADMIN_ROLE, get_current_user_email, get_current_user_role, require_auth
 from app.i18n import make_t
 
@@ -713,6 +721,18 @@ async def project_pricing_screen(
         raise HTTPException(status_code=404, detail="Project not found")
 
     pricing = get_or_create_project_pricing(db, project_id)
+    baseline, scenarios = compute_pricing_scenarios(db, project_id)
+    db.add(
+        AuditEvent(
+            event_type="pricing_scenarios_viewed",
+            user_id=get_current_user_email(request),
+            entity_type="project",
+            entity_id=project_id,
+            details=json.dumps({"project_id": project_id}, ensure_ascii=False),
+        )
+    )
+    db.commit()
+    is_readonly = get_current_user_role(request) not in {ADMIN_ROLE, OPERATOR_ROLE}
     wants_json = "application/json" in request.headers.get("accept", "")
     if wants_json:
         return JSONResponse(
@@ -729,6 +749,32 @@ async def project_pricing_screen(
                 "include_materials": pricing.include_materials,
                 "include_travel_setup_buffers": pricing.include_travel_setup_buffers,
                 "currency": pricing.currency,
+                "baseline": {
+                    "labor_hours_total": str(baseline.labor_hours_total),
+                    "labor_cost_internal": str(baseline.labor_cost_internal),
+                    "materials_cost_internal": str(baseline.materials_cost_internal),
+                    "travel_setup_cost_internal": str(baseline.travel_setup_cost_internal),
+                    "overhead_cost_internal": str(baseline.overhead_cost_internal),
+                    "internal_total_cost": str(baseline.internal_total_cost),
+                    "total_m2": str(baseline.total_m2),
+                    "rooms_count": baseline.rooms_count,
+                    "items_count": baseline.items_count,
+                },
+                "scenarios": [
+                    {
+                        "mode": sc.mode,
+                        "price_ex_vat": str(sc.price_ex_vat),
+                        "vat_amount": str(sc.vat_amount),
+                        "price_inc_vat": str(sc.price_inc_vat),
+                        "effective_hourly_sell_rate": str(sc.effective_hourly_sell_rate) if sc.effective_hourly_sell_rate is not None else None,
+                        "profit": str(sc.profit),
+                        "margin_pct": str(sc.margin_pct) if sc.margin_pct is not None else None,
+                        "warnings": sc.warnings,
+                        "invalid": sc.invalid,
+                        "details_lines": sc.details_lines,
+                    }
+                    for sc in scenarios
+                ],
             }
         )
 
@@ -750,7 +796,9 @@ async def project_pricing_screen(
                 "currency": pricing.currency,
             },
             "errors": {},
-            "is_readonly": False,
+            "is_readonly": is_readonly,
+            "baseline": baseline,
+            "scenarios": scenarios,
         }
     )
     return templates.TemplateResponse("projects/pricing.html", context)
@@ -776,13 +824,22 @@ async def update_project_pricing_screen(
     payload = dict(form)
 
     try:
-        update_project_pricing(
-            db,
-            pricing=pricing,
-            payload=payload,
-            user_id=get_current_user_email(request),
-        )
+        if payload.get("intent") == "select_mode":
+            select_pricing_mode(
+                db,
+                pricing=pricing,
+                mode=payload.get("selected_mode") or "",
+                user_id=get_current_user_email(request),
+            )
+        else:
+            update_project_pricing(
+                db,
+                pricing=pricing,
+                payload=payload,
+                user_id=get_current_user_email(request),
+            )
     except PricingValidationError as exc:
+        baseline, scenarios = compute_pricing_scenarios(db, project_id)
         context = template_context(request, lang)
         context.update(
             {
@@ -791,6 +848,8 @@ async def update_project_pricing_screen(
                 "form_data": payload,
                 "errors": exc.errors,
                 "is_readonly": False,
+                "baseline": baseline,
+                "scenarios": scenarios,
             }
         )
         return templates.TemplateResponse("projects/pricing.html", context, status_code=400)
