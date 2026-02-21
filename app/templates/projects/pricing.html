@@ -28,7 +28,7 @@
             ('PIECEWORK', 'Piecework')
         ] %}
         <label style="display:block; margin-bottom:4px;">
-            <input type="radio" name="mode" value="{{ mode_value }}" {% if current_mode == mode_value %}checked{% endif %}>
+            <input type="radio" name="mode" value="{{ mode_value }}" {% if current_mode == mode_value %}checked{% endif %} {% if is_readonly %}disabled{% endif %}>
             {{ mode_label }}
         </label>
         {% endfor %}
@@ -37,47 +37,102 @@
     <section data-mode-panel="HOURLY">
         <h3>Hourly</h3>
         <label>Hourly rate override (optional)</label>
-        <input type="number" step="0.01" min="0" name="hourly_rate_override" value="{{ form_data.get('hourly_rate_override') or '' }}">
+        <input type="number" step="0.01" min="0" name="hourly_rate_override" value="{{ form_data.get('hourly_rate_override') or '' }}" {% if is_readonly %}disabled{% endif %}>
     </section>
 
     <section data-mode-panel="FIXED_TOTAL">
         <h3>Fixed total <span class="help" title="Фиксированная цена проекта целиком. Пример: 120000 SEK за весь проект.">?</span></h3>
-        <input type="number" step="0.01" min="0" name="fixed_total_price" value="{{ form_data.get('fixed_total_price') or '' }}">
+        <input type="number" step="0.01" min="0" name="fixed_total_price" value="{{ form_data.get('fixed_total_price') or '' }}" {% if is_readonly %}disabled{% endif %}>
     </section>
 
     <section data-mode-panel="PER_M2">
         <h3>Rate per m² <span class="help" title="Ставка за каждый квадратный метр. Пример: 350 SEK/м².">?</span></h3>
-        <input type="number" step="0.01" min="0" name="rate_per_m2" value="{{ form_data.get('rate_per_m2') or '' }}">
+        <input type="number" step="0.01" min="0" name="rate_per_m2" value="{{ form_data.get('rate_per_m2') or '' }}" {% if is_readonly %}disabled{% endif %}>
     </section>
 
     <section data-mode-panel="PER_ROOM">
         <h3>Rate per room</h3>
-        <input type="number" step="0.01" min="0" name="rate_per_room" value="{{ form_data.get('rate_per_room') or '' }}">
+        <input type="number" step="0.01" min="0" name="rate_per_room" value="{{ form_data.get('rate_per_room') or '' }}" {% if is_readonly %}disabled{% endif %}>
     </section>
 
     <section data-mode-panel="PIECEWORK">
         <h3>Piecework</h3>
         <label>Rate per piece</label>
-        <input type="number" step="0.01" min="0" name="rate_per_piece" value="{{ form_data.get('rate_per_piece') or '' }}">
+        <input type="number" step="0.01" min="0" name="rate_per_piece" value="{{ form_data.get('rate_per_piece') or '' }}" {% if is_readonly %}disabled{% endif %}>
         <label>Target margin % <span class="help" title="Желаемая маржа в процентах. Пример: 25 означает целиться в 25% маржи.">?</span></label>
-        <input type="number" step="0.01" min="0" max="80" name="target_margin_pct" value="{{ form_data.get('target_margin_pct') or '' }}">
+        <input type="number" step="0.01" min="0" max="80" name="target_margin_pct" value="{{ form_data.get('target_margin_pct') or '' }}" {% if is_readonly %}disabled{% endif %}>
     </section>
 
     <section>
         <label>
-            <input type="checkbox" name="include_materials" {% if form_data.get('include_materials') in [True, 'on', 'true', '1', 1] %}checked{% endif %}>
+            <input type="checkbox" name="include_materials" {% if form_data.get('include_materials') in [True, 'on', 'true', '1', 1] %}checked{% endif %} {% if is_readonly %}disabled{% endif %}>
             Include materials
         </label>
         <label>
-            <input type="checkbox" name="include_travel_setup_buffers" {% if form_data.get('include_travel_setup_buffers') in [True, 'on', 'true', '1', 1] %}checked{% endif %}>
+            <input type="checkbox" name="include_travel_setup_buffers" {% if form_data.get('include_travel_setup_buffers') in [True, 'on', 'true', '1', 1] %}checked{% endif %} {% if is_readonly %}disabled{% endif %}>
             Include travel/setup buffers
         </label>
         <label>Currency</label>
-        <input type="text" name="currency" maxlength="3" value="{{ form_data.get('currency') or 'SEK' }}">
+        <input type="text" name="currency" maxlength="3" value="{{ form_data.get('currency') or 'SEK' }}" {% if is_readonly %}disabled{% endif %}>
     </section>
 
-    <button type="submit">Save</button>
+    {% if not is_readonly %}<button type="submit">Save</button>{% endif %}
 </form>
+
+<h2>Сравнение режимов</h2>
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse: collapse; width: 100%;">
+    <thead>
+        <tr>
+            <th>Mode</th>
+            <th>Price ex VAT</th>
+            <th>VAT</th>
+            <th>Total inc VAT</th>
+            <th>Effective hourly (ex VAT)</th>
+            <th>Profit</th>
+            <th>Margin %</th>
+            <th>Warnings</th>
+            <th>Action</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for scenario in scenarios %}
+        <tr {% if scenario.mode == pricing.mode %}style="background:#e7f7e7;"{% elif scenario.invalid %}style="background:#f2f2f2;color:#666;"{% endif %}>
+            <td>{{ scenario.mode }}</td>
+            <td>{{ scenario.price_ex_vat }}</td>
+            <td>{{ scenario.vat_amount }}</td>
+            <td>{{ scenario.price_inc_vat }}</td>
+            <td>{{ scenario.effective_hourly_sell_rate if scenario.effective_hourly_sell_rate is not none else '—' }}</td>
+            <td>{{ scenario.profit }}</td>
+            <td>{{ scenario.margin_pct if scenario.margin_pct is not none else '—' }}</td>
+            <td>{{ '; '.join(scenario.warnings) if scenario.warnings else '—' }}</td>
+            <td>
+                {% if not is_readonly and not scenario.invalid %}
+                <form method="post" action="/projects/{{ project.id }}/pricing">
+                    {{ csrf_input(request) }}
+                    <input type="hidden" name="intent" value="select_mode">
+                    <input type="hidden" name="selected_mode" value="{{ scenario.mode }}">
+                    <button type="submit">Use this mode</button>
+                </form>
+                {% else %}
+                —
+                {% endif %}
+            </td>
+        </tr>
+        <tr>
+            <td colspan="9" style="font-size: 0.9em;">
+                <details>
+                    <summary>Details</summary>
+                    <div>Formula:</div>
+                    <ul>
+                        {% for line in scenario.details_lines %}<li>{{ line }}</li>{% endfor %}
+                    </ul>
+                    <div>Baseline: hours={{ baseline.labor_hours_total }}, labor_cost={{ baseline.labor_cost_internal }}, materials={{ baseline.materials_cost_internal }}, travel/setup={{ baseline.travel_setup_cost_internal }}, overhead={{ baseline.overhead_cost_internal }}, internal_total={{ baseline.internal_total_cost }}</div>
+                </details>
+            </td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
 
 <script>
 (function() {
