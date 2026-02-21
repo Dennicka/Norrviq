@@ -1,5 +1,5 @@
 import json
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from datetime import date
 
@@ -23,6 +23,13 @@ from app.services.estimates import calculate_project_totals, recalculate_project
 from app.services.finance import calculate_project_financials, compute_project_finance
 from app.services.terms_templates import DOC_TYPE_OFFER, resolve_terms_template
 from app.services.pricing import (
+    LOW_MARGIN_WARN_PCT,
+    WARNING_LOW_MARGIN,
+    WARNING_MISSING_BASELINE,
+    WARNING_MISSING_ITEMS,
+    WARNING_MISSING_UNITS_M2,
+    WARNING_MISSING_UNITS_ROOMS,
+    WARNING_NEGATIVE_MARGIN,
     PricingValidationError,
     compute_pricing_scenarios,
     get_or_create_project_pricing,
@@ -33,6 +40,78 @@ from app.security import OPERATOR_ROLE, ADMIN_ROLE, get_current_user_email, get_
 from app.i18n import make_t
 
 router = APIRouter(prefix="/projects", tags=["projects"])
+
+CRITICAL_WARNING_CODES = {
+    WARNING_MISSING_UNITS_M2,
+    WARNING_MISSING_UNITS_ROOMS,
+    WARNING_MISSING_ITEMS,
+}
+
+
+def _normalize_for_display(value: Decimal | None) -> Decimal | None:
+    if value is None:
+        return None
+    try:
+        if not value.is_finite():
+            return None
+    except InvalidOperation:
+        return None
+    quantized = value.quantize(Decimal("0.01"))
+    if quantized == Decimal("-0.00"):
+        return Decimal("0.00")
+    return quantized
+
+
+def _format_money(value: Decimal | None) -> str:
+    normalized = _normalize_for_display(value)
+    return f"{normalized:.2f}" if normalized is not None else "—"
+
+
+def _format_hourly(value: Decimal | None) -> str:
+    normalized = _normalize_for_display(value)
+    return f"{normalized:.2f}" if normalized is not None else "—"
+
+
+def _format_margin_pct(value: Decimal | None) -> str:
+    normalized = _normalize_for_display(value)
+    if normalized is None:
+        return "—"
+    return f"{normalized.quantize(Decimal('0.1')):.1f}%"
+
+
+def _warning_text(code: str) -> str:
+    if code == WARNING_MISSING_UNITS_M2:
+        return "Нет площади (0 м²), режим за м² недоступен"
+    if code == WARNING_MISSING_UNITS_ROOMS:
+        return "Нет комнат (0), режим за комнату недоступен"
+    if code == WARNING_MISSING_ITEMS:
+        return "Нет работ (0 позиций), piecework недоступен"
+    if code == WARNING_MISSING_BASELINE:
+        return "Нет базовых трудозатрат (0 ч), effective hourly не рассчитывается"
+    if code == WARNING_NEGATIVE_MARGIN:
+        return "Отрицательная маржа: цена ниже полной себестоимости"
+    if code == WARNING_LOW_MARGIN:
+        return f"Низкая маржа: ниже {LOW_MARGIN_WARN_PCT}%"
+    return code
+
+
+def _scenario_view_model(scenario):
+    warning_codes = list(dict.fromkeys(scenario.warnings))
+    critical_codes = [code for code in warning_codes if code in CRITICAL_WARNING_CODES]
+    return {
+        "raw": scenario,
+        "mode": scenario.mode,
+        "price_ex_vat_display": _format_money(scenario.price_ex_vat),
+        "vat_amount_display": _format_money(scenario.vat_amount),
+        "price_inc_vat_display": _format_money(scenario.price_inc_vat),
+        "effective_hourly_display": _format_hourly(scenario.effective_hourly_sell_rate),
+        "profit_display": _format_money(scenario.profit),
+        "margin_pct_display": _format_margin_pct(scenario.margin_pct),
+        "warning_codes": warning_codes,
+        "warnings": [{"code": code, "text": _warning_text(code)} for code in warning_codes],
+        "critical_warnings": critical_codes,
+        "not_applicable": scenario.invalid and bool(critical_codes),
+    }
 
 
 def _parse_date(value: str | None):
@@ -738,6 +817,7 @@ async def project_pricing_screen(
 
     pricing = get_or_create_project_pricing(db, project_id)
     baseline, scenarios = compute_pricing_scenarios(db, project_id)
+    scenario_views = [_scenario_view_model(scenario) for scenario in scenarios]
     db.add(
         AuditEvent(
             event_type="pricing_scenarios_viewed",
@@ -814,7 +894,7 @@ async def project_pricing_screen(
             "errors": {},
             "is_readonly": is_readonly,
             "baseline": baseline,
-            "scenarios": scenarios,
+            "scenarios": scenario_views,
         }
     )
     return templates.TemplateResponse("projects/pricing.html", context)
@@ -856,6 +936,7 @@ async def update_project_pricing_screen(
             )
     except PricingValidationError as exc:
         baseline, scenarios = compute_pricing_scenarios(db, project_id)
+        scenario_views = [_scenario_view_model(scenario) for scenario in scenarios]
         context = template_context(request, lang)
         context.update(
             {
@@ -865,7 +946,7 @@ async def update_project_pricing_screen(
                 "errors": exc.errors,
                 "is_readonly": False,
                 "baseline": baseline,
-                "scenarios": scenarios,
+                "scenarios": scenario_views,
             }
         )
         return templates.TemplateResponse("projects/pricing.html", context, status_code=400)

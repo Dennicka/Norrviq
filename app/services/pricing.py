@@ -17,6 +17,14 @@ PRICING_MODES = {"HOURLY", "FIXED_TOTAL", "PER_M2", "PER_ROOM", "PIECEWORK"}
 DEFAULT_VAT_PCT = Decimal("25.00")
 HOURS_QUANT = Decimal("0.01")
 MONEY_QUANT = Decimal("0.01")
+LOW_MARGIN_WARN_PCT = Decimal("10.0")
+
+WARNING_MISSING_UNITS_M2 = "MISSING_UNITS_M2"
+WARNING_MISSING_UNITS_ROOMS = "MISSING_UNITS_ROOMS"
+WARNING_MISSING_ITEMS = "MISSING_ITEMS"
+WARNING_MISSING_BASELINE = "MISSING_BASELINE"
+WARNING_NEGATIVE_MARGIN = "NEGATIVE_MARGIN"
+WARNING_LOW_MARGIN = "LOW_MARGIN"
 
 
 @dataclass
@@ -208,6 +216,14 @@ def _build_scenario(
     margin_pct = None
     if price_ex_vat > 0:
         margin_pct = _quantize_money(profit / price_ex_vat * Decimal("100"))
+    warning_codes = list(warnings)
+    if baseline.labor_hours_total <= 0:
+        warning_codes.append(WARNING_MISSING_BASELINE)
+    if profit < 0:
+        warning_codes.append(WARNING_NEGATIVE_MARGIN)
+    elif margin_pct is not None and margin_pct < LOW_MARGIN_WARN_PCT:
+        warning_codes.append(WARNING_LOW_MARGIN)
+
     return PricingScenario(
         mode=mode,
         input_params=input_params,
@@ -217,7 +233,7 @@ def _build_scenario(
         effective_hourly_sell_rate=effective_hourly_sell_rate,
         profit=profit,
         margin_pct=margin_pct,
-        warnings=warnings,
+        warnings=warning_codes,
         invalid=invalid,
         details_lines=details_lines,
     )
@@ -277,7 +293,7 @@ def compute_pricing_scenarios(db: Session, project_id: int) -> tuple[ProjectBase
             input_params={"rate_per_m2": str(pricing.rate_per_m2) if pricing.rate_per_m2 is not None else None},
             baseline=baseline,
             price_ex_vat=Decimal(str(pricing.rate_per_m2 or 0)) * baseline.total_m2,
-            warnings=["No m² units available for this project"] if per_m2_invalid else [],
+            warnings=[WARNING_MISSING_UNITS_M2] if per_m2_invalid else [],
             invalid=per_m2_invalid or pricing.rate_per_m2 is None,
             details_lines=[f"total_m2({baseline.total_m2}) × rate_per_m2({pricing.rate_per_m2 or Decimal('0.00')})"],
             vat_pct=vat_pct,
@@ -290,7 +306,7 @@ def compute_pricing_scenarios(db: Session, project_id: int) -> tuple[ProjectBase
             input_params={"rate_per_room": str(pricing.rate_per_room) if pricing.rate_per_room is not None else None},
             baseline=baseline,
             price_ex_vat=Decimal(str(pricing.rate_per_room or 0)) * Decimal(str(baseline.rooms_count)),
-            warnings=["No rooms available for this project"] if baseline.rooms_count == 0 else [],
+            warnings=[WARNING_MISSING_UNITS_ROOMS] if baseline.rooms_count == 0 else [],
             invalid=baseline.rooms_count == 0 or pricing.rate_per_room is None,
             details_lines=[f"rooms_count({baseline.rooms_count}) × rate_per_room({pricing.rate_per_room or Decimal('0.00')})"],
             vat_pct=vat_pct,
@@ -300,7 +316,7 @@ def compute_pricing_scenarios(db: Session, project_id: int) -> tuple[ProjectBase
     piece_rate = Decimal(str(pricing.rate_per_piece or 0))
     piece_warnings: list[str] = []
     if baseline.items_count == 0:
-        piece_warnings.append("No work items available for piecework")
+        piece_warnings.append(WARNING_MISSING_ITEMS)
     piece_details = [f"items_count({baseline.items_count}) × rate_per_piece({piece_rate})"]
     if pricing.target_margin_pct is not None:
         margin = Decimal(str(pricing.target_margin_pct)) / Decimal("100")
@@ -335,6 +351,10 @@ def select_pricing_mode(db: Session, *, pricing: ProjectPricing, mode: str, user
     if normalized_mode not in PRICING_MODES:
         raise PricingValidationError({"mode": "Выберите корректный режим"})
 
+    if normalized_mode == "HOURLY" and pricing.hourly_rate_override is None:
+        settings = get_or_create_settings(db)
+        if settings.hourly_rate_company is not None:
+            pricing.hourly_rate_override = Decimal(str(settings.hourly_rate_company)).quantize(MONEY_QUANT)
     pricing.mode = normalized_mode
     db.add(pricing)
     db.add(

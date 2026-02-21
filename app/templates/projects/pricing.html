@@ -14,7 +14,7 @@
 </div>
 {% endif %}
 
-<form method="post" action="/projects/{{ project.id }}/pricing">
+<form method="post" action="/projects/{{ project.id }}/pricing" class="js-pricing-form">
     {{ csrf_input(request) }}
 
     <section>
@@ -76,7 +76,7 @@
         <input type="text" name="currency" maxlength="3" value="{{ form_data.get('currency') or 'SEK' }}" {% if is_readonly %}disabled{% endif %}>
     </section>
 
-    {% if not is_readonly %}<button type="submit">Save</button>{% endif %}
+    {% if not is_readonly %}<button type="submit" class="js-pricing-save-btn">Save</button>{% endif %}
 </form>
 
 <h2>Сравнение режимов</h2>
@@ -96,22 +96,33 @@
     </thead>
     <tbody>
     {% for scenario in scenarios %}
-        <tr {% if scenario.mode == pricing.mode %}style="background:#e7f7e7;"{% elif scenario.invalid %}style="background:#f2f2f2;color:#666;"{% endif %}>
-            <td>{{ scenario.mode }}</td>
-            <td>{{ scenario.price_ex_vat }}</td>
-            <td>{{ scenario.vat_amount }}</td>
-            <td>{{ scenario.price_inc_vat }}</td>
-            <td>{{ scenario.effective_hourly_sell_rate if scenario.effective_hourly_sell_rate is not none else '—' }}</td>
-            <td>{{ scenario.profit }}</td>
-            <td>{{ scenario.margin_pct if scenario.margin_pct is not none else '—' }}</td>
-            <td>{{ '; '.join(scenario.warnings) if scenario.warnings else '—' }}</td>
+        {% set row = scenario.raw %}
+        <tr {% if row.mode == pricing.mode %}style="background:#e7f7e7;"{% elif row.invalid %}style="background:#f2f2f2;color:#666;"{% endif %}>
+            <td>{{ row.mode }}{% if scenario.not_applicable %}<div><small title="Почему недоступно? {% for warning in scenario.warnings %}{{ warning.text }}{% if not loop.last %}; {% endif %}{% endfor %}">Not applicable</small></div>{% endif %}</td>
+            <td>{{ scenario.price_ex_vat_display }}</td>
+            <td>{{ scenario.vat_amount_display }}</td>
+            <td>{{ scenario.price_inc_vat_display }}</td>
+            <td>{{ scenario.effective_hourly_display }}</td>
+            <td>{{ scenario.profit_display }}</td>
+            <td>{{ scenario.margin_pct_display }}</td>
             <td>
-                {% if not is_readonly and not scenario.invalid %}
-                <form method="post" action="/projects/{{ project.id }}/pricing">
+                {% if scenario.warnings %}
+                    <ul style="margin:0; padding-left:18px;">
+                        {% for warning in scenario.warnings %}
+                            <li><code>{{ warning.code }}</code>: {{ warning.text }}</li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    —
+                {% endif %}
+            </td>
+            <td>
+                {% if not is_readonly and not row.invalid %}
+                <form method="post" action="/projects/{{ project.id }}/pricing" class="js-mode-select-form">
                     {{ csrf_input(request) }}
                     <input type="hidden" name="intent" value="select_mode">
-                    <input type="hidden" name="selected_mode" value="{{ scenario.mode }}">
-                    <button type="submit">Use this mode</button>
+                    <input type="hidden" name="selected_mode" value="{{ row.mode }}">
+                    <button type="submit" class="js-mode-select-btn">Use this mode</button>
                 </form>
                 {% else %}
                 —
@@ -122,11 +133,12 @@
             <td colspan="9" style="font-size: 0.9em;">
                 <details>
                     <summary>Details</summary>
-                    <div>Formula:</div>
+                    <div><strong>Formula:</strong></div>
                     <ul>
-                        {% for line in scenario.details_lines %}<li>{{ line }}</li>{% endfor %}
+                        {% for line in row.details_lines %}<li>{{ line }}</li>{% endfor %}
                     </ul>
-                    <div>Baseline: hours={{ baseline.labor_hours_total }}, labor_cost={{ baseline.labor_cost_internal }}, materials={{ baseline.materials_cost_internal }}, travel/setup={{ baseline.travel_setup_cost_internal }}, overhead={{ baseline.overhead_cost_internal }}, internal_total={{ baseline.internal_total_cost }}</div>
+                    <div><strong>Baseline breakdown:</strong> labor_hours={{ baseline.labor_hours_total }}, labor_cost={{ baseline.labor_cost_internal }}, materials={{ baseline.materials_cost_internal }}, travel/setup={{ baseline.travel_setup_cost_internal }}, overhead={{ baseline.overhead_cost_internal }}, internal_total={{ baseline.internal_total_cost }}</div>
+                    <div><strong>Include flags:</strong> materials={{ 'on' if form_data.get('include_materials') in [True, 'on', 'true', '1', 1] else 'off' }}, travel/setup buffers={{ 'on' if form_data.get('include_travel_setup_buffers') in [True, 'on', 'true', '1', 1] else 'off' }}</div>
                 </details>
             </td>
         </tr>
@@ -149,6 +161,33 @@
     radios.forEach((radio) => {
         radio.addEventListener('change', updateModePanels);
     });
+
+    const mainPricingForm = document.querySelector('.js-pricing-form');
+    if (mainPricingForm) {
+        mainPricingForm.addEventListener('submit', () => {
+            const btn = mainPricingForm.querySelector('.js-pricing-save-btn');
+            if (!btn || btn.disabled) {
+                return;
+            }
+            btn.dataset.originalText = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = 'Saving...';
+        });
+    }
+
+    const modeForms = Array.from(document.querySelectorAll('.js-mode-select-form'));
+    modeForms.forEach((form) => {
+        form.addEventListener('submit', () => {
+            const btn = form.querySelector('.js-mode-select-btn');
+            if (!btn || btn.disabled) {
+                return;
+            }
+            btn.dataset.originalText = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = 'Saving...';
+        });
+    });
+
     updateModePanels();
 })();
 </script>
