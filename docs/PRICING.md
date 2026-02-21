@@ -153,3 +153,7 @@ Audit события:
 
 - `pricing_conversion_calculated`
 - `pricing_conversion_applied` (в details: `mode`, `value`)
+
+
+## Margin Floor Policy
+См. подробности в `docs/PRICING_POLICY.md`.

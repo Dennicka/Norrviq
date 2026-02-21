@@ -9,7 +9,9 @@ from app.models.audit_event import AuditEvent
 from app.models.company_profile import CompanyProfile
 from app.models.document_sequence import DocumentSequence
 from app.models.invoice import Invoice
+from app.models.pricing_policy import get_or_create_pricing_policy
 from app.models.project import Project
+from app.services.pricing import compute_pricing_scenarios, evaluate_floor
 from app.services.terms_templates import DOC_TYPE_INVOICE, DOC_TYPE_OFFER, resolve_terms_template
 
 logger = logging.getLogger("uvicorn.error")
@@ -22,6 +24,50 @@ STATUS_ISSUED = "issued"
 
 class NumberingConflictError(RuntimeError):
     pass
+
+
+class FloorPolicyViolationError(RuntimeError):
+    def __init__(self, *, doc_type: str, doc_id: int, project_id: int, reasons: list[dict]):
+        super().__init__("Нельзя выпустить документ: ниже минимальной маржи")
+        self.doc_type = doc_type
+        self.doc_id = doc_id
+        self.project_id = project_id
+        self.reasons = reasons
+
+
+def _check_floor_policy_for_project(db: Session, *, project_id: int, user_id: str | None, doc_type: str, doc_id: int) -> None:
+    project = db.get(Project, project_id)
+    if project is None:
+        raise ValueError("Project not found")
+
+    policy = get_or_create_pricing_policy(db)
+    baseline, scenarios = compute_pricing_scenarios(db, project_id)
+    selected_mode = project.pricing.mode if project.pricing else "HOURLY"
+    selected = next((scenario for scenario in scenarios if scenario.mode == selected_mode), None)
+    if selected is None:
+        return
+    floor = evaluate_floor(baseline, selected, policy)
+    if not floor.is_below_floor:
+        return
+
+    reason_codes = [item.code for item in floor.reasons]
+    reason_payload = [{"code": item.code, "text": item.text} for item in floor.reasons]
+
+    event_type = "floor_warning_issue" if policy.warn_only_mode else "floor_blocked_issue"
+    _create_audit_event(
+        db,
+        event_type=event_type,
+        user_id=user_id,
+        entity_type=doc_type,
+        entity_id=doc_id,
+        details={"doc_type": doc_type, "doc_id": doc_id, "project_id": project_id, "reasons": reason_codes},
+    )
+    logger.warning("event=%s doc_type=%s doc_id=%s project_id=%s reason_codes=%s", event_type, doc_type, doc_id, project_id, ",".join(reason_codes))
+
+    if policy.warn_only_mode:
+        return
+    if policy.block_issue_below_floor:
+        raise FloorPolicyViolationError(doc_type=doc_type, doc_id=doc_id, project_id=project_id, reasons=reason_payload)
 
 
 def format_document_number(prefix: str, year: int, sequence: int, padding: int) -> str:
@@ -76,6 +122,8 @@ def finalize_offer(db: Session, project_id: int, user_id: str | None, profile: C
         if project.offer_status == STATUS_ISSUED and project.offer_number:
             db.commit()
             return project
+
+        _check_floor_policy_for_project(db, project_id=project.id, user_id=user_id, doc_type="project", doc_id=project.id)
 
         year = date.today().year
         seq = _next_sequence(db, DOC_TYPE_OFFER_NUMBERING, year)
@@ -135,6 +183,8 @@ def finalize_invoice(db: Session, invoice_id: int, user_id: str | None, profile:
         if invoice.status == STATUS_ISSUED and invoice.invoice_number:
             db.commit()
             return invoice
+
+        _check_floor_policy_for_project(db, project_id=invoice.project_id, user_id=user_id, doc_type="invoice", doc_id=invoice.id)
 
         year = date.today().year
         seq = _next_sequence(db, DOC_TYPE_INVOICE_NUMBERING, year)

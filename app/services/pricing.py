@@ -9,6 +9,7 @@ from app.models.audit_event import AuditEvent
 from app.models.cost import ProjectCostItem
 from app.models.project import Project, ProjectWorkItem, ProjectWorkerAssignment
 from app.models.project_pricing import ProjectPricing
+from app.models.pricing_policy import PricingPolicy
 from app.models.settings import get_or_create_settings
 
 logger = logging.getLogger("uvicorn.error")
@@ -27,6 +28,27 @@ WARNING_NEGATIVE_MARGIN = "NEGATIVE_MARGIN"
 WARNING_LOW_MARGIN = "LOW_MARGIN"
 WARNING_INVALID_TARGET_MARGIN = "INVALID_TARGET_MARGIN"
 
+FLOOR_REASON_MARGIN_BELOW_MIN = "MARGIN_BELOW_MIN"
+FLOOR_REASON_PROFIT_BELOW_MIN = "PROFIT_BELOW_MIN"
+FLOOR_REASON_EFFECTIVE_HOURLY_BELOW_MIN = "EFFECTIVE_HOURLY_BELOW_MIN"
+FLOOR_REASON_NEGATIVE_PROFIT = "NEGATIVE_PROFIT"
+
+
+@dataclass
+class FloorReason:
+    code: str
+    text: str
+
+
+@dataclass
+class FloorResult:
+    is_below_floor: bool
+    reasons: list[FloorReason]
+    recommended_min_price_ex_vat: Decimal
+    recommended_rate_per_m2: Decimal | None
+    recommended_rate_per_room: Decimal | None
+    recommended_rate_per_piece: Decimal | None
+    recommended_fixed_total: Decimal
 
 @dataclass
 class ProjectBaseline:
@@ -482,6 +504,67 @@ def compute_conversions(db: Session, project_id: int, desired: DesiredInput) -> 
         margin_pct=margin_pct,
         mode_results=mode_results,
         warnings=list(dict.fromkeys(warnings)),
+    )
+
+
+
+def _floor_reason_text(code: str, policy: PricingPolicy) -> str:
+    if code == FLOOR_REASON_MARGIN_BELOW_MIN:
+        return f"Маржа ниже минимума {Decimal(str(policy.min_margin_pct)).quantize(Decimal('0.01'))}%"
+    if code == FLOOR_REASON_PROFIT_BELOW_MIN:
+        return f"Прибыль ниже минимума {Decimal(str(policy.min_profit_sek)).quantize(Decimal('0.01'))} SEK"
+    if code == FLOOR_REASON_EFFECTIVE_HOURLY_BELOW_MIN:
+        return f"Эффективная ставка ниже минимума {Decimal(str(policy.min_effective_hourly_ex_vat)).quantize(Decimal('0.01'))} SEK/ч"
+    if code == FLOOR_REASON_NEGATIVE_PROFIT:
+        return "Отрицательная прибыль"
+    return code
+
+
+def evaluate_floor(baseline: ProjectBaseline, scenario: PricingScenario, policy: PricingPolicy) -> FloorResult:
+    min_margin_pct = Decimal(str(policy.min_margin_pct or 0))
+    min_profit_sek = Decimal(str(policy.min_profit_sek or 0))
+    min_hourly = Decimal(str(policy.min_effective_hourly_ex_vat or 0))
+
+    reasons: list[str] = []
+    if scenario.profit < 0:
+        reasons.append(FLOOR_REASON_NEGATIVE_PROFIT)
+    if scenario.margin_pct is None or scenario.margin_pct < min_margin_pct:
+        reasons.append(FLOOR_REASON_MARGIN_BELOW_MIN)
+    if scenario.profit < min_profit_sek:
+        reasons.append(FLOOR_REASON_PROFIT_BELOW_MIN)
+    if scenario.effective_hourly_sell_rate is None or scenario.effective_hourly_sell_rate < min_hourly:
+        reasons.append(FLOOR_REASON_EFFECTIVE_HOURLY_BELOW_MIN)
+
+    margin_constraint = Decimal('0')
+    if min_margin_pct < Decimal('100'):
+        margin_constraint = _quantize_money(baseline.internal_total_cost / (Decimal('1') - min_margin_pct / Decimal('100')))
+    hourly_constraint = Decimal('0')
+    if baseline.labor_hours_total > 0:
+        hourly_constraint = _quantize_money(min_hourly * baseline.labor_hours_total)
+    profit_constraint = _quantize_money(baseline.internal_total_cost + min_profit_sek)
+
+    recommended_min_price = max(profit_constraint, margin_constraint, hourly_constraint)
+
+    recommended_rate_per_m2 = None
+    if baseline.total_m2 > 0:
+        recommended_rate_per_m2 = _quantize_money(recommended_min_price / baseline.total_m2)
+
+    recommended_rate_per_room = None
+    if baseline.rooms_count > 0:
+        recommended_rate_per_room = _quantize_money(recommended_min_price / Decimal(str(baseline.rooms_count)))
+
+    recommended_rate_per_piece = None
+    if baseline.items_count > 0:
+        recommended_rate_per_piece = _quantize_money(recommended_min_price / Decimal(str(baseline.items_count)))
+
+    return FloorResult(
+        is_below_floor=bool(reasons),
+        reasons=[FloorReason(code=code, text=_floor_reason_text(code, policy)) for code in dict.fromkeys(reasons)],
+        recommended_min_price_ex_vat=_quantize_money(recommended_min_price),
+        recommended_rate_per_m2=recommended_rate_per_m2,
+        recommended_rate_per_room=recommended_rate_per_room,
+        recommended_rate_per_piece=recommended_rate_per_piece,
+        recommended_fixed_total=_quantize_money(recommended_min_price),
     )
 
 

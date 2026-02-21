@@ -110,3 +110,18 @@ def test_csrf_fetch_header_required():
         follow_redirects=False,
     )
     assert response.status_code == 403
+
+
+def test_policy_update_requires_csrf():
+    _login()
+    response = client.post(
+        "/settings/pricing-policy",
+        data={
+            "min_margin_pct": "20",
+            "min_profit_sek": "1500",
+            "min_effective_hourly_ex_vat": "600",
+        },
+        headers={"X-No-Auto-CSRF": "1"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 403

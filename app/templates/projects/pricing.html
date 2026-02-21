@@ -137,6 +137,7 @@
             <th>Profit</th>
             <th>Margin %</th>
             <th>Warnings</th>
+            <th>Floor policy</th>
             <th>Action</th>
         </tr>
     </thead>
@@ -163,6 +164,28 @@
                 {% endif %}
             </td>
             <td>
+                <div><strong>{{ scenario.floor_badge }}</strong></div>
+                {% if scenario.floor and scenario.floor.is_below_floor %}
+                <div><small>Recommended minimum: {{ scenario.floor.recommended_min_price_ex_vat }}</small></div>
+                <details>
+                    <summary>Почему</summary>
+                    <ul style="margin:0; padding-left:18px;">
+                        {% for reason in scenario.floor_reasons %}
+                        <li><code>{{ reason.code }}</code>: {{ reason.text }}</li>
+                        {% endfor %}
+                    </ul>
+                </details>
+                {% if not is_readonly %}
+                <form method="post" action="/projects/{{ project.id }}/pricing">
+                    {{ csrf_input(request) }}
+                    <input type="hidden" name="intent" value="apply_recommended">
+                    <input type="hidden" name="apply_mode" value="{{ row.mode }}">
+                    <button type="submit">Apply recommended values</button>
+                </form>
+                {% endif %}
+                {% endif %}
+            </td>
+            <td>
                 {% if not is_readonly and not row.invalid %}
                 <form method="post" action="/projects/{{ project.id }}/pricing" class="js-mode-select-form">
                     {{ csrf_input(request) }}
@@ -176,7 +199,7 @@
             </td>
         </tr>
         <tr>
-            <td colspan="9" style="font-size: 0.9em;">
+            <td colspan="10" style="font-size: 0.9em;">
                 <details>
                     <summary>Details</summary>
                     <div><strong>Formula:</strong></div>

@@ -15,6 +15,7 @@ from app.models.legal_note import LegalNote
 from app.models.material import Material
 from app.models.audit_event import AuditEvent
 from app.models.project import Project, ProjectWorkItem, ProjectWorkerAssignment
+from app.models.pricing_policy import get_or_create_pricing_policy
 from app.models.room import Room
 from app.models.worker import Worker
 from app.models.worktype import WorkType
@@ -38,6 +39,7 @@ from app.services.pricing import (
     get_or_create_project_pricing,
     select_pricing_mode,
     update_project_pricing,
+    evaluate_floor,
 )
 from app.security import OPERATOR_ROLE, ADMIN_ROLE, get_current_user_email, get_current_user_role, require_auth
 from app.i18n import make_t
@@ -100,9 +102,12 @@ def _warning_text(code: str) -> str:
     return code
 
 
-def _scenario_view_model(scenario):
+def _scenario_view_model(scenario, floor_result=None):
     warning_codes = list(dict.fromkeys(scenario.warnings))
     critical_codes = [code for code in warning_codes if code in CRITICAL_WARNING_CODES]
+    floor_reasons = []
+    if floor_result is not None:
+        floor_reasons = [{"code": item.code, "text": item.text} for item in floor_result.reasons]
     return {
         "raw": scenario,
         "mode": scenario.mode,
@@ -116,6 +121,9 @@ def _scenario_view_model(scenario):
         "warnings": [{"code": code, "text": _warning_text(code)} for code in warning_codes],
         "critical_warnings": critical_codes,
         "not_applicable": scenario.invalid and bool(critical_codes),
+        "floor": floor_result,
+        "floor_badge": "BELOW FLOOR" if floor_result and floor_result.is_below_floor else "OK",
+        "floor_reasons": floor_reasons,
     }
 
 
@@ -851,7 +859,8 @@ async def project_pricing_screen(
 
     pricing = get_or_create_project_pricing(db, project_id)
     baseline, scenarios = compute_pricing_scenarios(db, project_id)
-    scenario_views = [_scenario_view_model(scenario) for scenario in scenarios]
+    policy = get_or_create_pricing_policy(db)
+    scenario_views = [_scenario_view_model(scenario, evaluate_floor(baseline, scenario, policy)) for scenario in scenarios]
     db.add(
         AuditEvent(
             event_type="pricing_scenarios_viewed",
@@ -933,6 +942,7 @@ async def project_pricing_screen(
             "baseline": baseline,
             "scenarios": scenario_views,
             "effective_by_mode": effective_by_mode,
+            "pricing_policy": policy,
         }
     )
     return templates.TemplateResponse("projects/pricing.html", context)
@@ -995,7 +1005,8 @@ async def update_project_pricing_screen(
         db.commit()
 
         baseline, scenarios = compute_pricing_scenarios(db, project_id)
-        scenario_views = [_scenario_view_model(scenario) for scenario in scenarios]
+        policy = get_or_create_pricing_policy(db)
+        scenario_views = [_scenario_view_model(scenario, evaluate_floor(baseline, scenario, policy)) for scenario in scenarios]
         context = template_context(request, lang)
         context.update(
             {
@@ -1020,9 +1031,34 @@ async def update_project_pricing_screen(
                 "baseline": baseline,
                 "scenarios": scenario_views,
                 "effective_by_mode": {scenario.mode: _format_hourly(scenario.effective_hourly_sell_rate) for scenario in scenarios},
+                "pricing_policy": policy,
             }
         )
         return templates.TemplateResponse("projects/pricing.html", context)
+
+    if intent == "apply_recommended":
+        apply_mode = (payload.get("apply_mode") or "").upper()
+        baseline, scenarios = compute_pricing_scenarios(db, project_id)
+        policy = get_or_create_pricing_policy(db)
+        selected = next((sc for sc in scenarios if sc.mode == apply_mode), None)
+        if selected is None:
+            raise HTTPException(status_code=400, detail="Unknown pricing mode")
+        floor = evaluate_floor(baseline, selected, policy)
+        mode_to_field = {
+            "FIXED_TOTAL": ("fixed_total_price", floor.recommended_fixed_total),
+            "PER_M2": ("rate_per_m2", floor.recommended_rate_per_m2),
+            "PER_ROOM": ("rate_per_room", floor.recommended_rate_per_room),
+            "PIECEWORK": ("rate_per_piece", floor.recommended_rate_per_piece),
+            "HOURLY": ("hourly_rate_override", floor.recommended_min_price_ex_vat / baseline.labor_hours_total if baseline.labor_hours_total > 0 else None),
+        }
+        field_name, value = mode_to_field.get(apply_mode, (None, None))
+        if field_name is None or value is None:
+            raise HTTPException(status_code=400, detail="Recommended value unavailable")
+        setattr(pricing, field_name, value.quantize(Decimal("0.01")))
+        db.add(pricing)
+        db.commit()
+        add_flash_message(request, "Recommended values applied", "success")
+        return RedirectResponse(url=f"/projects/{project_id}/pricing", status_code=status.HTTP_303_SEE_OTHER)
 
     if intent == "apply_conversion":
         apply_mode = (payload.get("apply_mode") or "").upper()
@@ -1068,7 +1104,8 @@ async def update_project_pricing_screen(
             )
     except PricingValidationError as exc:
         baseline, scenarios = compute_pricing_scenarios(db, project_id)
-        scenario_views = [_scenario_view_model(scenario) for scenario in scenarios]
+        policy = get_or_create_pricing_policy(db)
+        scenario_views = [_scenario_view_model(scenario, evaluate_floor(baseline, scenario, policy)) for scenario in scenarios]
         context = template_context(request, lang)
         context.update(
             {
@@ -1082,6 +1119,7 @@ async def update_project_pricing_screen(
                 "baseline": baseline,
                 "scenarios": scenario_views,
                 "effective_by_mode": {scenario.mode: _format_hourly(scenario.effective_hourly_sell_rate) for scenario in scenarios},
+                "pricing_policy": policy,
             }
         )
         return templates.TemplateResponse("projects/pricing.html", context, status_code=400)
