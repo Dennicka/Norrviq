@@ -9,6 +9,7 @@ from app.main import app
 from app.models.cost import CostCategory, ProjectCostItem
 from app.models.project import Project, ProjectWorkItem
 from app.models.project_pricing import ProjectPricing
+from app.models.pricing_policy import PricingPolicy
 from app.models.room import Room
 from app.models.user import User
 from app.models.worker import Worker
@@ -28,6 +29,7 @@ from app.services.pricing import (
     compute_pricing_scenarios,
     get_or_create_project_pricing,
     update_project_pricing,
+    evaluate_floor,
 )
 
 client = TestClient(app)
@@ -523,9 +525,6 @@ def test_converter_warns_when_hours_zero():
         assert WARNING_MISSING_BASELINE in conversion.warnings
     finally:
         db.close()
-
-from app.models.pricing_policy import PricingPolicy
-from app.services.pricing import evaluate_floor
 
 
 def test_floor_recommended_price_max_of_constraints():

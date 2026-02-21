@@ -6,9 +6,12 @@ from fastapi.testclient import TestClient
 from app.config import get_settings
 from app.db import SessionLocal
 from app.main import app
+from app.models.audit_event import AuditEvent
 from app.models.company_profile import get_or_create_company_profile
 from app.models.invoice import Invoice
+from app.models.pricing_policy import get_or_create_pricing_policy
 from app.models.project import Project
+from app.models.project_pricing import ProjectPricing
 from app.models.user import User
 from app.security import hash_password
 from app.services.document_numbering import finalize_invoice, format_document_number
@@ -168,10 +171,6 @@ def test_number_exists_only_when_issued():
         assert invoice.invoice_number is None
     finally:
         db.close()
-
-from app.models.audit_event import AuditEvent
-from app.models.pricing_policy import get_or_create_pricing_policy
-from app.models.project_pricing import ProjectPricing
 
 
 def _force_project_below_floor(project_id: int):

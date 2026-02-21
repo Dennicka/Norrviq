@@ -8,6 +8,7 @@ from app.config import get_settings
 from app.db import SessionLocal
 from app.main import app
 from app.models.invoice import Invoice
+from app.models.pricing_policy import get_or_create_pricing_policy
 from app.models.project import Project
 from app.models.worktype import WorkType
 
@@ -41,6 +42,16 @@ def test_smoke_critical_business_flow_end_to_end():
         assert login_response.status_code in (302, 303)
         _assert_request_id(login_response)
     
+        db = SessionLocal()
+        try:
+            policy = get_or_create_pricing_policy(db)
+            policy.warn_only_mode = True
+            policy.block_issue_below_floor = True
+            db.add(policy)
+            db.commit()
+        finally:
+            db.close()
+
         client_name = f"E2E Client {uuid4().hex[:8]}"
         create_client_response = csrf_post(
             client,
