@@ -1,3 +1,7 @@
+import logging
+
+import itsdangerous
+import multipart
 from fastapi import Depends, FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
@@ -33,6 +37,7 @@ from .services.bootstrap import (
 )
 
 settings = get_settings()
+logger = logging.getLogger("uvicorn.error")
 
 app = FastAPI(title=settings.app_name)
 
@@ -49,6 +54,8 @@ Base.metadata.create_all(bind=engine)
 
 @app.on_event("startup")
 def startup_event():
+    logger.info("Using python-multipart from: %s", multipart.__file__)
+    logger.info("Using itsdangerous from: %s", itsdangerous.__file__)
     db = SessionLocal()
     try:
         get_or_create_settings(db)
