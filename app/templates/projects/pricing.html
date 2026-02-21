@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Pricing — {{ project.name }}</h1>
+<p><a href="/projects/{{ project.id }}">← {{ t('projects.detail') }}</a></p>
+
+{% if errors %}
+<div class="flash flash-error">
+    <strong>Проверьте форму:</strong>
+    <ul>
+        {% for field, message in errors.items() %}
+        <li>{{ field }}: {{ message }}</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+<form method="post" action="/projects/{{ project.id }}/pricing">
+    {{ csrf_input(request) }}
+
+    <section>
+        <h2>Выбранный режим</h2>
+        {% set current_mode = form_data.get('mode') or 'HOURLY' %}
+        {% for mode_value, mode_label in [
+            ('HOURLY', 'Hourly'),
+            ('FIXED_TOTAL', 'Fixed total'),
+            ('PER_M2', 'Per m²'),
+            ('PER_ROOM', 'Per room'),
+            ('PIECEWORK', 'Piecework')
+        ] %}
+        <label style="display:block; margin-bottom:4px;">
+            <input type="radio" name="mode" value="{{ mode_value }}" {% if current_mode == mode_value %}checked{% endif %}>
+            {{ mode_label }}
+        </label>
+        {% endfor %}
+    </section>
+
+    <section data-mode-panel="HOURLY">
+        <h3>Hourly</h3>
+        <label>Hourly rate override (optional)</label>
+        <input type="number" step="0.01" min="0" name="hourly_rate_override" value="{{ form_data.get('hourly_rate_override') or '' }}">
+    </section>
+
+    <section data-mode-panel="FIXED_TOTAL">
+        <h3>Fixed total <span class="help" title="Фиксированная цена проекта целиком. Пример: 120000 SEK за весь проект.">?</span></h3>
+        <input type="number" step="0.01" min="0" name="fixed_total_price" value="{{ form_data.get('fixed_total_price') or '' }}">
+    </section>
+
+    <section data-mode-panel="PER_M2">
+        <h3>Rate per m² <span class="help" title="Ставка за каждый квадратный метр. Пример: 350 SEK/м².">?</span></h3>
+        <input type="number" step="0.01" min="0" name="rate_per_m2" value="{{ form_data.get('rate_per_m2') or '' }}">
+    </section>
+
+    <section data-mode-panel="PER_ROOM">
+        <h3>Rate per room</h3>
+        <input type="number" step="0.01" min="0" name="rate_per_room" value="{{ form_data.get('rate_per_room') or '' }}">
+    </section>
+
+    <section data-mode-panel="PIECEWORK">
+        <h3>Piecework</h3>
+        <label>Rate per piece</label>
+        <input type="number" step="0.01" min="0" name="rate_per_piece" value="{{ form_data.get('rate_per_piece') or '' }}">
+        <label>Target margin % <span class="help" title="Желаемая маржа в процентах. Пример: 25 означает целиться в 25% маржи.">?</span></label>
+        <input type="number" step="0.01" min="0" max="80" name="target_margin_pct" value="{{ form_data.get('target_margin_pct') or '' }}">
+    </section>
+
+    <section>
+        <label>
+            <input type="checkbox" name="include_materials" {% if form_data.get('include_materials') in [True, 'on', 'true', '1', 1] %}checked{% endif %}>
+            Include materials
+        </label>
+        <label>
+            <input type="checkbox" name="include_travel_setup_buffers" {% if form_data.get('include_travel_setup_buffers') in [True, 'on', 'true', '1', 1] %}checked{% endif %}>
+            Include travel/setup buffers
+        </label>
+        <label>Currency</label>
+        <input type="text" name="currency" maxlength="3" value="{{ form_data.get('currency') or 'SEK' }}">
+    </section>
+
+    <button type="submit">Save</button>
+</form>
+
+<script>
+(function() {
+    const radios = Array.from(document.querySelectorAll('input[name="mode"]'));
+    const panels = Array.from(document.querySelectorAll('[data-mode-panel]'));
+
+    function updateModePanels() {
+        const selected = radios.find((radio) => radio.checked)?.value || 'HOURLY';
+        panels.forEach((panel) => {
+            panel.style.display = panel.dataset.modePanel === selected ? 'block' : 'none';
+        });
+    }
+
+    radios.forEach((radio) => {
+        radio.addEventListener('change', updateModePanels);
+    });
+    updateModePanels();
+})();
+</script>
+{% endblock %}
