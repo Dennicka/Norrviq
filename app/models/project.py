@@ -63,6 +63,12 @@ class Project(Base):
         uselist=False,
         cascade="all, delete-orphan",
     )
+    buffer_settings = relationship(
+        "ProjectBufferSettings",
+        back_populates="project",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
 
 
 class ProjectWorkItem(Base):

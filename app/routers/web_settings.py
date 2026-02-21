@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.dependencies import get_current_lang, get_db, template_context, templates
 from app.models.audit_event import AuditEvent
+from app.models.buffer_rule import BufferRule
 from app.models.company_profile import get_or_create_company_profile
 from app.models.pricing_policy import get_or_create_pricing_policy
 from app.models.settings import get_or_create_settings
@@ -302,3 +303,57 @@ async def create_terms_template(request: Request, db: Session = Depends(get_db))
     )
     db.commit()
     return RedirectResponse(url="/settings/terms", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.get("/buffers")
+async def buffers_settings_page(request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang)):
+    rules = db.query(BufferRule).order_by(BufferRule.scope_type.asc(), BufferRule.priority.desc(), BufferRule.id.desc()).all()
+    context = template_context(request, lang)
+    context.update({"rules": rules})
+    return templates.TemplateResponse("settings/buffers.html", context)
+
+
+@router.post("/buffers")
+async def upsert_buffer_rule(request: Request, db: Session = Depends(get_db)):
+    form = await request.form()
+    data = _load_form_data(form)
+    rule_id = data.get("rule_id")
+    action = data.get("action") or "save"
+
+    rule = db.get(BufferRule, int(rule_id)) if rule_id else BufferRule()
+    if action == "deactivate" and rule is not None:
+        rule.is_active = False
+        event_type = "buffer_rule_deactivated"
+    else:
+        rule.kind = (data.get("kind") or "SETUP").upper()
+        rule.basis = (data.get("basis") or "LABOR_HOURS").upper()
+        rule.unit = (data.get("unit") or "PERCENT").upper()
+        rule.value = Decimal((data.get("value") or "0").strip() or "0").quantize(Decimal("0.01"))
+        rule.scope_type = (data.get("scope_type") or "GLOBAL").upper()
+        scope_id_raw = (data.get("scope_id") or "").strip()
+        rule.scope_id = int(scope_id_raw) if scope_id_raw else None
+        rule.priority = int((data.get("priority") or "0").strip() or "0")
+        rule.is_active = data.get("is_active") in ("on", "true", "1", True, 1)
+        if rule.scope_type == "GLOBAL":
+            rule.scope_id = None
+        event_type = "buffer_rule_updated" if rule_id else "buffer_rule_created"
+
+    db.add(rule)
+    user_id = request.session.get("user_email") if hasattr(request, "session") else None
+    _audit(
+        db,
+        event_type=event_type,
+        user_id=user_id,
+        entity_type="buffer_rule",
+        entity_id=rule.id or 0,
+        details={
+            "kind": getattr(rule, "kind", None),
+            "basis": getattr(rule, "basis", None),
+            "scope_type": getattr(rule, "scope_type", None),
+            "scope_id": getattr(rule, "scope_id", None),
+            "priority": getattr(rule, "priority", None),
+            "is_active": getattr(rule, "is_active", None),
+        },
+    )
+    db.commit()
+    return RedirectResponse(url="/settings/buffers", status_code=status.HTTP_303_SEE_OTHER)

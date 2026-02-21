@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Project buffers — {{ project.name }}</h1>
+<p><a href="/projects/{{ project.id }}">← Back</a></p>
+<form method="post" action="/projects/{{ project.id }}/buffers">
+  {{ csrf_input(request) }}
+  <label><input type="checkbox" name="include_setup_cleanup_travel" {% if buffer_settings.include_setup_cleanup_travel %}checked{% endif %}> Include setup/cleanup/travel</label><br>
+  <label><input type="checkbox" name="include_risk" {% if buffer_settings.include_risk %}checked{% endif %}> Include risk</label><br>
+  <button type="submit">Save</button>
+</form>
+
+<h3>Preview</h3>
+<div>Raw baseline: {{ baseline.raw_labor_hours_total }} h / {{ baseline.raw_internal_cost }} SEK</div>
+<div>Buffers total: +{{ baseline.buffers_hours_total }} h / +{{ baseline.buffers_cost_total }} SEK</div>
+<div>After buffers: {{ baseline.labor_hours_total }} h / {{ baseline.internal_total_cost }} SEK</div>
+{% if baseline.buffers %}
+<ul>
+{% for b in baseline.buffers %}
+<li>{{ b.kind }}: +{{ b.hours_delta }} h / +{{ b.sek_delta }} SEK ({{ b.reason }})</li>
+{% endfor %}
+</ul>
+{% endif %}
+{% endblock %}

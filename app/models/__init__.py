@@ -15,6 +15,8 @@ from .audit_event import AuditEvent
 from .project_pricing import ProjectPricing
 from .terms_template import TermsTemplate
 from .pricing_policy import PricingPolicy
+from .buffer_rule import BufferRule
+from .project_buffer_settings import ProjectBufferSettings
 
 __all__ = [
     "Client",
@@ -37,4 +39,6 @@ __all__ = [
     "ProjectPricing",
     "TermsTemplate",
     "PricingPolicy",
+    "BufferRule",
+    "ProjectBufferSettings",
 ]

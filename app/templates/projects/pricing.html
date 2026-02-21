@@ -206,7 +206,10 @@
                     <ul>
                         {% for line in row.details_lines %}<li>{{ line }}</li>{% endfor %}
                     </ul>
-                    <div><strong>Baseline breakdown:</strong> labor_hours={{ baseline.labor_hours_total }}, labor_cost={{ baseline.labor_cost_internal }}, materials={{ baseline.materials_cost_internal }}, travel/setup={{ baseline.travel_setup_cost_internal }}, overhead={{ baseline.overhead_cost_internal }}, internal_total={{ baseline.internal_total_cost }}</div>
+                    <div><strong>Raw baseline:</strong> hours={{ baseline.raw_labor_hours_total }}, internal_total={{ baseline.raw_internal_cost }}</div>
+                    <div><strong>Buffers breakdown:</strong> setup/cleanup/travel +{{ baseline.buffers_hours_total }} h / +{{ baseline.buffers_cost_total }} SEK</div>
+                    <div><strong>Risk:</strong> {% set risk_hours = baseline.buffers | selectattr("kind", "equalto", "RISK") | map(attribute="hours_delta") | list %}{% set risk_sek = baseline.buffers | selectattr("kind", "equalto", "RISK") | map(attribute="sek_delta") | list %}+{{ (risk_hours | sum) if risk_hours else "0.00" }} h / +{{ (risk_sek | sum) if risk_sek else "0.00" }} SEK</div>
+                    <div><strong>Baseline after buffers:</strong> labor_hours={{ baseline.labor_hours_total }}, labor_cost={{ baseline.labor_cost_internal }}, materials={{ baseline.materials_cost_internal }}, travel/setup={{ baseline.travel_setup_cost_internal }}, overhead={{ baseline.overhead_cost_internal }}, internal_total={{ baseline.internal_total_cost }}</div>
                     <div><strong>Include flags:</strong> materials={{ 'on' if form_data.get('include_materials') in [True, 'on', 'true', '1', 1] else 'off' }}, travel/setup buffers={{ 'on' if form_data.get('include_travel_setup_buffers') in [True, 'on', 'true', '1', 1] else 'off' }}</div>
                 </details>
             </td>

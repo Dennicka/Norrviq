@@ -37,6 +37,7 @@ from app.services.pricing import (
     compute_conversions,
     compute_pricing_scenarios,
     get_or_create_project_pricing,
+    get_or_create_project_buffer_settings,
     select_pricing_mode,
     update_project_pricing,
     evaluate_floor,
@@ -858,7 +859,7 @@ async def project_pricing_screen(
         raise HTTPException(status_code=404, detail="Project not found")
 
     pricing = get_or_create_project_pricing(db, project_id)
-    baseline, scenarios = compute_pricing_scenarios(db, project_id)
+    baseline, scenarios = compute_pricing_scenarios(db, project_id, request_id=getattr(request.state, "request_id", None))
     policy = get_or_create_pricing_policy(db)
     scenario_views = [_scenario_view_model(scenario, evaluate_floor(baseline, scenario, policy)) for scenario in scenarios]
     db.add(
@@ -1004,7 +1005,7 @@ async def update_project_pricing_screen(
         )
         db.commit()
 
-        baseline, scenarios = compute_pricing_scenarios(db, project_id)
+        baseline, scenarios = compute_pricing_scenarios(db, project_id, request_id=getattr(request.state, "request_id", None))
         policy = get_or_create_pricing_policy(db)
         scenario_views = [_scenario_view_model(scenario, evaluate_floor(baseline, scenario, policy)) for scenario in scenarios]
         context = template_context(request, lang)
@@ -1038,7 +1039,7 @@ async def update_project_pricing_screen(
 
     if intent == "apply_recommended":
         apply_mode = (payload.get("apply_mode") or "").upper()
-        baseline, scenarios = compute_pricing_scenarios(db, project_id)
+        baseline, scenarios = compute_pricing_scenarios(db, project_id, request_id=getattr(request.state, "request_id", None))
         policy = get_or_create_pricing_policy(db)
         selected = next((sc for sc in scenarios if sc.mode == apply_mode), None)
         if selected is None:
@@ -1103,7 +1104,7 @@ async def update_project_pricing_screen(
                 user_id=get_current_user_email(request),
             )
     except PricingValidationError as exc:
-        baseline, scenarios = compute_pricing_scenarios(db, project_id)
+        baseline, scenarios = compute_pricing_scenarios(db, project_id, request_id=getattr(request.state, "request_id", None))
         policy = get_or_create_pricing_policy(db)
         scenario_views = [_scenario_view_model(scenario, evaluate_floor(baseline, scenario, policy)) for scenario in scenarios]
         context = template_context(request, lang)
@@ -1127,3 +1128,47 @@ async def update_project_pricing_screen(
     return RedirectResponse(
         url=f"/projects/{project_id}/pricing", status_code=status.HTTP_303_SEE_OTHER
     )
+
+
+@router.get("/{project_id}/buffers")
+async def project_buffers_page(
+    project_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    lang: str = Depends(get_current_lang),
+):
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    role = get_current_user_role(request)
+    if role not in {ADMIN_ROLE, OPERATOR_ROLE}:
+        raise HTTPException(status_code=403, detail="Insufficient role")
+
+    buffer_settings = get_or_create_project_buffer_settings(db, project_id)
+    baseline, _ = compute_pricing_scenarios(db, project_id, request_id=getattr(request.state, "request_id", None))
+    context = template_context(request, lang)
+    context.update({"project": project, "buffer_settings": buffer_settings, "baseline": baseline})
+    return templates.TemplateResponse("projects/buffers.html", context)
+
+
+@router.post("/{project_id}/buffers")
+async def update_project_buffers(
+    project_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    role = get_current_user_role(request)
+    if role not in {ADMIN_ROLE, OPERATOR_ROLE}:
+        raise HTTPException(status_code=403, detail="Insufficient role")
+
+    form = await request.form()
+    settings_obj = get_or_create_project_buffer_settings(db, project_id)
+    settings_obj.include_setup_cleanup_travel = form.get("include_setup_cleanup_travel") in ("on", "true", "1", True, 1)
+    settings_obj.include_risk = form.get("include_risk") in ("on", "true", "1", True, 1)
+    db.add(settings_obj)
+    db.add(AuditEvent(event_type="project_buffer_flags_updated", user_id=get_current_user_email(request), entity_type="project", entity_id=project_id, details=json.dumps({"project_id": project_id, "include_setup_cleanup_travel": settings_obj.include_setup_cleanup_travel, "include_risk": settings_obj.include_risk}, ensure_ascii=False)))
+    db.commit()
+    return RedirectResponse(url=f"/projects/{project_id}/buffers", status_code=status.HTTP_303_SEE_OTHER)
