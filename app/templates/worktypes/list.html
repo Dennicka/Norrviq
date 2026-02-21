@@ -42,9 +42,11 @@
                 <a href="/worktypes/{{ wt.id }}/copy">{{ t("worktypes.action.copy") }}</a>
                 |
                 <form method="post" action="/worktypes/{{ wt.id }}/toggle-active" style="display:inline">
+                    {{ csrf_input(request) }}
                     <button type="submit">{{ wt.is_active and t('worktypes.action.deactivate') or t('worktypes.action.activate') }}</button>
                 </form>
                 <form method="post" action="/worktypes/{{ wt.id }}/delete" style="display:inline" onsubmit="return confirm('{{ t('label.delete') }}?')">
+                    {{ csrf_input(request) }}
                     <button type="submit">{{ t('label.delete') }}</button>
                 </form>
             </td>

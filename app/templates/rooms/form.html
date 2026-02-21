@@ -3,6 +3,7 @@
 <h1>{{ room and t('projects.edit') or t('label.create') }}: {{ t('rooms.section_title') }}</h1>
 <p><a href="/projects/{{ project.id }}/rooms/">{{ t('rooms.section_title') }}</a></p>
 <form method="post">
+    {{ csrf_input(request) }}
     <div>
         <label>{{ t("label.name") }}</label>
         <input type="text" name="name" value="{{ room.name if room else '' }}" required>

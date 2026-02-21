@@ -8,6 +8,7 @@
     {% endif %}
 </h1>
 <form method="post" action="{{ action_url }}">
+    {{ csrf_input(request) }}
     <div>
         <label>{{ t("invoice.field.number") }}</label>
         <input type="text" name="invoice_number" value="{{ invoice.invoice_number if invoice else defaults.invoice_number }}" required>

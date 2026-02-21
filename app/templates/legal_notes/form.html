@@ -2,6 +2,7 @@
 {% block content %}
 <h1>{{ note and note.title_ru or t("legal_notes.new") }}</h1>
 <form method="post">
+    {{ csrf_input(request) }}
     <div class="form-row">
         <label for="code">{{ t("label.code") }}</label>
         <input type="text" id="code" name="code" value="{{ note.code if note else '' }}">

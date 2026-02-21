@@ -2,6 +2,7 @@
 {% block content %}
 <h1>{{ worktype and t("worktypes.edit") or t("worktypes.new") }}</h1>
 <form method="post">
+    {{ csrf_input(request) }}
     <div>
         <label>{{ t("label.code") }}</label>
         <input type="text" name="code" value="{{ worktype.code if worktype else '' }}" required>

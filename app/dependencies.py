@@ -1,15 +1,60 @@
 from typing import Callable, Optional
+import logging
 
-from fastapi import Request
+from fastapi import HTTPException, Request
 from fastapi.templating import Jinja2Templates
+from markupsafe import Markup, escape
 from sqlalchemy.orm import Session
 
 from .config import get_settings
 from .db import SessionLocal
 from .i18n import make_t
+from .security import ensure_csrf_token, validate_csrf_token
 
 settings = get_settings()
 templates = Jinja2Templates(directory="app/templates")
+
+
+def csrf_input(request: Request) -> Markup:
+    token = ensure_csrf_token(request)
+    return Markup(f'<input type="hidden" name="csrf_token" value="{escape(token)}">')
+
+
+templates.env.globals["csrf_input"] = csrf_input
+
+
+
+logger = logging.getLogger("uvicorn.error")
+
+
+async def enforce_csrf(request: Request) -> None:
+    safe_methods = {"GET", "HEAD", "OPTIONS"}
+    exempt_paths = ("/static/", "/api/health")
+
+    if any(request.url.path.startswith(path) for path in exempt_paths):
+        return
+
+    if request.method in safe_methods:
+        ensure_csrf_token(request)
+        return
+
+    csrf_token = request.headers.get("X-CSRF-Token")
+    if not csrf_token and "application/json" not in request.headers.get("content-type", ""):
+        form = await request.form()
+        csrf_token = form.get("csrf_token")
+
+    if validate_csrf_token(request, csrf_token):
+        return
+
+    request_id = getattr(request.state, "request_id", None) or request.headers.get("x-request-id")
+    logger.warning(
+        "csrf_reject path=%s method=%s user_id=%s request_id=%s",
+        request.url.path,
+        request.method,
+        request.session.get("user_email"),
+        request_id,
+    )
+    raise HTTPException(status_code=403, detail="Invalid or missing CSRF token")
 
 
 async def get_current_lang(request: Request) -> str:
@@ -33,6 +78,7 @@ def template_context(request: Request, lang: str) -> dict:
         "app_name": settings.app_name,
         "current_user": current_user,
         "flash_message": flash_message,
+        "csrf_token": ensure_csrf_token(request),
     }
 
 

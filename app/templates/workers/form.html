@@ -2,6 +2,7 @@
 {% block content %}
 <h1>{{ worker and t("workers.edit") or t("workers.new") }}</h1>
 <form method="post">
+    {{ csrf_input(request) }}
     <div class="form-group">
         <label for="name">{{ t("workers.name") }}</label>
         <input type="text" id="name" name="name" value="{{ worker.name if worker else '' }}" required>

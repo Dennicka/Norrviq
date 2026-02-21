@@ -56,3 +56,32 @@ uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload
 ruff check .
 pytest
 ```
+
+## CSRF protection: how it works
+
+- Все state-changing запросы (`POST`, `PUT`, `PATCH`, `DELETE`) требуют CSRF-токен.
+- Токен хранится в сессии (`session["csrf_token"]`) и автоматически создаётся на первом безопасном запросе (`GET/HEAD/OPTIONS`).
+- Для HTML-форм токен передаётся через скрытое поле `csrf_token` (через шаблонный helper `csrf_input(request)`).
+- Для JS/fetch токен публикуется в `<meta name="csrf-token">` и должен отправляться в заголовке `X-CSRF-Token`.
+- Исключения: только `GET/HEAD/OPTIONS`, `/api/health`, `/static/*`.
+- При отсутствии/невалидности токена сервер возвращает `403 Invalid or missing CSRF token`.
+
+## How to send token from JS
+
+```html
+<meta name="csrf-token" content="{{ csrf_token }}">
+```
+
+```js
+const token = document.querySelector('meta[name="csrf-token"]').content;
+await fetch('/clients/new', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+    'X-CSRF-Token': token,
+  },
+  body: new URLSearchParams({ name: 'Demo Client', csrf_token: token }),
+});
+```
+
+Для встроенного UI также доступен helper `window.norrviqFetch(url, options)`, который автоматически добавляет `X-CSRF-Token`.

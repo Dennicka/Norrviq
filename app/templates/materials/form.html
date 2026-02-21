@@ -2,6 +2,7 @@
 {% block content %}
 <h1>{{ material and t('materials.edit') or t('materials.create') }}</h1>
 <form method="post" action="{{ material and ('/materials/' ~ material.id ~ '/edit') or '/materials/create' }}">
+    {{ csrf_input(request) }}
     <div>
         <label>{{ t('label.code') }}</label>
         <input type="text" name="code" value="{{ material.code if material else '' }}" required>

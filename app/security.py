@@ -15,6 +15,7 @@ ADMIN_ROLE = "admin"
 OPERATOR_ROLE = "operator"
 VIEWER_ROLE = "viewer"
 VALID_ROLES = {ADMIN_ROLE, OPERATOR_ROLE, VIEWER_ROLE}
+CSRF_SESSION_KEY = "csrf_token"
 
 
 class SecurityConfigError(RuntimeError):
@@ -109,3 +110,20 @@ def verify_password(password: str, password_hash: str) -> bool:
 def log_auth_event(event: str, **kwargs) -> None:
     safe_payload = {k: v for k, v in kwargs.items() if "password" not in k and "secret" not in k}
     logger.info("auth_event=%s payload=%s", event, safe_payload)
+
+
+def ensure_csrf_token(request: Request) -> str:
+    token = request.session.get(CSRF_SESSION_KEY)
+    if not token:
+        token = secrets.token_urlsafe(32)
+        request.session[CSRF_SESSION_KEY] = token
+    return token
+
+
+def validate_csrf_token(request: Request, token: Optional[str]) -> bool:
+    if not token:
+        return False
+    expected = request.session.get(CSRF_SESSION_KEY)
+    if not expected:
+        return False
+    return hmac.compare_digest(token, expected)
