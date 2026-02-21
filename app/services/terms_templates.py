@@ -52,7 +52,7 @@ def resolve_terms_template(
     client: Client | None,
     doc_type: str,
     lang: str | None,
-) -> TermsTemplate | None:
+) -> TermsTemplate:
     effective_lang = lang if lang in {"sv", "ru", "en"} else DEFAULT_LANG
 
     default_template_id = (
@@ -78,17 +78,37 @@ def resolve_terms_template(
         .order_by(TermsTemplate.version.desc())
         .first()
     )
-    if template or effective_lang == DEFAULT_LANG:
+    if template:
         return template
 
-    return (
+    if effective_lang != DEFAULT_LANG:
+        template = (
+            db.query(TermsTemplate)
+            .filter(
+                TermsTemplate.segment == segment,
+                TermsTemplate.doc_type == doc_type,
+                TermsTemplate.lang == DEFAULT_LANG,
+                TermsTemplate.is_active.is_(True),
+            )
+            .order_by(TermsTemplate.version.desc())
+            .first()
+        )
+        if template:
+            return template
+
+    template = (
         db.query(TermsTemplate)
         .filter(
-            TermsTemplate.segment == segment,
             TermsTemplate.doc_type == doc_type,
             TermsTemplate.lang == DEFAULT_LANG,
             TermsTemplate.is_active.is_(True),
         )
-        .order_by(TermsTemplate.version.desc())
+        .order_by(TermsTemplate.version.desc(), TermsTemplate.id.desc())
         .first()
+    )
+    if template:
+        return template
+
+    raise RuntimeError(
+        f"No active terms template found for doc_type={doc_type}. Expected seeded sv defaults to exist."
     )

@@ -82,3 +82,4 @@ def test_offer_page_works_for_authenticated_user():
     response = client.get(f"/projects/{project_id}/offer?lang=sv")
     assert response.status_code == 200
     assert "Test Client" in response.text or "Test Project" in response.text
+    assert "Offertvillkor" in response.text

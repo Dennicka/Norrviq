@@ -159,15 +159,19 @@ async def invoice_document(
 ):
     invoice = _get_invoice(db, project_id, invoice_id)
     company_profile = get_or_create_company_profile(db)
-    terms_template = resolve_terms_template(
-        db,
-        profile=company_profile,
-        client=invoice.project.client,
-        doc_type=DOC_TYPE_INVOICE,
-        lang=lang,
-    )
-    terms_title = invoice.invoice_terms_snapshot_title or (terms_template.title if terms_template else "")
-    terms_body = invoice.invoice_terms_snapshot_body or (terms_template.body_text if terms_template else "")
+    if invoice.status == "issued":
+        terms_title = invoice.invoice_terms_snapshot_title or ""
+        terms_body = invoice.invoice_terms_snapshot_body or ""
+    else:
+        terms_template = resolve_terms_template(
+            db,
+            profile=company_profile,
+            client=invoice.project.client,
+            doc_type=DOC_TYPE_INVOICE,
+            lang=lang,
+        )
+        terms_title = terms_template.title
+        terms_body = terms_template.body_text
     context = template_context(request, lang)
     context.update({"project": invoice.project, "invoice": invoice, "company_profile": company_profile, "terms_title": terms_title, "terms_body": terms_body})
     return templates.TemplateResponse("invoices/document.html", context)

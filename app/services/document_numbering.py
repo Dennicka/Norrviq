@@ -80,7 +80,6 @@ def finalize_offer(db: Session, project_id: int, user_id: str | None, profile: C
         year = date.today().year
         seq = _next_sequence(db, DOC_TYPE_OFFER_NUMBERING, year)
         project.offer_number = format_document_number(profile.offer_prefix, year, seq, profile.document_number_padding)
-        project.offer_status = STATUS_ISSUED
         if not project.offer_terms_snapshot_title or not project.offer_terms_snapshot_body:
             template = resolve_terms_template(
                 db,
@@ -89,17 +88,17 @@ def finalize_offer(db: Session, project_id: int, user_id: str | None, profile: C
                 doc_type=DOC_TYPE_OFFER,
                 lang=lang,
             )
-            if template:
-                project.offer_terms_snapshot_title = template.title
-                project.offer_terms_snapshot_body = template.body_text
-                _create_audit_event(
-                    db,
-                    event_type="offer_terms_snapshotted_on_issue",
-                    user_id=user_id,
-                    entity_type="project",
-                    entity_id=project.id,
-                    details={"template_id": template.id, "version": template.version},
-                )
+            project.offer_terms_snapshot_title = template.title
+            project.offer_terms_snapshot_body = template.body_text
+            _create_audit_event(
+                db,
+                event_type="offer_terms_snapshotted_on_issue",
+                user_id=user_id,
+                entity_type="project",
+                entity_id=project.id,
+                details={"template_id": template.id, "version": template.version},
+            )
+        project.offer_status = STATUS_ISSUED
         db.add(project)
 
         _create_audit_event(
@@ -145,7 +144,6 @@ def finalize_invoice(db: Session, invoice_id: int, user_id: str | None, profile:
             seq,
             profile.document_number_padding,
         )
-        invoice.status = STATUS_ISSUED
         invoice.issue_date = invoice.issue_date or date.today()
         if not invoice.invoice_terms_snapshot_title or not invoice.invoice_terms_snapshot_body:
             template = resolve_terms_template(
@@ -155,17 +153,17 @@ def finalize_invoice(db: Session, invoice_id: int, user_id: str | None, profile:
                 doc_type=DOC_TYPE_INVOICE,
                 lang=lang,
             )
-            if template:
-                invoice.invoice_terms_snapshot_title = template.title
-                invoice.invoice_terms_snapshot_body = template.body_text
-                _create_audit_event(
-                    db,
-                    event_type="invoice_terms_snapshotted_on_issue",
-                    user_id=user_id,
-                    entity_type="invoice",
-                    entity_id=invoice.id,
-                    details={"template_id": template.id, "version": template.version},
-                )
+            invoice.invoice_terms_snapshot_title = template.title
+            invoice.invoice_terms_snapshot_body = template.body_text
+            _create_audit_event(
+                db,
+                event_type="invoice_terms_snapshotted_on_issue",
+                user_id=user_id,
+                entity_type="invoice",
+                entity_id=invoice.id,
+                details={"template_id": template.id, "version": template.version},
+            )
+        invoice.status = STATUS_ISSUED
         db.add(invoice)
 
         _create_audit_event(

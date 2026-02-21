@@ -45,8 +45,7 @@ def test_terms_template_versioning_creates_new_version():
             db, segment="B2C", doc_type="OFFER", lang="sv", title="v2", body_text="body2"
         )
         db.commit()
-        assert first.version == 1
-        assert second.version == 2
+        assert second.version == first.version + 1
     finally:
         db.close()
 
