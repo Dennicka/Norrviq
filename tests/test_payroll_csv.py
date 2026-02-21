@@ -4,7 +4,9 @@ from decimal import Decimal
 from fastapi.testclient import TestClient
 
 from app.config import get_settings
-from app.db import Base, SessionLocal, engine
+from sqlalchemy import text
+
+from app.db import SessionLocal
 from app.models import Project, ProjectWorkerAssignment, Worker
 from app.models.settings import get_or_create_settings
 from app.main import app
@@ -15,8 +17,29 @@ settings = get_settings()
 
 
 def reset_db():
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    try:
+        table_names = [
+            "project_worker_assignments",
+            "project_cost_items",
+            "project_work_items",
+            "rooms",
+            "invoices",
+            "projects",
+            "workers",
+            "work_types",
+            "materials",
+            "legal_notes",
+            "cost_categories",
+            "users",
+            "settings",
+            "clients",
+        ]
+        for table_name in table_names:
+            db.execute(text(f"DELETE FROM {table_name}"))
+        db.commit()
+    finally:
+        db.close()
 
 
 def login():

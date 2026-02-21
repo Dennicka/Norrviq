@@ -1,14 +1,17 @@
 import os
 import re
 import sys
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
+TEST_DB_PATH = PROJECT_ROOT / "tests" / "test_app.sqlite3"
+os.environ["DATABASE_URL"] = f"sqlite:///{TEST_DB_PATH}"
 os.environ.setdefault("APP_SECRET_KEY", "test-secret-key-0123456789-0123456789")
 os.environ.setdefault("ADMIN_EMAIL", "admin@example.com")
 os.environ.setdefault("ADMIN_PASSWORD", "admin-password")
@@ -17,6 +20,13 @@ os.environ.setdefault("ALLOW_DEV_DEFAULTS", "true")
 from app.config import get_settings  # noqa: E402
 
 get_settings.cache_clear()
+
+from tests.db_utils import upgrade_database  # noqa: E402
+
+
+if TEST_DB_PATH.exists():
+    TEST_DB_PATH.unlink()
+upgrade_database(os.environ["DATABASE_URL"])
 
 
 _ORIGINAL_TESTCLIENT_REQUEST = TestClient.request

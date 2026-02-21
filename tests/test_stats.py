@@ -1,26 +1,28 @@
-from decimal import Decimal
 from datetime import datetime
+from decimal import Decimal
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.db import Base
+from app.config import get_settings
 from app.main import app
 from app.models import Client, Project
 from app.services.stats import get_profit_by_client, get_profit_by_month
-from app.config import get_settings
+from tests.db_utils import upgrade_database
 
 
-def create_session():
-    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
+def create_session(tmp_path: Path):
+    db_path = tmp_path / "stats.sqlite3"
+    upgrade_database(f"sqlite:///{db_path}")
+    engine = create_engine(f"sqlite:///{db_path}", connect_args={"check_same_thread": False})
     TestingSessionLocal = sessionmaker(bind=engine)
-    Base.metadata.create_all(bind=engine)
     return TestingSessionLocal()
 
 
-def test_profit_by_month_basic():
-    session = create_session()
+def test_profit_by_month_basic(tmp_path: Path):
+    session = create_session(tmp_path)
     project1 = Project(
         name="P1",
         client_pays_total=Decimal("1000"),
@@ -54,8 +56,8 @@ def test_profit_by_month_basic():
     session.close()
 
 
-def test_profit_by_client_basic():
-    session = create_session()
+def test_profit_by_client_basic(tmp_path: Path):
+    session = create_session(tmp_path)
     client1 = Client(name="Client A")
     client2 = Client(name="Client B")
     project1 = Project(name="P1", client=client1, client_pays_total=Decimal("500"), profit=Decimal("300"))
@@ -77,7 +79,7 @@ def test_profit_by_client_basic():
     session.close()
 
 
-def test_stats_page_returns_200():
+def test_stats_page_returns_200_after_login():
     client = TestClient(app)
     settings = get_settings()
     client.post(

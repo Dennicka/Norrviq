@@ -15,6 +15,9 @@ branch_labels = None
 depends_on = None
 
 
+FK_NAME = "project_cost_items_material_id_fkey"
+
+
 def upgrade() -> None:
     op.add_column("projects", sa.Column("planned_start_date", sa.Date(), nullable=True))
     op.add_column("projects", sa.Column("planned_end_date", sa.Date(), nullable=True))
@@ -44,22 +47,23 @@ def upgrade() -> None:
     op.create_index(op.f("ix_materials_code"), "materials", ["code"], unique=False)
     op.create_index(op.f("ix_materials_id"), "materials", ["id"], unique=False)
 
-    op.add_column(
-        "project_cost_items",
-        sa.Column("material_id", sa.Integer(), nullable=True),
-    )
-    op.create_foreign_key(
-        "project_cost_items_material_id_fkey",
-        "project_cost_items",
-        "materials",
-        ["material_id"],
-        ["id"],
-    )
+    if op.get_bind().dialect.name == "sqlite":
+        with op.batch_alter_table("project_cost_items") as batch_op:
+            batch_op.add_column(sa.Column("material_id", sa.Integer(), nullable=True))
+            batch_op.create_foreign_key(FK_NAME, "materials", ["material_id"], ["id"])
+    else:
+        op.add_column("project_cost_items", sa.Column("material_id", sa.Integer(), nullable=True))
+        op.create_foreign_key(FK_NAME, "project_cost_items", "materials", ["material_id"], ["id"])
 
 
 def downgrade() -> None:
-    op.drop_constraint("project_cost_items_material_id_fkey", "project_cost_items", type_="foreignkey")
-    op.drop_column("project_cost_items", "material_id")
+    if op.get_bind().dialect.name == "sqlite":
+        with op.batch_alter_table("project_cost_items") as batch_op:
+            batch_op.drop_constraint(FK_NAME, type_="foreignkey")
+            batch_op.drop_column("material_id")
+    else:
+        op.drop_constraint(FK_NAME, "project_cost_items", type_="foreignkey")
+        op.drop_column("project_cost_items", "material_id")
 
     op.drop_index(op.f("ix_materials_id"), table_name="materials")
     op.drop_index(op.f("ix_materials_code"), table_name="materials")

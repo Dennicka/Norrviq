@@ -1,13 +1,19 @@
 from decimal import Decimal
 
 import pytest
+from pathlib import Path
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.db import Base
+from tests.db_utils import upgrade_database
+
 from app.models import Project, ProjectWorkerAssignment, Worker
+
 from app.models.cost import CostCategory, ProjectCostItem
+
 from app.models.project import ProjectWorkItem
+
 from app.models.settings import get_or_create_settings
 from app.services.finance import (
     calculate_cost_items,
@@ -17,10 +23,11 @@ from app.services.finance import (
 
 
 @pytest.fixture()
-def db_session():
-    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
+def db_session(tmp_path: Path):
+    db_path = tmp_path / "unit.sqlite3"
+    upgrade_database(f"sqlite:///{db_path}")
+    engine = create_engine(f"sqlite:///{db_path}", connect_args={"check_same_thread": False})
     TestingSessionLocal = sessionmaker(bind=engine)
-    Base.metadata.create_all(bind=engine)
     session = TestingSessionLocal()
     yield session
     session.close()
