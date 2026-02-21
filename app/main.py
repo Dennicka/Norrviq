@@ -8,7 +8,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from . import models  # noqa: F401
 from .config import get_settings
-from .db import Base, SessionLocal, engine
+from .db import SessionLocal, ensure_schema_up_to_date
 from .dependencies import enforce_csrf, get_current_lang
 from .models.settings import get_or_create_settings
 from .routers import (
@@ -58,13 +58,12 @@ app.add_middleware(
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
-Base.metadata.create_all(bind=engine)
-
 
 @app.on_event("startup")
 def startup_event():
     logger.info("Using python-multipart from: %s", multipart.__file__)
     logger.info("Using itsdangerous from: %s", itsdangerous.__file__)
+    ensure_schema_up_to_date()
     db = SessionLocal()
     try:
         get_or_create_settings(db)

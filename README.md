@@ -37,6 +37,31 @@
 - `ADMIN_EMAIL` / `ADMIN_PASSWORD` — учётные данные для bootstrap admin-пользователя при первом запуске (idempotent).
 - `ALLOW_DEV_DEFAULTS` — только для локальной разработки; по умолчанию `false`.
 
+## Database initialization and migrations
+
+Schema is managed only by Alembic.
+
+- Initialize/upgrade DB to latest schema:
+  ```bash
+  python scripts/db_upgrade.py
+  ```
+- Show current revision:
+  ```bash
+  python scripts/db_current.py
+  ```
+- Downgrade one revision (dev only):
+  ```bash
+  python scripts/db_downgrade.py
+  ```
+- Seed development data (data only, no schema creation):
+  ```bash
+  python scripts/seed_dev.py
+  ```
+
+If you see a startup error about outdated DB, run `python scripts/db_upgrade.py` (or `alembic upgrade head`) and restart.
+
+Detailed policy: `docs/DB_MIGRATIONS.md`.
+
 ## Run locally
 
 ```bash

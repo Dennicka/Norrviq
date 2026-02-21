@@ -1,19 +1,23 @@
 from decimal import Decimal
 
 import pytest
+from pathlib import Path
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.db import Base
+from tests.db_utils import upgrade_database
+
 from app.models import Project, ProjectWorkItem, Room, WorkType
 from app.services.rooms import recalc_room_dimensions
 
 
 @pytest.fixture()
-def db_session():
-    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
+def db_session(tmp_path: Path):
+    db_path = tmp_path / "unit.sqlite3"
+    upgrade_database(f"sqlite:///{db_path}")
+    engine = create_engine(f"sqlite:///{db_path}", connect_args={"check_same_thread": False})
     TestingSessionLocal = sessionmaker(bind=engine)
-    Base.metadata.create_all(bind=engine)
     session = TestingSessionLocal()
     yield session
     session.close()
