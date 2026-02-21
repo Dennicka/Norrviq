@@ -39,3 +39,13 @@ Pricing details показывает:
 - итоговый baseline после буферов.
 
 Это повышает прозрачность и не меняет результаты при отсутствии правил.
+
+
+## API (UI)
+- `GET /api/ui/buffer-rules` — list (`project_id`, `active`, `limit`, `offset`).
+- `POST /api/ui/buffer-rules` — create rule.
+- `PATCH/PUT /api/ui/buffer-rules/{rule_id}` — update rule.
+- `DELETE /api/ui/buffer-rules/{rule_id}` — delete rule.
+- `GET /api/ui/buffer-rules/effective?project_id=&worktype_id=` — deterministic effective-rule preview.
+
+Effective selection is deterministic: active-only, scope precedence `WORKTYPE > PROJECT > GLOBAL`, then `priority desc`, then newest `created_at`, then lowest `id`.

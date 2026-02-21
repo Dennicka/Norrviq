@@ -73,8 +73,8 @@ def test_buffer_rule_precedence_project_over_global():
         db.add(BufferRule(kind="SETUP", basis="LABOR_HOURS", unit="FIXED_HOURS", value=Decimal("2.00"), scope_type="PROJECT", scope_id=pid, priority=100, is_active=True))
         db.commit()
         baseline = compute_project_baseline(db, pid, include_materials=True, include_travel_setup_buffers=True)
-        assert baseline.buffers_hours_total == Decimal("3.00")
-        assert len(baseline.buffers) == 2
+        assert baseline.buffers_hours_total == Decimal("2.00")
+        assert len(baseline.buffers) == 1
         assert baseline.buffers[0]["scope_type"] == "PROJECT"
     finally:
         db.close()
