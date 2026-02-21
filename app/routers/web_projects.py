@@ -21,6 +21,7 @@ from app.models.worktype import WorkType
 from app.models.settings import get_or_create_settings
 from app.services.estimates import calculate_project_totals, recalculate_project_work_items
 from app.services.finance import calculate_project_financials, compute_project_finance
+from app.services.terms_templates import DOC_TYPE_OFFER, resolve_terms_template
 from app.services.pricing import (
     PricingValidationError,
     compute_pricing_scenarios,

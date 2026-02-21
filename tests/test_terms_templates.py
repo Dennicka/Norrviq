@@ -9,7 +9,6 @@ from app.models.client import Client
 from app.models.company_profile import get_or_create_company_profile
 from app.models.invoice import Invoice
 from app.models.project import Project
-from app.models.terms_template import TermsTemplate
 from app.models.user import User
 from app.security import hash_password
 from app.services.terms_templates import DOC_TYPE_INVOICE, DOC_TYPE_OFFER, create_versioned_template, resolve_terms_template
