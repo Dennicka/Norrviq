@@ -29,6 +29,15 @@
 </section>
 
 <section>
+    <h2>Buffer applied</h2>
+    {% if baseline.effective_buffer and baseline.effective_buffer.get('rule_id') %}
+    <p>Buffer: +{{ baseline.effective_buffer.get('value') }}{% if baseline.effective_buffer.get('unit') == 'PERCENT' %}%{% endif %} (Rule <a href="/web/buffer-rules?rule_id={{ baseline.effective_buffer.get('rule_id') }}">#{{ baseline.effective_buffer.get('rule_id') }}</a>, scope: {{ baseline.effective_buffer.get('scope') or 'n/a' }})</p>
+    {% else %}
+    <p>Buffer: none</p>
+    {% endif %}
+</section>
+
+<section>
     <h2>{{ t("menu.invoices") }}</h2>
     <p>
         <a href="/projects/{{ project.id }}/invoices/">{{ t("invoice.list.title") }}</a>
