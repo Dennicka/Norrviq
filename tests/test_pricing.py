@@ -414,7 +414,8 @@ def test_details_section_contains_baseline_and_formula():
     page = client.get(f"/projects/{project_id}/pricing")
     assert page.status_code == 200
     assert "Formula:" in page.text
-    assert "Baseline breakdown:" in page.text
+    assert "Raw baseline:" in page.text
+    assert "Buffers breakdown:" in page.text
     assert "Include flags:" in page.text
 
 
