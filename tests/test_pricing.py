@@ -20,7 +20,11 @@ from app.services.pricing import (
     WARNING_MISSING_ITEMS,
     WARNING_MISSING_UNITS_M2,
     WARNING_MISSING_UNITS_ROOMS,
+    WARNING_MISSING_BASELINE,
+    DesiredInput,
     PricingValidationError,
+    compute_conversions,
+    compute_project_baseline,
     compute_pricing_scenarios,
     get_or_create_project_pricing,
     update_project_pricing,
@@ -420,3 +424,102 @@ def test_double_click_guard():
     assert "js-mode-select-btn" in page.text
     assert "btn.disabled = true;" in page.text
     assert "Saving..." in page.text
+
+
+def test_conversion_golden_desired_hourly_and_margin_formula():
+    project_id = _make_golden_project()
+    db = SessionLocal()
+    try:
+        conversion = compute_conversions(
+            db,
+            project_id,
+            DesiredInput(desired_effective_hourly_ex_vat=Decimal("650.00")),
+        )
+        assert conversion.implied_fixed_total_price == Decimal("6500.00")
+        assert conversion.implied_rate_per_m2 == Decimal("130.00")
+
+        margin_conversion = compute_conversions(
+            db,
+            project_id,
+            DesiredInput(desired_margin_pct=Decimal("20.00")),
+        )
+        baseline = compute_project_baseline(
+            db,
+            project_id,
+            include_materials=True,
+            include_travel_setup_buffers=True,
+        )
+        expected_price = (baseline.internal_total_cost / Decimal("0.80")).quantize(Decimal("0.01"))
+        assert margin_conversion.implied_fixed_total_price == expected_price
+    finally:
+        db.close()
+
+
+def test_converter_panel_renders():
+    login(settings.admin_email, settings.admin_password)
+    project_id = _make_golden_project()
+    page = client.get(f"/projects/{project_id}/pricing")
+    assert page.status_code == 200
+    assert "Конвертер" in page.text
+    assert "Desired effective hourly (ex VAT)" in page.text
+    assert "Apply to Fixed" not in page.text
+
+
+def test_apply_conversion_updates_project_pricing():
+    login(settings.admin_email, settings.admin_password)
+    project_id = _make_golden_project()
+
+    calculate_response = client.post(
+        f"/projects/{project_id}/pricing",
+        data={"intent": "calculate_conversion", "desired_effective_hourly_ex_vat": "700.00"},
+        follow_redirects=False,
+    )
+    assert calculate_response.status_code == 200
+    assert "Apply to m²" in calculate_response.text
+
+    apply_response = client.post(
+        f"/projects/{project_id}/pricing",
+        data={"intent": "apply_conversion", "apply_mode": "PER_M2", "apply_value": "140.00"},
+        follow_redirects=False,
+    )
+    assert apply_response.status_code == 303
+
+    db = SessionLocal()
+    try:
+        pricing = db.query(ProjectPricing).filter(ProjectPricing.project_id == project_id).first()
+        assert pricing is not None
+        assert pricing.rate_per_m2 == Decimal("140.00")
+    finally:
+        db.close()
+
+
+def test_converter_warns_when_m2_zero():
+    db = SessionLocal()
+    try:
+        project = Project(name=f"Conv warn m2 {uuid4().hex[:8]}")
+        db.add(project)
+        db.commit()
+        conversion = compute_conversions(
+            db,
+            project.id,
+            DesiredInput(desired_effective_hourly_ex_vat=Decimal("650.00")),
+        )
+        assert WARNING_MISSING_UNITS_M2 in conversion.warnings
+    finally:
+        db.close()
+
+
+def test_converter_warns_when_hours_zero():
+    db = SessionLocal()
+    try:
+        project = Project(name=f"Conv warn hours {uuid4().hex[:8]}")
+        db.add(project)
+        db.commit()
+        conversion = compute_conversions(
+            db,
+            project.id,
+            DesiredInput(fixed_total_price=Decimal("1000.00")),
+        )
+        assert WARNING_MISSING_BASELINE in conversion.warnings
+    finally:
+        db.close()

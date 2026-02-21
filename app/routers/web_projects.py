@@ -30,7 +30,10 @@ from app.services.pricing import (
     WARNING_MISSING_UNITS_M2,
     WARNING_MISSING_UNITS_ROOMS,
     WARNING_NEGATIVE_MARGIN,
+    WARNING_INVALID_TARGET_MARGIN,
+    DesiredInput,
     PricingValidationError,
+    compute_conversions,
     compute_pricing_scenarios,
     get_or_create_project_pricing,
     select_pricing_mode,
@@ -92,6 +95,8 @@ def _warning_text(code: str) -> str:
         return "Отрицательная маржа: цена ниже полной себестоимости"
     if code == WARNING_LOW_MARGIN:
         return f"Низкая маржа: ниже {LOW_MARGIN_WARN_PCT}%"
+    if code == WARNING_INVALID_TARGET_MARGIN:
+        return "Невозможно: target margin должен быть меньше 100%"
     return code
 
 
@@ -112,6 +117,35 @@ def _scenario_view_model(scenario):
         "critical_warnings": critical_codes,
         "not_applicable": scenario.invalid and bool(critical_codes),
     }
+
+
+def _conversion_view_model(result):
+    if result is None:
+        return None
+    warning_codes = list(dict.fromkeys(result.warnings))
+    return {
+        "raw": result,
+        "fixed_total_display": _format_money(result.implied_fixed_total_price),
+        "effective_hourly_display": _format_hourly(result.effective_hourly_ex_vat),
+        "rate_per_m2_display": _format_money(result.implied_rate_per_m2),
+        "rate_per_room_display": _format_money(result.implied_rate_per_room),
+        "rate_per_piece_display": _format_money(result.implied_rate_per_piece),
+        "profit_display": _format_money(result.profit),
+        "margin_pct_display": _format_margin_pct(result.margin_pct),
+        "warnings": [{"code": code, "text": _warning_text(code)} for code in warning_codes],
+    }
+
+
+def _parse_conversion_decimal(value: str | None):
+    if value in (None, ""):
+        return None
+    try:
+        decimal_value = Decimal(value)
+    except (InvalidOperation, TypeError):
+        return None
+    if decimal_value <= 0:
+        return None
+    return decimal_value.quantize(Decimal("0.01"))
 
 
 def _parse_date(value: str | None):
@@ -875,6 +909,7 @@ async def project_pricing_screen(
         )
 
     context = template_context(request, lang)
+    effective_by_mode = {scenario.mode: _format_hourly(scenario.effective_hourly_sell_rate) for scenario in scenarios}
     context.update(
         {
             "project": project,
@@ -891,10 +926,13 @@ async def project_pricing_screen(
                 "include_travel_setup_buffers": pricing.include_travel_setup_buffers,
                 "currency": pricing.currency,
             },
+            "converter_input": {},
+            "conversion_result": None,
             "errors": {},
             "is_readonly": is_readonly,
             "baseline": baseline,
             "scenarios": scenario_views,
+            "effective_by_mode": effective_by_mode,
         }
     )
     return templates.TemplateResponse("projects/pricing.html", context)
@@ -911,16 +949,110 @@ async def update_project_pricing_screen(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    role = get_current_user_role(request)
-    if role not in {ADMIN_ROLE, OPERATOR_ROLE}:
-        raise HTTPException(status_code=403, detail="Insufficient role")
-
     pricing = get_or_create_project_pricing(db, project_id)
     form = await request.form()
     payload = dict(form)
+    intent = payload.get("intent") or "save_pricing"
+    role = get_current_user_role(request)
+
+    if intent in {"save_pricing", "select_mode", "apply_conversion"} and role not in {ADMIN_ROLE, OPERATOR_ROLE}:
+        raise HTTPException(status_code=403, detail="Insufficient role")
+
+    converter_input = {
+        "desired_effective_hourly_ex_vat": payload.get("desired_effective_hourly_ex_vat") or "",
+        "desired_margin_pct": payload.get("desired_margin_pct") or "",
+    }
+
+    if intent == "calculate_conversion":
+        desired = DesiredInput(
+            desired_effective_hourly_ex_vat=_parse_conversion_decimal(payload.get("desired_effective_hourly_ex_vat")),
+            desired_margin_pct=_parse_conversion_decimal(payload.get("desired_margin_pct")),
+        )
+        if desired.desired_effective_hourly_ex_vat is None and desired.desired_margin_pct is None:
+            for field_name in ("rate_per_m2", "rate_per_room", "rate_per_piece", "fixed_total_price"):
+                value = _parse_conversion_decimal(payload.get(field_name))
+                if value is not None:
+                    setattr(desired, field_name, value)
+                    break
+        conversion_result = compute_conversions(db, project_id, desired)
+        db.add(
+            AuditEvent(
+                event_type="pricing_conversion_calculated",
+                user_id=get_current_user_email(request),
+                entity_type="project",
+                entity_id=project_id,
+                details=json.dumps(
+                    {
+                        "project_id": project_id,
+                        "desired_effective_hourly_ex_vat": converter_input["desired_effective_hourly_ex_vat"] or None,
+                        "desired_margin_pct": converter_input["desired_margin_pct"] or None,
+                        "warnings": conversion_result.warnings,
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+        )
+        db.commit()
+
+        baseline, scenarios = compute_pricing_scenarios(db, project_id)
+        scenario_views = [_scenario_view_model(scenario) for scenario in scenarios]
+        context = template_context(request, lang)
+        context.update(
+            {
+                "project": project,
+                "pricing": pricing,
+                "form_data": {
+                    "mode": pricing.mode,
+                    "hourly_rate_override": pricing.hourly_rate_override,
+                    "fixed_total_price": pricing.fixed_total_price,
+                    "rate_per_m2": pricing.rate_per_m2,
+                    "rate_per_room": pricing.rate_per_room,
+                    "rate_per_piece": pricing.rate_per_piece,
+                    "target_margin_pct": pricing.target_margin_pct,
+                    "include_materials": pricing.include_materials,
+                    "include_travel_setup_buffers": pricing.include_travel_setup_buffers,
+                    "currency": pricing.currency,
+                },
+                "converter_input": converter_input,
+                "conversion_result": _conversion_view_model(conversion_result),
+                "errors": {},
+                "is_readonly": role not in {ADMIN_ROLE, OPERATOR_ROLE},
+                "baseline": baseline,
+                "scenarios": scenario_views,
+                "effective_by_mode": {scenario.mode: _format_hourly(scenario.effective_hourly_sell_rate) for scenario in scenarios},
+            }
+        )
+        return templates.TemplateResponse("projects/pricing.html", context)
+
+    if intent == "apply_conversion":
+        apply_mode = (payload.get("apply_mode") or "").upper()
+        apply_value = _parse_conversion_decimal(payload.get("apply_value"))
+        mode_to_field = {
+            "FIXED_TOTAL": "fixed_total_price",
+            "PER_M2": "rate_per_m2",
+            "PER_ROOM": "rate_per_room",
+            "PIECEWORK": "rate_per_piece",
+        }
+        field_name = mode_to_field.get(apply_mode)
+        if field_name is None or apply_value is None:
+            raise HTTPException(status_code=400, detail="Invalid conversion apply payload")
+        setattr(pricing, field_name, apply_value)
+        db.add(pricing)
+        db.add(
+            AuditEvent(
+                event_type="pricing_conversion_applied",
+                user_id=get_current_user_email(request),
+                entity_type="project",
+                entity_id=project_id,
+                details=json.dumps({"project_id": project_id, "mode": apply_mode, "value": str(apply_value)}, ensure_ascii=False),
+            )
+        )
+        db.commit()
+        add_flash_message(request, "Conversion applied", "success")
+        return RedirectResponse(url=f"/projects/{project_id}/pricing", status_code=status.HTTP_303_SEE_OTHER)
 
     try:
-        if payload.get("intent") == "select_mode":
+        if intent == "select_mode":
             select_pricing_mode(
                 db,
                 pricing=pricing,
@@ -943,10 +1075,13 @@ async def update_project_pricing_screen(
                 "project": project,
                 "pricing": pricing,
                 "form_data": payload,
+                "converter_input": converter_input,
+                "conversion_result": None,
                 "errors": exc.errors,
                 "is_readonly": False,
                 "baseline": baseline,
                 "scenarios": scenario_views,
+                "effective_by_mode": {scenario.mode: _format_hourly(scenario.effective_hourly_sell_rate) for scenario in scenarios},
             }
         )
         return templates.TemplateResponse("projects/pricing.html", context, status_code=400)
