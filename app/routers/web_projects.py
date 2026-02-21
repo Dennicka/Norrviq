@@ -23,6 +23,7 @@ from app.models.settings import get_or_create_settings
 from app.services.estimates import calculate_project_totals, recalculate_project_work_items
 from app.services.finance import calculate_project_financials, compute_project_finance
 from app.services.terms_templates import DOC_TYPE_OFFER, resolve_terms_template
+from app.services.buffer_audit import log_buffer_audit
 from app.services.pricing import (
     LOW_MARGIN_WARN_PCT,
     WARNING_LOW_MARGIN,
@@ -36,6 +37,7 @@ from app.services.pricing import (
     PricingValidationError,
     compute_conversions,
     compute_pricing_scenarios,
+    compute_project_baseline,
     get_or_create_project_pricing,
     get_or_create_project_buffer_settings,
     select_pricing_mode,
@@ -241,6 +243,7 @@ async def project_detail(
     rooms = sorted(project.rooms, key=lambda room: room.name.lower() if room.name else "")
     settings = get_or_create_settings(db)
     finance_summary = compute_project_finance(db, project, settings=settings)
+    baseline = compute_project_baseline(db, project.id, include_materials=True, include_travel_setup_buffers=True)
     recent_invoices = sorted(
         project.invoices, key=lambda inv: inv.issue_date or inv.created_at or date.min, reverse=True
     )[:2]
@@ -255,6 +258,7 @@ async def project_detail(
             "rooms": rooms,
             "finance_summary": finance_summary,
             "recent_invoices": recent_invoices,
+            "baseline": baseline,
         }
     )
     return templates.TemplateResponse("projects/detail.html", context)
@@ -1166,9 +1170,19 @@ async def update_project_buffers(
 
     form = await request.form()
     settings_obj = get_or_create_project_buffer_settings(db, project_id)
+    before = {"include_setup_cleanup_travel": settings_obj.include_setup_cleanup_travel, "include_risk": settings_obj.include_risk}
     settings_obj.include_setup_cleanup_travel = form.get("include_setup_cleanup_travel") in ("on", "true", "1", True, 1)
     settings_obj.include_risk = form.get("include_risk") in ("on", "true", "1", True, 1)
     db.add(settings_obj)
-    db.add(AuditEvent(event_type="project_buffer_flags_updated", user_id=get_current_user_email(request), entity_type="project", entity_id=project_id, details=json.dumps({"project_id": project_id, "include_setup_cleanup_travel": settings_obj.include_setup_cleanup_travel, "include_risk": settings_obj.include_risk}, ensure_ascii=False)))
+    log_buffer_audit(
+        db,
+        actor=get_current_user_email(request) or "system",
+        action="UPDATE",
+        entity_type="project_buffer_settings",
+        entity_id=project_id,
+        before=before,
+        after={"include_setup_cleanup_travel": settings_obj.include_setup_cleanup_travel, "include_risk": settings_obj.include_risk},
+        request_id=getattr(request.state, "request_id", None),
+    )
     db.commit()
     return RedirectResponse(url=f"/projects/{project_id}/buffers", status_code=status.HTTP_303_SEE_OTHER)
