@@ -21,6 +21,18 @@ def _login(username: str, password: str):
     client.post("/login", data={"username": username, "password": password}, follow_redirects=False)
 
 
+def _set_warn_only_policy() -> None:
+    db = SessionLocal()
+    try:
+        policy = get_or_create_pricing_policy(db)
+        policy.warn_only_mode = True
+        policy.block_issue_below_floor = True
+        db.add(policy)
+        db.commit()
+    finally:
+        db.close()
+
+
 def _create_project_with_invoice() -> tuple[int, int]:
     db = SessionLocal()
     try:
@@ -52,6 +64,7 @@ def test_format_number_padding():
 
 
 def test_offer_finalize_assigns_unique_number_and_idempotent():
+    _set_warn_only_policy()
     _login(settings.admin_email, settings.admin_password)
     db = SessionLocal()
     try:
@@ -86,6 +99,7 @@ def test_offer_finalize_assigns_unique_number_and_idempotent():
 
 
 def test_invoice_finalize_assigns_unique_number():
+    _set_warn_only_policy()
     _login(settings.admin_email, settings.admin_password)
     _, invoice_id = _create_project_with_invoice()
 
@@ -152,5 +166,87 @@ def test_number_exists_only_when_issued():
         invoice = db.get(Invoice, invoice_id)
         assert invoice.status == "draft"
         assert invoice.invoice_number is None
+    finally:
+        db.close()
+
+from app.models.audit_event import AuditEvent
+from app.models.pricing_policy import get_or_create_pricing_policy
+from app.models.project_pricing import ProjectPricing
+
+
+def _force_project_below_floor(project_id: int):
+    db = SessionLocal()
+    try:
+        pricing = db.query(ProjectPricing).filter(ProjectPricing.project_id == project_id).first()
+        if pricing is None:
+            pricing = ProjectPricing(project_id=project_id, mode="FIXED_TOTAL", fixed_total_price=1)
+        pricing.mode = "FIXED_TOTAL"
+        pricing.fixed_total_price = 1
+        db.add(pricing)
+        policy = get_or_create_pricing_policy(db)
+        policy.min_margin_pct = 15
+        policy.min_profit_sek = 1000
+        policy.min_effective_hourly_ex_vat = 500
+        policy.block_issue_below_floor = True
+        policy.warn_only_mode = False
+        db.add(policy)
+        db.commit()
+    finally:
+        db.close()
+
+
+def test_offer_finalize_blocked_below_floor():
+    _login(settings.admin_email, settings.admin_password)
+    db = SessionLocal()
+    try:
+        project = Project(name="Offer blocked")
+        db.add(project)
+        db.commit()
+        db.refresh(project)
+        project_id = project.id
+    finally:
+        db.close()
+
+    _force_project_below_floor(project_id)
+    response = client.post(f"/offers/{project_id}/finalize", headers={"accept": "application/json"}, follow_redirects=False)
+    assert response.status_code == 409
+
+
+def test_invoice_finalize_blocked_below_floor():
+    _login(settings.admin_email, settings.admin_password)
+    project_id, invoice_id = _create_project_with_invoice()
+    _force_project_below_floor(project_id)
+    response = client.post(f"/invoices/{invoice_id}/finalize", headers={"accept": "application/json"}, follow_redirects=False)
+    assert response.status_code == 409
+
+
+def test_warn_only_allows_issue_but_logs_audit():
+    _login(settings.admin_email, settings.admin_password)
+    project_id, invoice_id = _create_project_with_invoice()
+    _force_project_below_floor(project_id)
+
+    db = SessionLocal()
+    try:
+        policy = get_or_create_pricing_policy(db)
+        policy.warn_only_mode = True
+        db.add(policy)
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.post(f"/invoices/{invoice_id}/finalize", follow_redirects=False)
+    assert response.status_code == 303
+
+    db = SessionLocal()
+    try:
+        invoice = db.get(Invoice, invoice_id)
+        assert invoice is not None
+        assert invoice.status == "issued"
+        warning_event = (
+            db.query(AuditEvent)
+            .filter(AuditEvent.event_type == "floor_warning_issue", AuditEvent.entity_id == invoice_id)
+            .first()
+        )
+        assert warning_event is not None
     finally:
         db.close()

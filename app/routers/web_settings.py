@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.dependencies import get_current_lang, get_db, template_context, templates
 from app.models.audit_event import AuditEvent
 from app.models.company_profile import get_or_create_company_profile
+from app.models.pricing_policy import get_or_create_pricing_policy
 from app.models.settings import get_or_create_settings
 from app.models.terms_template import TermsTemplate
 from app.services.terms_templates import create_versioned_template
@@ -78,6 +79,72 @@ async def update_settings(
     db.refresh(settings_obj)
 
     return RedirectResponse(url="/settings/", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.get("/pricing-policy")
+async def pricing_policy_form(request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang)):
+    policy = get_or_create_pricing_policy(db)
+    context = template_context(request, lang)
+    context.update({"policy": policy, "errors": {}, "form_data": {}})
+    return templates.TemplateResponse("settings/pricing_policy.html", context)
+
+
+@router.post("/pricing-policy")
+async def update_pricing_policy(request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang)):
+    policy = get_or_create_pricing_policy(db)
+    form = await request.form()
+    data = _load_form_data(form)
+
+    errors: dict[str, str] = {}
+
+    def _decimal_field(field: str):
+        raw = (data.get(field) or "").strip()
+        try:
+            return Decimal(raw)
+        except Exception:
+            errors[field] = "Некорректное число"
+            return None
+
+    min_margin_pct = _decimal_field("min_margin_pct")
+    min_profit_sek = _decimal_field("min_profit_sek")
+    min_effective_hourly_ex_vat = _decimal_field("min_effective_hourly_ex_vat")
+
+    if min_margin_pct is not None and (min_margin_pct < 0 or min_margin_pct > 80):
+        errors["min_margin_pct"] = "Маржа должна быть в диапазоне 0–80%"
+    if min_profit_sek is not None and min_profit_sek < 0:
+        errors["min_profit_sek"] = "Минимальная прибыль должна быть >= 0"
+    if min_effective_hourly_ex_vat is not None and min_effective_hourly_ex_vat <= 0:
+        errors["min_effective_hourly_ex_vat"] = "Ставка должна быть больше 0"
+
+    if errors:
+        context = template_context(request, lang)
+        context.update({"policy": policy, "errors": errors, "form_data": data})
+        return templates.TemplateResponse("settings/pricing_policy.html", context, status_code=400)
+
+    policy.min_margin_pct = min_margin_pct.quantize(Decimal("0.01"))
+    policy.min_profit_sek = min_profit_sek.quantize(Decimal("0.01"))
+    policy.min_effective_hourly_ex_vat = min_effective_hourly_ex_vat.quantize(Decimal("0.01"))
+    policy.block_issue_below_floor = data.get("block_issue_below_floor") in ("on", "true", "1", True, 1)
+    policy.warn_only_mode = data.get("warn_only_mode") in ("on", "true", "1", True, 1)
+
+    user_id = request.session.get("user_email") if hasattr(request, "session") else None
+    _audit(
+        db,
+        event_type="policy_updated",
+        user_id=user_id,
+        entity_type="pricing_policy",
+        entity_id=policy.id,
+        details={
+            "min_margin_pct": str(policy.min_margin_pct),
+            "min_profit_sek": str(policy.min_profit_sek),
+            "min_effective_hourly_ex_vat": str(policy.min_effective_hourly_ex_vat),
+            "block_issue_below_floor": policy.block_issue_below_floor,
+            "warn_only_mode": policy.warn_only_mode,
+        },
+    )
+    db.add(policy)
+    db.commit()
+    return RedirectResponse(url="/settings/pricing-policy", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.get("/company")

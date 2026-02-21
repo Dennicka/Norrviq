@@ -14,6 +14,7 @@ from .document_sequence import DocumentSequence
 from .audit_event import AuditEvent
 from .project_pricing import ProjectPricing
 from .terms_template import TermsTemplate
+from .pricing_policy import PricingPolicy
 
 __all__ = [
     "Client",
@@ -35,4 +36,5 @@ __all__ = [
     "AuditEvent",
     "ProjectPricing",
     "TermsTemplate",
+    "PricingPolicy",
 ]

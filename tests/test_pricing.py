@@ -523,3 +523,79 @@ def test_converter_warns_when_hours_zero():
         assert WARNING_MISSING_BASELINE in conversion.warnings
     finally:
         db.close()
+
+from app.models.pricing_policy import PricingPolicy
+from app.services.pricing import evaluate_floor
+
+
+def test_floor_recommended_price_max_of_constraints():
+    db = SessionLocal()
+    try:
+        project_id = _make_golden_project()
+        policy = PricingPolicy(
+            min_margin_pct=Decimal("15.00"),
+            min_profit_sek=Decimal("1000.00"),
+            min_effective_hourly_ex_vat=Decimal("700.00"),
+        )
+        db.add(policy)
+        db.commit()
+        baseline, scenarios = compute_pricing_scenarios(db, project_id)
+        scenario = next(sc for sc in scenarios if sc.mode == "HOURLY")
+        result = evaluate_floor(baseline, scenario, policy)
+
+        c_profit = (baseline.internal_total_cost + Decimal("1000.00")).quantize(Decimal("0.01"))
+        c_margin = (baseline.internal_total_cost / Decimal("0.85")).quantize(Decimal("0.01"))
+        c_hourly = (Decimal("700.00") * baseline.labor_hours_total).quantize(Decimal("0.01"))
+        assert result.recommended_min_price_ex_vat == max(c_profit, c_margin, c_hourly)
+    finally:
+        db.close()
+
+
+def test_floor_below_when_negative_profit():
+    db = SessionLocal()
+    try:
+        project_id = _make_golden_project()
+        pricing = get_or_create_project_pricing(db, project_id)
+        pricing.fixed_total_price = Decimal("1.00")
+        pricing.mode = "FIXED_TOTAL"
+        db.add(pricing)
+        db.commit()
+
+        baseline, scenarios = compute_pricing_scenarios(db, project_id)
+        scenario = next(sc for sc in scenarios if sc.mode == "FIXED_TOTAL")
+        policy = PricingPolicy(min_margin_pct=Decimal("10.00"), min_profit_sek=Decimal("0.00"), min_effective_hourly_ex_vat=Decimal("1.00"))
+        result = evaluate_floor(baseline, scenario, policy)
+        reason_codes = {reason.code for reason in result.reasons}
+        assert result.is_below_floor is True
+        assert "NEGATIVE_PROFIT" in reason_codes
+    finally:
+        db.close()
+
+
+def test_pricing_ui_shows_below_floor_badge_and_recommendations():
+    login(settings.admin_email, settings.admin_password)
+    project_id = _make_golden_project()
+
+    db = SessionLocal()
+    try:
+        pricing = get_or_create_project_pricing(db, project_id)
+        pricing.mode = "FIXED_TOTAL"
+        pricing.fixed_total_price = Decimal("1.00")
+        db.add(pricing)
+
+        policy = db.query(PricingPolicy).first()
+        if not policy:
+            policy = PricingPolicy()
+        policy.min_margin_pct = Decimal("50.00")
+        policy.min_profit_sek = Decimal("5000.00")
+        policy.min_effective_hourly_ex_vat = Decimal("900.00")
+        db.add(policy)
+        db.commit()
+    finally:
+        db.close()
+
+    page = client.get(f"/projects/{project_id}/pricing")
+    assert page.status_code == 200
+    assert "BELOW FLOOR" in page.text
+    assert "Recommended minimum" in page.text
+    assert "Apply recommended values" in page.text

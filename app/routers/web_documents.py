@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.dependencies import add_flash_message, get_current_lang, get_db
@@ -7,7 +7,7 @@ from app.models.company_profile import get_or_create_company_profile
 from app.models.invoice import Invoice
 from app.observability import REQUEST_ID_HEADER
 from app.security import require_role
-from app.services.document_numbering import NumberingConflictError, finalize_invoice, finalize_offer
+from app.services.document_numbering import FloorPolicyViolationError, NumberingConflictError, finalize_invoice, finalize_offer
 
 router = APIRouter(tags=["document-finalize"])
 
@@ -30,6 +30,11 @@ async def finalize_offer_action(
     except NumberingConflictError:
         req_id = getattr(request.state, "request_id", "-")
         add_flash_message(request, f"Номер уже выдан, обновите страницу (request_id={req_id})", "error")
+    except FloorPolicyViolationError as exc:
+        if "application/json" in request.headers.get("accept", ""):
+            return JSONResponse(status_code=409, content={"detail": str(exc), "reasons": exc.reasons, "pricing_url": f"/projects/{project_id}/pricing"})
+        add_flash_message(request, f"{exc}. Перейдите в Pricing.", "error")
+        return RedirectResponse(url=f"/projects/{project_id}/pricing", status_code=status.HTTP_303_SEE_OTHER)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -58,6 +63,11 @@ async def finalize_invoice_action(
     except NumberingConflictError:
         req_id = getattr(request.state, "request_id", "-")
         add_flash_message(request, f"Номер уже выдан, обновите страницу (request_id={req_id})", "error")
+    except FloorPolicyViolationError as exc:
+        if "application/json" in request.headers.get("accept", ""):
+            return JSONResponse(status_code=409, content={"detail": str(exc), "reasons": exc.reasons, "pricing_url": f"/projects/{invoice.project_id}/pricing"})
+        add_flash_message(request, f"{exc}. Перейдите в Pricing.", "error")
+        return RedirectResponse(url=f"/projects/{invoice.project_id}/pricing", status_code=status.HTTP_303_SEE_OTHER)
 
     response = RedirectResponse(
         url=f"/projects/{invoice.project_id}/invoices/{invoice_id}", status_code=status.HTTP_303_SEE_OTHER

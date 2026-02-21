@@ -87,3 +87,22 @@ def test_settings_requires_admin():
 
     response = client.get("/settings/", follow_redirects=False)
     assert response.status_code == 403
+
+
+def test_policy_settings_admin_only():
+    db = SessionLocal()
+    try:
+        if not db.query(User).filter(User.email == "viewer-policy@example.com").first():
+            db.add(User(email="viewer-policy@example.com", password_hash=hash_password("viewer-password"), role="viewer"))
+            db.commit()
+    finally:
+        db.close()
+
+    client.get("/logout")
+    client.post(
+        "/login",
+        data={"username": "viewer-policy@example.com", "password": "viewer-password", "next": "/settings/pricing-policy"},
+        follow_redirects=False,
+    )
+    response = client.get("/settings/pricing-policy", follow_redirects=False)
+    assert response.status_code == 403
