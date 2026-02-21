@@ -3,7 +3,7 @@ from decimal import Decimal
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session, selectinload
 
 from app.dependencies import add_flash_message, get_current_lang, get_db, template_context, templates
@@ -19,7 +19,8 @@ from app.models.worktype import WorkType
 from app.models.settings import get_or_create_settings
 from app.services.estimates import calculate_project_totals, recalculate_project_work_items
 from app.services.finance import calculate_project_financials, compute_project_finance
-from app.security import require_auth
+from app.services.pricing import PricingValidationError, get_or_create_project_pricing, update_project_pricing
+from app.security import OPERATOR_ROLE, ADMIN_ROLE, get_current_user_email, get_current_user_role, require_auth
 from app.i18n import make_t
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -75,6 +76,7 @@ async def create_project(
     db.add(project)
     db.commit()
     db.refresh(project)
+    get_or_create_project_pricing(db, project.id)
     return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
@@ -697,3 +699,102 @@ async def delete_assignment(
     add_flash_message(request, translator("projects.worker_assignments.deleted"), "success")
 
     return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.get("/{project_id}/pricing")
+async def project_pricing_screen(
+    project_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    lang: str = Depends(get_current_lang),
+):
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    pricing = get_or_create_project_pricing(db, project_id)
+    wants_json = "application/json" in request.headers.get("accept", "")
+    if wants_json:
+        return JSONResponse(
+            {
+                "id": pricing.id,
+                "project_id": pricing.project_id,
+                "mode": pricing.mode,
+                "hourly_rate_override": str(pricing.hourly_rate_override) if pricing.hourly_rate_override is not None else None,
+                "fixed_total_price": str(pricing.fixed_total_price) if pricing.fixed_total_price is not None else None,
+                "rate_per_m2": str(pricing.rate_per_m2) if pricing.rate_per_m2 is not None else None,
+                "rate_per_room": str(pricing.rate_per_room) if pricing.rate_per_room is not None else None,
+                "rate_per_piece": str(pricing.rate_per_piece) if pricing.rate_per_piece is not None else None,
+                "target_margin_pct": str(pricing.target_margin_pct) if pricing.target_margin_pct is not None else None,
+                "include_materials": pricing.include_materials,
+                "include_travel_setup_buffers": pricing.include_travel_setup_buffers,
+                "currency": pricing.currency,
+            }
+        )
+
+    context = template_context(request, lang)
+    context.update(
+        {
+            "project": project,
+            "pricing": pricing,
+            "form_data": {
+                "mode": pricing.mode,
+                "hourly_rate_override": pricing.hourly_rate_override,
+                "fixed_total_price": pricing.fixed_total_price,
+                "rate_per_m2": pricing.rate_per_m2,
+                "rate_per_room": pricing.rate_per_room,
+                "rate_per_piece": pricing.rate_per_piece,
+                "target_margin_pct": pricing.target_margin_pct,
+                "include_materials": pricing.include_materials,
+                "include_travel_setup_buffers": pricing.include_travel_setup_buffers,
+                "currency": pricing.currency,
+            },
+            "errors": {},
+            "is_readonly": False,
+        }
+    )
+    return templates.TemplateResponse("projects/pricing.html", context)
+
+
+@router.post("/{project_id}/pricing")
+async def update_project_pricing_screen(
+    project_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    lang: str = Depends(get_current_lang),
+):
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    role = get_current_user_role(request)
+    if role not in {ADMIN_ROLE, OPERATOR_ROLE}:
+        raise HTTPException(status_code=403, detail="Insufficient role")
+
+    pricing = get_or_create_project_pricing(db, project_id)
+    form = await request.form()
+    payload = dict(form)
+
+    try:
+        update_project_pricing(
+            db,
+            pricing=pricing,
+            payload=payload,
+            user_id=get_current_user_email(request),
+        )
+    except PricingValidationError as exc:
+        context = template_context(request, lang)
+        context.update(
+            {
+                "project": project,
+                "pricing": pricing,
+                "form_data": payload,
+                "errors": exc.errors,
+                "is_readonly": False,
+            }
+        )
+        return templates.TemplateResponse("projects/pricing.html", context, status_code=400)
+
+    return RedirectResponse(
+        url=f"/projects/{project_id}/pricing", status_code=status.HTTP_303_SEE_OTHER
+    )

@@ -52,6 +52,12 @@
 - Sequences are stored in DB table `document_sequences` (separate for `offer` and `invoice`, unique by type+year).
 - Finalize is idempotent: repeated finalize returns the same number and does not consume a new one.
 
+
+## Pricing screen
+
+- Экран настройки ценообразования проекта: `/projects/{id}/pricing`.
+- Описание режимов и полей: `docs/PRICING.md`.
+
 ## Environment variables
 
 - `APP_SECRET_KEY` — обязательный секрет для сессий в production (`ALLOW_DEV_DEFAULTS=false`), минимум 32 байта (raw/hex/base64).

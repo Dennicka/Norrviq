@@ -12,6 +12,7 @@ from .user import User
 from .company_profile import CompanyProfile
 from .document_sequence import DocumentSequence
 from .audit_event import AuditEvent
+from .project_pricing import ProjectPricing
 
 __all__ = [
     "Client",
@@ -31,4 +32,5 @@ __all__ = [
     "CompanyProfile",
     "DocumentSequence",
     "AuditEvent",
+    "ProjectPricing",
 ]

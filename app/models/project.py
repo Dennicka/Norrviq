@@ -55,6 +55,12 @@ class Project(Base):
         back_populates="project",
         cascade="all, delete-orphan",
     )
+    pricing = relationship(
+        "ProjectPricing",
+        back_populates="project",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
 
 
 class ProjectWorkItem(Base):
