@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     session_cookie_name: str = "norrviq_session"
     session_max_age_seconds: int = 60 * 60 * 24 * 7
 
+    log_format: str = "pretty"
+    log_level: str = "INFO"
+
     @property
     def admin_username(self) -> str:
         return self.admin_email
