@@ -17,6 +17,9 @@ from app.security import hash_password
 from app.services.estimates import calculate_work_item
 from app.services.pricing import (
     PRICING_MODES,
+    WARNING_MISSING_ITEMS,
+    WARNING_MISSING_UNITS_M2,
+    WARNING_MISSING_UNITS_ROOMS,
     PricingValidationError,
     compute_pricing_scenarios,
     get_or_create_project_pricing,
@@ -341,3 +344,79 @@ def test_pricing_post_requires_csrf():
         follow_redirects=False,
     )
     assert response.status_code == 403
+
+
+def test_pricing_ui_no_nan_or_negative_zero():
+    login(settings.admin_email, settings.admin_password)
+    project_id = _make_golden_project()
+    page = client.get(f"/projects/{project_id}/pricing")
+    assert page.status_code == 200
+    assert "NaN" not in page.text
+    assert "Infinity" not in page.text
+    assert "-0.00" not in page.text
+
+
+def test_warnings_for_missing_units():
+    db = SessionLocal()
+    try:
+        project = Project(name=f"Warnings project {uuid4().hex[:8]}")
+        db.add(project)
+        db.commit()
+        pricing = get_or_create_project_pricing(db, project.id)
+        pricing.rate_per_m2 = Decimal("100.00")
+        pricing.rate_per_room = Decimal("1000.00")
+        pricing.rate_per_piece = Decimal("99.00")
+        db.commit()
+        _, scenarios = compute_pricing_scenarios(db, project.id)
+    finally:
+        db.close()
+
+    by_mode = {scenario.mode: scenario for scenario in scenarios}
+    assert WARNING_MISSING_UNITS_M2 in by_mode["PER_M2"].warnings
+    assert WARNING_MISSING_UNITS_ROOMS in by_mode["PER_ROOM"].warnings
+    assert WARNING_MISSING_ITEMS in by_mode["PIECEWORK"].warnings
+
+
+def test_use_this_mode_persists_and_prefills():
+    login(settings.admin_email, settings.admin_password)
+    project_id = _make_golden_project()
+    response = client.post(
+        f"/projects/{project_id}/pricing",
+        data={"intent": "select_mode", "selected_mode": "PER_M2"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+
+    db = SessionLocal()
+    try:
+        pricing = db.query(ProjectPricing).filter(ProjectPricing.project_id == project_id).first()
+        assert pricing is not None
+        assert pricing.mode == "PER_M2"
+        assert pricing.rate_per_m2 == Decimal("200.00")
+    finally:
+        db.close()
+
+    page = client.get(f"/projects/{project_id}/pricing")
+    assert page.status_code == 200
+    assert 'value="PER_M2" checked' in page.text
+    assert 'name="rate_per_m2" value="200.00"' in page.text
+
+
+def test_details_section_contains_baseline_and_formula():
+    login(settings.admin_email, settings.admin_password)
+    project_id = _make_golden_project()
+    page = client.get(f"/projects/{project_id}/pricing")
+    assert page.status_code == 200
+    assert "Formula:" in page.text
+    assert "Baseline breakdown:" in page.text
+    assert "Include flags:" in page.text
+
+
+def test_double_click_guard():
+    login(settings.admin_email, settings.admin_password)
+    project_id = _make_golden_project()
+    page = client.get(f"/projects/{project_id}/pricing")
+    assert page.status_code == 200
+    assert "js-mode-select-btn" in page.text
+    assert "btn.disabled = true;" in page.text
+    assert "Saving..." in page.text
