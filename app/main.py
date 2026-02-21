@@ -29,6 +29,7 @@ from .observability import (
     validation_exception_handler,
 )
 from .routers import (
+    api_buffer_rules,
     web_analytics,
     web_auth,
     web_clients,
@@ -157,6 +158,7 @@ async def basic_metrics():
 csrf_dependency = Depends(enforce_csrf)
 
 app.include_router(web_root.router, dependencies=[csrf_dependency])
+app.include_router(api_buffer_rules.router, dependencies=[csrf_dependency, Depends(require_role("admin"))])
 app.include_router(web_auth.router, dependencies=[csrf_dependency])
 app.include_router(web_clients.router, dependencies=[csrf_dependency, Depends(require_auth)])
 app.include_router(web_worktypes.router, dependencies=[csrf_dependency, Depends(require_auth)])

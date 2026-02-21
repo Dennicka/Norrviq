@@ -13,6 +13,7 @@ from app.models.project_buffer_settings import ProjectBufferSettings
 from app.models.project_pricing import ProjectPricing
 from app.models.pricing_policy import PricingPolicy
 from app.models.settings import get_or_create_settings
+from app.services.buffer_rules import resolve_effective_buffer
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -68,6 +69,7 @@ class ProjectBaseline:
     buffers_hours_total: Decimal
     buffers_cost_total: Decimal
     buffers: list[dict]
+    effective_buffer: dict | None = None
 
 
 @dataclass
@@ -267,71 +269,65 @@ def compute_project_baseline(
         include_setup_cleanup_travel = project_buffer_settings.include_setup_cleanup_travel
         include_risk = project_buffer_settings.include_risk
 
-    rules = (
-        db.query(BufferRule)
-        .filter(BufferRule.is_active.is_(True))
-        .order_by(BufferRule.scope_type.asc(), BufferRule.priority.desc(), BufferRule.id.asc())
-        .all()
-    )
-    worktype_ids = {wi.work_type_id for wi in project.work_items if wi.work_type_id is not None}
-    category_ids = {ci.cost_category_id for ci in project.cost_items if ci.cost_category_id is not None}
-
-    matched_rules: list[BufferRule] = []
-    seen: set[int] = set()
-
-    def _add_rules(scope: str, allowed_ids):
-        for rule in rules:
-            if rule.id in seen or rule.scope_type != scope:
-                continue
-            if scope == "GLOBAL" or rule.scope_id in allowed_ids:
-                matched_rules.append(rule)
-                seen.add(rule.id)
-
-    _add_rules("PROJECT", {project.id})
-    _add_rules("WORKTYPE", worktype_ids)
-    _add_rules("CATEGORY", category_ids)
-    _add_rules("GLOBAL", set())
-
     fixed_hours = Decimal("0")
     percent_hours = Decimal("0")
     fixed_cost = Decimal("0")
     percent_cost = Decimal("0")
     breakdown: list[dict] = []
-    for rule in matched_rules:
-        if rule.kind in {"SETUP", "CLEANUP", "TRAVEL"} and not include_setup_cleanup_travel:
-            continue
-        if rule.kind == "RISK" and not include_risk:
-            continue
-        value = Decimal(str(rule.value or 0))
-        base = raw_labor_hours_total if rule.basis == "LABOR_HOURS" else raw_internal_cost
-        delta = Decimal("0")
-        if rule.unit == "PERCENT":
-            delta = base * (value / Decimal("100"))
-            if rule.basis == "LABOR_HOURS":
-                percent_hours += delta
-            else:
-                percent_cost += delta
-        elif rule.unit == "FIXED_HOURS" and rule.basis == "LABOR_HOURS":
-            delta = value
-            fixed_hours += delta
-        elif rule.unit == "FIXED_SEK" and rule.basis == "INTERNAL_COST":
-            delta = value
-            fixed_cost += delta
+    effective = resolve_effective_buffer(db, project_id)
+    effective_meta: dict | None = None
+    if effective.applied_rule_id is not None:
+        rule = db.get(BufferRule, effective.applied_rule_id)
+    else:
+        rule = None
 
-        breakdown.append(
-            {
+    if rule is not None:
+        if rule.kind in {"SETUP", "CLEANUP", "TRAVEL"} and not include_setup_cleanup_travel:
+            effective_meta = {"rule_id": rule.id, "applied": False, "reason": "rule disabled by project setup/cleanup/travel flag"}
+        elif rule.kind == "RISK" and not include_risk:
+            effective_meta = {"rule_id": rule.id, "applied": False, "reason": "rule disabled by project risk flag"}
+        else:
+            value = Decimal(str(rule.value or 0))
+            base = raw_labor_hours_total if rule.basis == "LABOR_HOURS" else raw_internal_cost
+            delta = Decimal("0")
+            if rule.unit == "PERCENT":
+                delta = base * (value / Decimal("100"))
+                if rule.basis == "LABOR_HOURS":
+                    percent_hours += delta
+                else:
+                    percent_cost += delta
+            elif rule.unit == "FIXED_HOURS" and rule.basis == "LABOR_HOURS":
+                delta = value
+                fixed_hours += delta
+            elif rule.unit == "FIXED_SEK" and rule.basis == "INTERNAL_COST":
+                delta = value
+                fixed_cost += delta
+
+            breakdown.append(
+                {
+                    "rule_id": rule.id,
+                    "kind": rule.kind,
+                    "basis": rule.basis,
+                    "unit": rule.unit,
+                    "scope_type": rule.scope_type,
+                    "scope_id": rule.scope_id,
+                    "priority": rule.priority,
+                    "hours_delta": _quantize_hours(delta) if rule.basis == "LABOR_HOURS" else Decimal("0.00"),
+                    "sek_delta": _quantize_money(delta) if rule.basis == "INTERNAL_COST" else Decimal("0.00"),
+                    "reason": effective.reason,
+                }
+            )
+            effective_meta = {
                 "rule_id": rule.id,
-                "kind": rule.kind,
-                "basis": rule.basis,
-                "unit": rule.unit,
-                "scope_type": rule.scope_type,
-                "scope_id": rule.scope_id,
-                "priority": rule.priority,
-                "hours_delta": _quantize_hours(delta) if rule.basis == "LABOR_HOURS" else Decimal("0.00"),
-                "sek_delta": _quantize_money(delta) if rule.basis == "INTERNAL_COST" else Decimal("0.00"),
-                "reason": f"{rule.kind} {rule.unit} ({rule.scope_type})",
+                "scope": effective.scope,
+                "basis": effective.buffer_basis,
+                "unit": effective.buffer_unit,
+                "value": str(effective.buffer_value) if effective.buffer_value is not None else None,
+                "applied": True,
+                "reason": effective.reason,
             }
-        )
+    elif effective.applied_rule_id is None:
+        effective_meta = {"rule_id": None, "applied": False, "reason": effective.reason}
 
     buffers_hours_total = _quantize_hours(fixed_hours + percent_hours)
     buffers_cost_total = _quantize_money(fixed_cost + percent_cost)
@@ -369,6 +365,7 @@ def compute_project_baseline(
         buffers_hours_total=buffers_hours_total,
         buffers_cost_total=buffers_cost_total,
         buffers=breakdown,
+        effective_buffer=effective_meta,
     )
 
 
