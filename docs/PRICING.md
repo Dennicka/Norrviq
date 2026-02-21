@@ -96,3 +96,60 @@ VAT берётся из `settings.moms_percent` (fallback `25.00`), а не ха
   - `pricing_updated`
   - `pricing_mode_selected`
   - `pricing_scenarios_viewed` (view-событие)
+
+## Конвертер ставок (T18)
+
+На странице pricing добавлен блок **«Конвертер»**:
+
+- ввод `Desired effective hourly (ex VAT)`;
+- ввод `Target margin %`;
+- кнопка `Calculate`.
+
+Результат показывает:
+
+- `Suggested fixed total`;
+- `Suggested rate per m² / per room / per piece` (если есть соответствующие units);
+- `Effective hourly`, `Profit`, `Margin %`;
+- warnings при невозможности расчёта.
+
+### Формулы конвертера
+
+- `effective_hourly = price_ex_vat / labor_hours_total`
+- `price_ex_vat_from_effective_hourly = desired_effective_hourly * labor_hours_total`
+- `rate_per_m2 = price_ex_vat / total_m2` (если `total_m2 > 0`)
+- `rate_per_room = price_ex_vat / rooms_count` (если `rooms_count > 0`)
+- `rate_per_piece = price_ex_vat / items_count` (если `items_count > 0`)
+- `fixed_total = price_ex_vat`
+- `price_ex_vat_needed_for_margin = internal_total_cost / (1 - target_margin_pct/100)`
+
+Ограничения:
+
+- `target_margin_pct >= 100` — invalid (`INVALID_TARGET_MARGIN`);
+- `labor_hours_total = 0` — warning `MISSING_BASELINE`;
+- если `m²/rooms/items = 0`, соответствующие ставки не предлагаются и показываются warnings.
+
+Округления:
+
+- деньги/ставки — 2 знака;
+- margin — 1 знак.
+
+### Apply-кнопки
+
+В конвертере доступны:
+
+- `Apply to Fixed`
+- `Apply to m²`
+- `Apply to Room`
+- `Apply to Piecework`
+
+Нажатие записывает значение в `ProjectPricing` и сохраняет POST с CSRF.
+
+RBAC:
+
+- `viewer` может смотреть конвертер и считать результат;
+- `admin/operator` могут выполнять `Apply`.
+
+Audit события:
+
+- `pricing_conversion_calculated`
+- `pricing_conversion_applied` (в details: `mode`, `value`)

@@ -43,22 +43,26 @@
     <section data-mode-panel="FIXED_TOTAL">
         <h3>Fixed total <span class="help" title="Фиксированная цена проекта целиком. Пример: 120000 SEK за весь проект.">?</span></h3>
         <input type="number" step="0.01" min="0" name="fixed_total_price" value="{{ form_data.get('fixed_total_price') or '' }}" {% if is_readonly %}disabled{% endif %}>
+        <div><small>Effective hourly: {{ effective_by_mode.get('FIXED_TOTAL') or '—' }}</small></div>
     </section>
 
     <section data-mode-panel="PER_M2">
         <h3>Rate per m² <span class="help" title="Ставка за каждый квадратный метр. Пример: 350 SEK/м².">?</span></h3>
         <input type="number" step="0.01" min="0" name="rate_per_m2" value="{{ form_data.get('rate_per_m2') or '' }}" {% if is_readonly %}disabled{% endif %}>
+        <div><small>Effective hourly: {{ effective_by_mode.get('PER_M2') or '—' }}</small></div>
     </section>
 
     <section data-mode-panel="PER_ROOM">
         <h3>Rate per room</h3>
         <input type="number" step="0.01" min="0" name="rate_per_room" value="{{ form_data.get('rate_per_room') or '' }}" {% if is_readonly %}disabled{% endif %}>
+        <div><small>Effective hourly: {{ effective_by_mode.get('PER_ROOM') or '—' }}</small></div>
     </section>
 
     <section data-mode-panel="PIECEWORK">
         <h3>Piecework</h3>
         <label>Rate per piece</label>
         <input type="number" step="0.01" min="0" name="rate_per_piece" value="{{ form_data.get('rate_per_piece') or '' }}" {% if is_readonly %}disabled{% endif %}>
+        <div><small>Effective hourly: {{ effective_by_mode.get('PIECEWORK') or '—' }}</small></div>
         <label>Target margin % <span class="help" title="Желаемая маржа в процентах. Пример: 25 означает целиться в 25% маржи.">?</span></label>
         <input type="number" step="0.01" min="0" max="80" name="target_margin_pct" value="{{ form_data.get('target_margin_pct') or '' }}" {% if is_readonly %}disabled{% endif %}>
     </section>
@@ -78,6 +82,48 @@
 
     {% if not is_readonly %}<button type="submit" class="js-pricing-save-btn">Save</button>{% endif %}
 </form>
+
+
+<section style="margin-top:24px; padding:12px; border:1px solid #ddd;">
+    <h2>Конвертер</h2>
+    <form method="post" action="/projects/{{ project.id }}/pricing" class="js-converter-form">
+        {{ csrf_input(request) }}
+        <input type="hidden" name="intent" value="calculate_conversion">
+        <label>Desired effective hourly (ex VAT)</label>
+        <input type="number" step="0.01" min="0" name="desired_effective_hourly_ex_vat" value="{{ converter_input.get('desired_effective_hourly_ex_vat') or '' }}">
+        <label>Target margin %</label>
+        <input type="number" step="0.01" min="0" name="desired_margin_pct" value="{{ converter_input.get('desired_margin_pct') or '' }}">
+        <button type="submit">Calculate</button>
+    </form>
+
+    {% if conversion_result %}
+    <div style="margin-top:12px;">
+        <div>Suggested fixed total: <strong>{{ conversion_result.fixed_total_display }}</strong></div>
+        <div>Suggested rate per m²: <strong>{{ conversion_result.rate_per_m2_display }}</strong></div>
+        <div>Suggested rate per room: <strong>{{ conversion_result.rate_per_room_display }}</strong></div>
+        <div>Suggested rate per piece: <strong>{{ conversion_result.rate_per_piece_display }}</strong></div>
+        <div>Effective hourly: <strong>{{ conversion_result.effective_hourly_display }}</strong></div>
+        <div>Profit: <strong>{{ conversion_result.profit_display }}</strong> · Margin: <strong>{{ conversion_result.margin_pct_display }}</strong></div>
+
+        {% if conversion_result.warnings %}
+        <ul>
+            {% for warning in conversion_result.warnings %}
+            <li><code>{{ warning.code }}</code>: {{ warning.text }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+
+        {% if not is_readonly %}
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <form method="post" action="/projects/{{ project.id }}/pricing">{{ csrf_input(request) }}<input type="hidden" name="intent" value="apply_conversion"><input type="hidden" name="apply_mode" value="FIXED_TOTAL"><input type="hidden" name="apply_value" value="{{ conversion_result.raw.implied_fixed_total_price }}"><button type="submit">Apply to Fixed</button></form>
+            {% if conversion_result.raw.implied_rate_per_m2 is not none %}<form method="post" action="/projects/{{ project.id }}/pricing">{{ csrf_input(request) }}<input type="hidden" name="intent" value="apply_conversion"><input type="hidden" name="apply_mode" value="PER_M2"><input type="hidden" name="apply_value" value="{{ conversion_result.raw.implied_rate_per_m2 }}"><button type="submit">Apply to m²</button></form>{% endif %}
+            {% if conversion_result.raw.implied_rate_per_room is not none %}<form method="post" action="/projects/{{ project.id }}/pricing">{{ csrf_input(request) }}<input type="hidden" name="intent" value="apply_conversion"><input type="hidden" name="apply_mode" value="PER_ROOM"><input type="hidden" name="apply_value" value="{{ conversion_result.raw.implied_rate_per_room }}"><button type="submit">Apply to Room</button></form>{% endif %}
+            {% if conversion_result.raw.implied_rate_per_piece is not none %}<form method="post" action="/projects/{{ project.id }}/pricing">{{ csrf_input(request) }}<input type="hidden" name="intent" value="apply_conversion"><input type="hidden" name="apply_mode" value="PIECEWORK"><input type="hidden" name="apply_value" value="{{ conversion_result.raw.implied_rate_per_piece }}"><button type="submit">Apply to Piecework</button></form>{% endif %}
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+</section>
 
 <h2>Сравнение режимов</h2>
 <table border="1" cellpadding="6" cellspacing="0" style="border-collapse: collapse; width: 100%;">

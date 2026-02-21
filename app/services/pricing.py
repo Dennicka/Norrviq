@@ -25,6 +25,7 @@ WARNING_MISSING_ITEMS = "MISSING_ITEMS"
 WARNING_MISSING_BASELINE = "MISSING_BASELINE"
 WARNING_NEGATIVE_MARGIN = "NEGATIVE_MARGIN"
 WARNING_LOW_MARGIN = "LOW_MARGIN"
+WARNING_INVALID_TARGET_MARGIN = "INVALID_TARGET_MARGIN"
 
 
 @dataclass
@@ -55,6 +56,40 @@ class PricingScenario:
     details_lines: list[str]
 
 
+@dataclass
+class DesiredInput:
+    desired_effective_hourly_ex_vat: Decimal | None = None
+    desired_margin_pct: Decimal | None = None
+    rate_per_m2: Decimal | None = None
+    rate_per_room: Decimal | None = None
+    rate_per_piece: Decimal | None = None
+    fixed_total_price: Decimal | None = None
+
+
+@dataclass
+class ConversionEstimate:
+    mode: str
+    price_ex_vat: Decimal
+    effective_hourly_ex_vat: Decimal | None
+    profit: Decimal
+    margin_pct: Decimal | None
+    warnings: list[str]
+
+
+@dataclass
+class ConversionResult:
+    base_price_ex_vat: Decimal
+    implied_fixed_total_price: Decimal
+    implied_rate_per_m2: Decimal | None
+    implied_rate_per_room: Decimal | None
+    implied_rate_per_piece: Decimal | None
+    effective_hourly_ex_vat: Decimal | None
+    profit: Decimal
+    margin_pct: Decimal | None
+    mode_results: dict[str, ConversionEstimate]
+    warnings: list[str]
+
+
 class PricingValidationError(ValueError):
     def __init__(self, errors: dict[str, str]):
         super().__init__("Pricing validation failed")
@@ -67,6 +102,10 @@ def _quantize_money(value: Decimal) -> Decimal:
 
 def _quantize_hours(value: Decimal) -> Decimal:
     return value.quantize(HOURS_QUANT)
+
+
+def _quantize_margin(value: Decimal) -> Decimal:
+    return value.quantize(Decimal("0.1"))
 
 
 def get_or_create_project_pricing(db: Session, project_id: int) -> ProjectPricing:
@@ -344,6 +383,106 @@ def compute_pricing_scenarios(db: Session, project_id: int) -> tuple[ProjectBase
     )
 
     return baseline, scenarios
+
+
+def compute_conversions(db: Session, project_id: int, desired: DesiredInput) -> ConversionResult:
+    pricing = get_or_create_project_pricing(db, project_id)
+    baseline = compute_project_baseline(
+        db,
+        project_id,
+        include_materials=pricing.include_materials,
+        include_travel_setup_buffers=pricing.include_travel_setup_buffers,
+    )
+
+    warnings: list[str] = []
+    price_ex_vat = Decimal("0")
+
+    if desired.desired_effective_hourly_ex_vat is not None:
+        price_ex_vat = desired.desired_effective_hourly_ex_vat * baseline.labor_hours_total
+    elif desired.desired_margin_pct is not None:
+        margin_pct = desired.desired_margin_pct
+        if margin_pct >= Decimal("100"):
+            warnings.append(WARNING_INVALID_TARGET_MARGIN)
+        else:
+            price_ex_vat = baseline.internal_total_cost / (Decimal("1") - margin_pct / Decimal("100"))
+    elif desired.fixed_total_price is not None:
+        price_ex_vat = desired.fixed_total_price
+    elif desired.rate_per_m2 is not None:
+        price_ex_vat = desired.rate_per_m2 * baseline.total_m2
+    elif desired.rate_per_room is not None:
+        price_ex_vat = desired.rate_per_room * Decimal(str(baseline.rooms_count))
+    elif desired.rate_per_piece is not None:
+        price_ex_vat = desired.rate_per_piece * Decimal(str(baseline.items_count))
+
+    price_ex_vat = _quantize_money(price_ex_vat)
+    if baseline.total_m2 <= 0:
+        warnings.append(WARNING_MISSING_UNITS_M2)
+    if baseline.rooms_count <= 0:
+        warnings.append(WARNING_MISSING_UNITS_ROOMS)
+    if baseline.items_count <= 0:
+        warnings.append(WARNING_MISSING_ITEMS)
+    if baseline.labor_hours_total <= 0:
+        warnings.append(WARNING_MISSING_BASELINE)
+
+    implied_rate_per_m2 = None
+    if baseline.total_m2 > 0:
+        implied_rate_per_m2 = _quantize_money(price_ex_vat / baseline.total_m2)
+
+    implied_rate_per_room = None
+    if baseline.rooms_count > 0:
+        implied_rate_per_room = _quantize_money(price_ex_vat / Decimal(str(baseline.rooms_count)))
+
+    implied_rate_per_piece = None
+    if baseline.items_count > 0:
+        implied_rate_per_piece = _quantize_money(price_ex_vat / Decimal(str(baseline.items_count)))
+
+    effective_hourly_ex_vat = None
+    if baseline.labor_hours_total > 0:
+        effective_hourly_ex_vat = _quantize_money(price_ex_vat / baseline.labor_hours_total)
+
+    profit = _quantize_money(price_ex_vat - baseline.internal_total_cost)
+    margin_pct = None
+    if price_ex_vat > 0:
+        margin_pct = _quantize_margin(profit / price_ex_vat * Decimal("100"))
+
+    mode_results: dict[str, ConversionEstimate] = {}
+    for mode in ("FIXED_TOTAL", "PER_M2", "PER_ROOM", "PIECEWORK"):
+        mode_warnings = list(warnings)
+        mode_price = price_ex_vat
+        if mode == "PER_M2" and implied_rate_per_m2 is None:
+            mode_price = Decimal("0")
+        if mode == "PER_ROOM" and implied_rate_per_room is None:
+            mode_price = Decimal("0")
+        if mode == "PIECEWORK" and implied_rate_per_piece is None:
+            mode_price = Decimal("0")
+        mode_effective_hourly = None
+        if baseline.labor_hours_total > 0:
+            mode_effective_hourly = _quantize_money(mode_price / baseline.labor_hours_total)
+        mode_profit = _quantize_money(mode_price - baseline.internal_total_cost)
+        mode_margin = None
+        if mode_price > 0:
+            mode_margin = _quantize_margin(mode_profit / mode_price * Decimal("100"))
+        mode_results[mode] = ConversionEstimate(
+            mode=mode,
+            price_ex_vat=mode_price,
+            effective_hourly_ex_vat=mode_effective_hourly,
+            profit=mode_profit,
+            margin_pct=mode_margin,
+            warnings=mode_warnings,
+        )
+
+    return ConversionResult(
+        base_price_ex_vat=price_ex_vat,
+        implied_fixed_total_price=price_ex_vat,
+        implied_rate_per_m2=implied_rate_per_m2,
+        implied_rate_per_room=implied_rate_per_room,
+        implied_rate_per_piece=implied_rate_per_piece,
+        effective_hourly_ex_vat=effective_hourly_ex_vat,
+        profit=profit,
+        margin_pct=margin_pct,
+        mode_results=mode_results,
+        warnings=list(dict.fromkeys(warnings)),
+    )
 
 
 def select_pricing_mode(db: Session, *, pricing: ProjectPricing, mode: str, user_id: str | None) -> ProjectPricing:
