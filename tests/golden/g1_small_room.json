@@ -1,0 +1,172 @@
+{
+  "baseline": {
+    "internal_total_cost": "3729.17",
+    "items_count": 2,
+    "labor_cost_internal": "2920.15",
+    "labor_hours_total": "10.10",
+    "materials_cost_internal": "350.00",
+    "overhead_cost_internal": "339.02",
+    "rooms_count": 1,
+    "total_m2": "12.50",
+    "travel_setup_cost_internal": "120.00"
+  },
+  "case": "g1_small_room",
+  "converter": {
+    "base_price_ex_vat": "7878.00",
+    "effective_hourly_ex_vat": "780.00",
+    "implied_fixed_total_price": "7878.00",
+    "implied_rate_per_m2": "630.24",
+    "implied_rate_per_piece": "3939.00",
+    "implied_rate_per_room": "7878.00",
+    "input": {
+      "desired_effective_hourly_ex_vat": "780.00",
+      "desired_margin_pct": "28.00"
+    },
+    "margin_pct": "52.7",
+    "mode_results": {
+      "FIXED_TOTAL": {
+        "effective_hourly": "780.00",
+        "margin_pct": "52.7",
+        "price_ex_vat": "7878.00",
+        "profit": "4148.83",
+        "warnings": []
+      },
+      "PER_M2": {
+        "effective_hourly": "780.00",
+        "margin_pct": "52.7",
+        "price_ex_vat": "7878.00",
+        "profit": "4148.83",
+        "warnings": []
+      },
+      "PER_ROOM": {
+        "effective_hourly": "780.00",
+        "margin_pct": "52.7",
+        "price_ex_vat": "7878.00",
+        "profit": "4148.83",
+        "warnings": []
+      },
+      "PIECEWORK": {
+        "effective_hourly": "780.00",
+        "margin_pct": "52.7",
+        "price_ex_vat": "7878.00",
+        "profit": "4148.83",
+        "warnings": []
+      }
+    },
+    "profit": "4148.83",
+    "warnings": []
+  },
+  "floor": {
+    "FIXED_TOTAL": {
+      "is_below_floor": false,
+      "reasons": [],
+      "recommended_fixed_total": "5050.00",
+      "recommended_min_price_ex_vat": "5050.00",
+      "recommended_rate_per_m2": "404.00",
+      "recommended_rate_per_piece": "2525.00",
+      "recommended_rate_per_room": "5050.00"
+    },
+    "HOURLY": {
+      "is_below_floor": false,
+      "reasons": [],
+      "recommended_fixed_total": "5050.00",
+      "recommended_min_price_ex_vat": "5050.00",
+      "recommended_rate_per_m2": "404.00",
+      "recommended_rate_per_piece": "2525.00",
+      "recommended_rate_per_room": "5050.00"
+    },
+    "PER_M2": {
+      "is_below_floor": true,
+      "reasons": [
+        "NEGATIVE_PROFIT",
+        "MARGIN_BELOW_MIN",
+        "PROFIT_BELOW_MIN",
+        "EFFECTIVE_HOURLY_BELOW_MIN"
+      ],
+      "recommended_fixed_total": "5050.00",
+      "recommended_min_price_ex_vat": "5050.00",
+      "recommended_rate_per_m2": "404.00",
+      "recommended_rate_per_piece": "2525.00",
+      "recommended_rate_per_room": "5050.00"
+    },
+    "PER_ROOM": {
+      "is_below_floor": true,
+      "reasons": [
+        "NEGATIVE_PROFIT",
+        "MARGIN_BELOW_MIN",
+        "PROFIT_BELOW_MIN",
+        "EFFECTIVE_HOURLY_BELOW_MIN"
+      ],
+      "recommended_fixed_total": "5050.00",
+      "recommended_min_price_ex_vat": "5050.00",
+      "recommended_rate_per_m2": "404.00",
+      "recommended_rate_per_piece": "2525.00",
+      "recommended_rate_per_room": "5050.00"
+    },
+    "PIECEWORK": {
+      "is_below_floor": true,
+      "reasons": [
+        "NEGATIVE_PROFIT",
+        "MARGIN_BELOW_MIN",
+        "PROFIT_BELOW_MIN",
+        "EFFECTIVE_HOURLY_BELOW_MIN"
+      ],
+      "recommended_fixed_total": "5050.00",
+      "recommended_min_price_ex_vat": "5050.00",
+      "recommended_rate_per_m2": "404.00",
+      "recommended_rate_per_piece": "2525.00",
+      "recommended_rate_per_room": "5050.00"
+    }
+  },
+  "performance": {
+    "compute_seconds": "0.0915"
+  },
+  "scenarios": {
+    "FIXED_TOTAL": {
+      "effective_hourly": "980.20",
+      "invalid": false,
+      "margin_pct": "62.33",
+      "price_ex_vat": "9900.00",
+      "profit": "6170.83",
+      "warnings": []
+    },
+    "HOURLY": {
+      "effective_hourly": "674.65",
+      "invalid": false,
+      "margin_pct": "45.27",
+      "price_ex_vat": "6814.00",
+      "profit": "3084.83",
+      "warnings": []
+    },
+    "PER_M2": {
+      "effective_hourly": "346.53",
+      "invalid": false,
+      "margin_pct": "-6.55",
+      "price_ex_vat": "3500.00",
+      "profit": "-229.17",
+      "warnings": [
+        "NEGATIVE_MARGIN"
+      ]
+    },
+    "PER_ROOM": {
+      "effective_hourly": "316.83",
+      "invalid": false,
+      "margin_pct": "-16.54",
+      "price_ex_vat": "3200.00",
+      "profit": "-529.17",
+      "warnings": [
+        "NEGATIVE_MARGIN"
+      ]
+    },
+    "PIECEWORK": {
+      "effective_hourly": "227.72",
+      "invalid": false,
+      "margin_pct": "-62.14",
+      "price_ex_vat": "2300.00",
+      "profit": "-1429.17",
+      "warnings": [
+        "NEGATIVE_MARGIN"
+      ]
+    }
+  }
+}
