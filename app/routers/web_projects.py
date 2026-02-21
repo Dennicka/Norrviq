@@ -260,6 +260,15 @@ def project_offer(
 
     context = template_context(request, lang)
     company_profile = get_or_create_company_profile(db)
+    terms_template = resolve_terms_template(
+        db,
+        profile=company_profile,
+        client=project.client,
+        doc_type=DOC_TYPE_OFFER,
+        lang=lang,
+    )
+    terms_title = project.offer_terms_snapshot_title or (terms_template.title if terms_template else "")
+    terms_body = project.offer_terms_snapshot_body or (terms_template.body_text if terms_template else "")
     context.update(
         {
             "project": project,
@@ -270,6 +279,8 @@ def project_offer(
             "company_profile": company_profile,
             "offer_number": project.offer_number,
             "offer_status": project.offer_status,
+            "terms_title": terms_title,
+            "terms_body": terms_body,
         }
     )
 

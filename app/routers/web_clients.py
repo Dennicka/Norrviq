@@ -19,6 +19,10 @@ def _parse_client_form(form_data: dict) -> dict:
         value = value.strip()
         return value or None
 
+    segment = (form_data.get("client_segment") or "B2C").strip().upper()
+    if segment not in {"B2C", "BRF", "B2B"}:
+        segment = "B2C"
+
     return {
         "name": (form_data.get("name") or "").strip(),
         "contact_person": _clean(form_data.get("contact_person")),
@@ -28,6 +32,7 @@ def _parse_client_form(form_data: dict) -> dict:
         "comment": _clean(form_data.get("comment")),
         "is_private_person": bool(form_data.get("is_private_person")),
         "is_rot_eligible": bool(form_data.get("is_rot_eligible")),
+        "client_segment": segment,
     }
 
 
@@ -40,6 +45,7 @@ def _apply_client_data(client: Client, data: dict) -> None:
     client.comment = data["comment"]
     client.is_private_person = data["is_private_person"]
     client.is_rot_eligible = data["is_rot_eligible"]
+    client.client_segment = data["client_segment"]
 
 
 async def _save_client(

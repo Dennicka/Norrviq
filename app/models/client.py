@@ -16,5 +16,6 @@ class Client(Base):
     comment = Column(Text, nullable=True)
     is_private_person = Column(Boolean, nullable=False, default=True)
     is_rot_eligible = Column(Boolean, nullable=False, default=True)
+    client_segment = Column(String(8), nullable=False, default="B2C")
 
     projects = relationship("Project", back_populates="client")

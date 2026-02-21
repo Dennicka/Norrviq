@@ -9,6 +9,7 @@
         {% if offer_status != 'issued' %}
         <form method="post" action="/offers/{{ project.id }}/finalize" onsubmit="finalizeOffer(this)">
             {{ csrf_input(request) }}
+            <input type="hidden" name="terms_lang" value="{{ lang }}">
             <button type="submit" class="js-finalize-btn">Finalize</button>
         </form>
         {% endif %}
@@ -69,6 +70,9 @@
                 <div><span>{{ t("offer.summary.rot") }}</span><span>{{ project.rot_amount or 0 }}</span></div>
                 <div><strong>{{ t("offer.summary.total") }}</strong><strong>{{ project.client_pays_total or 0 }}</strong></div>
             </div>
+                <div class="offer-section">
+            <h2>{{ terms_title or "Terms / Villkor" }}</h2>
+            <pre style="white-space: pre-wrap;">{{ terms_body }}</pre>
         </div>
     </div>
 </div>

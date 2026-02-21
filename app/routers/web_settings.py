@@ -1,17 +1,38 @@
+import json
 from decimal import Decimal
+
 from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_current_lang, get_db, template_context, templates
+from app.models.audit_event import AuditEvent
 from app.models.company_profile import get_or_create_company_profile
 from app.models.settings import get_or_create_settings
+from app.models.terms_template import TermsTemplate
+from app.services.terms_templates import create_versioned_template
 
 router = APIRouter(prefix="/settings", tags=["settings"])
+
+SEGMENTS = ("B2C", "BRF", "B2B")
+DOC_TYPES = ("OFFER", "INVOICE")
+LANGS = ("sv", "ru", "en")
 
 
 def _load_form_data(form) -> dict:
     return dict(form)
+
+
+def _audit(db: Session, *, event_type: str, user_id: str | None, entity_type: str, entity_id: int, details: dict) -> None:
+    db.add(
+        AuditEvent(
+            event_type=event_type,
+            user_id=user_id,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            details=json.dumps(details, ensure_ascii=False),
+        )
+    )
 
 
 @router.get("/")
@@ -63,7 +84,8 @@ async def update_settings(
 async def company_form(request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang)):
     profile = get_or_create_company_profile(db)
     context = template_context(request, lang)
-    context.update({"company": profile, "errors": []})
+    templates_list = db.query(TermsTemplate).filter(TermsTemplate.is_active.is_(True)).order_by(TermsTemplate.id.desc()).all()
+    context.update({"company": profile, "errors": [], "terms_templates": templates_list})
     return templates.TemplateResponse("settings/company_form.html", context)
 
 
@@ -112,7 +134,8 @@ async def update_company(request: Request, db: Session = Depends(get_db), lang: 
 
     if errors:
         context = template_context(request, lang)
-        context.update({"company": profile, "errors": errors, "form_data": data})
+        templates_list = db.query(TermsTemplate).filter(TermsTemplate.is_active.is_(True)).order_by(TermsTemplate.id.desc()).all()
+        context.update({"company": profile, "errors": errors, "form_data": data, "terms_templates": templates_list})
         return templates.TemplateResponse("settings/company_form.html", context, status_code=400)
 
     profile.legal_name = (data.get("legal_name") or "").strip()
@@ -135,7 +158,80 @@ async def update_company(request: Request, db: Session = Depends(get_db), lang: 
     profile.offer_prefix = (data.get("offer_prefix") or "OF-").strip() or "OF-"
     profile.document_number_padding = document_number_padding
 
+    def _to_int(v: str | None) -> int | None:
+        if not v:
+            return None
+        try:
+            return int(v)
+        except ValueError:
+            return None
+
+    profile.default_offer_terms_template_id = _to_int(data.get("default_offer_terms_template_id"))
+    profile.default_invoice_terms_template_id = _to_int(data.get("default_invoice_terms_template_id"))
+
+    user_id = request.session.get("user_email") if hasattr(request, "session") else None
+    _audit(
+        db,
+        event_type="company_defaults_updated",
+        user_id=user_id,
+        entity_type="company_profile",
+        entity_id=profile.id,
+        details={
+            "default_offer_terms_template_id": profile.default_offer_terms_template_id,
+            "default_invoice_terms_template_id": profile.default_invoice_terms_template_id,
+        },
+    )
     db.add(profile)
     db.commit()
 
     return RedirectResponse(url="/settings/company", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.get("/terms")
+async def terms_templates_page(request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang)):
+    context = template_context(request, lang)
+    templates_list = db.query(TermsTemplate).order_by(TermsTemplate.created_at.desc()).all()
+    context.update({"terms_templates": templates_list, "segments": SEGMENTS, "doc_types": DOC_TYPES, "langs": LANGS})
+    return templates.TemplateResponse("settings/terms_templates.html", context)
+
+
+@router.post("/terms")
+async def create_terms_template(request: Request, db: Session = Depends(get_db)):
+    form = await request.form()
+    segment = (form.get("segment") or "B2C").strip().upper()
+    doc_type = (form.get("doc_type") or "OFFER").strip().upper()
+    lang = (form.get("lang") or "sv").strip().lower()
+    source_template_id = form.get("source_template_id")
+
+    title = (form.get("title") or "").strip()
+    body_text = (form.get("body_text") or "").strip()
+
+    if source_template_id:
+        source = db.get(TermsTemplate, int(source_template_id))
+        if source:
+            segment = source.segment
+            doc_type = source.doc_type
+            lang = source.lang
+            title = title or source.title
+            body_text = body_text or source.body_text
+
+    template = create_versioned_template(
+        db,
+        segment=segment,
+        doc_type=doc_type,
+        lang=lang,
+        title=title or "Terms",
+        body_text=body_text or "",
+        is_active=bool(form.get("is_active", "1")),
+    )
+    user_id = request.session.get("user_email") if hasattr(request, "session") else None
+    _audit(
+        db,
+        event_type="terms_template_versioned" if source_template_id else "terms_template_created",
+        user_id=user_id,
+        entity_type="terms_template",
+        entity_id=template.id,
+        details={"segment": template.segment, "doc_type": template.doc_type, "lang": template.lang, "version": template.version},
+    )
+    db.commit()
+    return RedirectResponse(url="/settings/terms", status_code=status.HTTP_303_SEE_OTHER)

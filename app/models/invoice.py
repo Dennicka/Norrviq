@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Date, DateTime, ForeignKey, Integer, Numeric, String, func
+from sqlalchemy import Column, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, func
 from sqlalchemy.orm import relationship
 
 from app.db import Base
@@ -23,6 +23,8 @@ class Invoice(Base):
     client_pays_total = Column(Numeric(12, 2), nullable=False)
 
     comment = Column(String, nullable=True)
+    invoice_terms_snapshot_title = Column(Text, nullable=True)
+    invoice_terms_snapshot_body = Column(Text, nullable=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(
         DateTime, server_default=func.now(), onupdate=func.now(), nullable=False

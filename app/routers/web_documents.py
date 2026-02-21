@@ -22,8 +22,10 @@ async def finalize_offer_action(
 ):
     profile = get_or_create_company_profile(db)
     user_id = request.session.get("user_email") if hasattr(request, "session") else None
+    form = await request.form()
+    terms_lang = form.get("terms_lang")
     try:
-        finalize_offer(db, project_id=project_id, user_id=user_id, profile=profile)
+        finalize_offer(db, project_id=project_id, user_id=user_id, profile=profile, lang=terms_lang)
         add_flash_message(request, "Offer finalized", "success")
     except NumberingConflictError:
         req_id = getattr(request.state, "request_id", "-")
@@ -44,12 +46,14 @@ async def finalize_invoice_action(
 ):
     profile = get_or_create_company_profile(db)
     user_id = request.session.get("user_email") if hasattr(request, "session") else None
+    form = await request.form()
+    terms_lang = form.get("terms_lang")
     invoice = db.get(Invoice, invoice_id)
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
 
     try:
-        finalize_invoice(db, invoice_id=invoice_id, user_id=user_id, profile=profile)
+        finalize_invoice(db, invoice_id=invoice_id, user_id=user_id, profile=profile, lang=terms_lang)
         add_flash_message(request, "Invoice finalized", "success")
     except NumberingConflictError:
         req_id = getattr(request.state, "request_id", "-")

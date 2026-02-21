@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, Integer, String, func
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Session
 
 from app.db import Base
@@ -29,6 +29,8 @@ class CompanyProfile(Base):
     invoice_prefix = Column(String(16), nullable=False, default="TR-")
     offer_prefix = Column(String(16), nullable=False, default="OF-")
     document_number_padding = Column(Integer, nullable=False, default=4)
+    default_offer_terms_template_id = Column(Integer, ForeignKey("terms_templates.id"), nullable=True)
+    default_invoice_terms_template_id = Column(Integer, ForeignKey("terms_templates.id"), nullable=True)
 
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)

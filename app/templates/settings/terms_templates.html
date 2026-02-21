@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Terms templates</h1>
+
+<h2>Create / New version</h2>
+<form method="post" action="/settings/terms" class="form-grid">
+    {{ csrf_input(request) }}
+    <label>Segment</label>
+    <select name="segment">
+        {% for s in segments %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+    </select>
+
+    <label>Doc type</label>
+    <select name="doc_type">
+        {% for d in doc_types %}<option value="{{ d }}">{{ d }}</option>{% endfor %}
+    </select>
+
+    <label>Language</label>
+    <select name="lang">
+        {% for l in langs %}<option value="{{ l }}">{{ l }}</option>{% endfor %}
+    </select>
+
+    <label>Version from template (optional)</label>
+    <select name="source_template_id">
+        <option value="">-- none --</option>
+        {% for item in terms_templates %}
+        <option value="{{ item.id }}">#{{ item.id }} {{ item.segment }}/{{ item.doc_type }}/{{ item.lang }} v{{ item.version }}</option>
+        {% endfor %}
+    </select>
+
+    <label>Title</label>
+    <input type="text" name="title" required>
+
+    <label>Body</label>
+    <textarea name="body_text" rows="8" required></textarea>
+
+    <label><input type="checkbox" name="is_active" checked> Active</label>
+    <button type="submit">Save as new version</button>
+</form>
+
+<h2>Existing templates</h2>
+<table>
+    <thead><tr><th>ID</th><th>Segment</th><th>Type</th><th>Lang</th><th>Version</th><th>Active</th><th>Title</th></tr></thead>
+    <tbody>
+        {% for item in terms_templates %}
+        <tr>
+            <td>{{ item.id }}</td><td>{{ item.segment }}</td><td>{{ item.doc_type }}</td><td>{{ item.lang }}</td><td>{{ item.version }}</td><td>{{ item.is_active }}</td><td>{{ item.title }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}
