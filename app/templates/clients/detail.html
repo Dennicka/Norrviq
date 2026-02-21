@@ -5,6 +5,7 @@
     <a href="/clients/">{{ t('clients.title') }}</a> |
     <a href="/clients/{{ client.id }}/edit">{{ t('clients.edit') }}</a>
     <form method="post" action="/clients/{{ client.id }}/delete" style="display:inline;">
+        {{ csrf_input(request) }}
         <button type="submit" onclick="return confirm('{{ t('label.delete') }}?');">{{ t('label.delete') }}</button>
     </form>
 </p>

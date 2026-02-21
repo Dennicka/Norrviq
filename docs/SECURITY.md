@@ -34,3 +34,15 @@
 - `admin_created`
 
 Логи не содержат пароли и секреты.
+
+## CSRF
+
+- Применяется защита для всех state-changing методов: `POST`, `PUT`, `PATCH`, `DELETE`.
+- Источник истины токена — серверная сессия (`session["csrf_token"]`).
+- Токен создаётся при первом безопасном запросе и затем переиспользуется в рамках сессии.
+- Валидация токена:
+  - HTML forms: hidden input `csrf_token`.
+  - JS/XHR/fetch: header `X-CSRF-Token`.
+- Исключения строго ограничены: `GET/HEAD/OPTIONS`, `/api/health`, `/static/*`.
+- Ошибка валидации возвращает `HTTP 403` с сообщением `Invalid or missing CSRF token`.
+- События отклонения логируются как `csrf_reject` с `path`, `method`, `user_id`, `request_id`.

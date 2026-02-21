@@ -3,6 +3,7 @@
 <h1>{{ t('projects.edit') }}: {{ t('label.work_type') }}</h1>
 <p><a href="/projects/{{ project.id }}">{{ t('projects.detail') }}</a></p>
 <form method="post" action="/projects/{{ project.id }}/items/{{ item.id }}/edit">
+    {{ csrf_input(request) }}
     <div>
         <label>{{ t("label.room") }}</label>
         <select name="room_id">

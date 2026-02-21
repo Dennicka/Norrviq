@@ -11,6 +11,7 @@
     {% endif %}
 
     <form method="post" action="/login">
+        {{ csrf_input(request) }}
         <input type="hidden" name="next" value="{{ next_path }}">
         <div>
             <label>{{ t("auth.username") }}</label>

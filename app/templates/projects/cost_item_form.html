@@ -2,6 +2,7 @@
 {% block content %}
 <h1>{{ t('projects.cost_items.edit') }}</h1>
 <form method="post" action="/projects/{{ project.id }}/costs/{{ cost_item.id }}/save">
+    {{ csrf_input(request) }}
     <div>
         <label>{{ t('label.category') }}</label>
         <select name="cost_category_id" required>

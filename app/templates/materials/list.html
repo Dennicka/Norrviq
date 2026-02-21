@@ -24,6 +24,7 @@
             <td>
                 <a href="/materials/{{ material.id }}/edit">{{ t('label.edit') }}</a>
                 <form method="post" action="/materials/{{ material.id }}/delete" style="display:inline" onsubmit="return confirm('Delete material?')">
+                    {{ csrf_input(request) }}
                     <button type="submit">{{ t('label.delete') }}</button>
                 </form>
             </td>

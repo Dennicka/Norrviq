@@ -3,6 +3,7 @@
 <h1>{{ client and t("clients.edit") or t("clients.new") }}</h1>
 {% set action_url = form_action or (client and '/clients/' ~ client.id ~ '/edit' or '/clients/new') %}
 <form method="post" action="{{ action_url }}">
+    {{ csrf_input(request) }}
     {% if client and client.id %}
     <input type="hidden" name="id" value="{{ client.id }}">
     {% endif %}

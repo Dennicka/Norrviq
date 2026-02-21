@@ -9,7 +9,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from . import models  # noqa: F401
 from .config import get_settings
 from .db import Base, SessionLocal, engine
-from .dependencies import get_current_lang
+from .dependencies import enforce_csrf, get_current_lang
 from .models.settings import get_or_create_settings
 from .routers import (
     web_auth,
@@ -84,20 +84,22 @@ async def add_lang_to_request(request: Request, call_next):
     return response
 
 
-app.include_router(web_root.router)
-app.include_router(web_auth.router)
-app.include_router(web_clients.router, dependencies=[Depends(require_auth)])
-app.include_router(web_worktypes.router, dependencies=[Depends(require_auth)])
-app.include_router(web_projects.router, dependencies=[Depends(require_auth)])
-app.include_router(web_settings.router, dependencies=[Depends(require_role("admin"))])
-app.include_router(web_costs.router, dependencies=[Depends(require_auth)])
-app.include_router(web_legal.router, dependencies=[Depends(require_auth)])
-app.include_router(web_materials.router, dependencies=[Depends(require_auth)])
-app.include_router(web_invoices.router, dependencies=[Depends(require_auth)])
-app.include_router(web_reports.router, dependencies=[Depends(require_auth)])
-app.include_router(web_rooms.router, dependencies=[Depends(require_auth)])
-app.include_router(web_workers.router, dependencies=[Depends(require_auth)])
-app.include_router(web_stats.router, dependencies=[Depends(require_auth)])
-app.include_router(web_analytics.router, dependencies=[Depends(require_auth)])
-app.include_router(web_payroll.router, dependencies=[Depends(require_auth)])
-app.include_router(web_help.router, dependencies=[Depends(require_auth)])
+csrf_dependency = Depends(enforce_csrf)
+
+app.include_router(web_root.router, dependencies=[csrf_dependency])
+app.include_router(web_auth.router, dependencies=[csrf_dependency])
+app.include_router(web_clients.router, dependencies=[csrf_dependency, Depends(require_auth)])
+app.include_router(web_worktypes.router, dependencies=[csrf_dependency, Depends(require_auth)])
+app.include_router(web_projects.router, dependencies=[csrf_dependency, Depends(require_auth)])
+app.include_router(web_settings.router, dependencies=[csrf_dependency, Depends(require_role("admin"))])
+app.include_router(web_costs.router, dependencies=[csrf_dependency, Depends(require_auth)])
+app.include_router(web_legal.router, dependencies=[csrf_dependency, Depends(require_auth)])
+app.include_router(web_materials.router, dependencies=[csrf_dependency, Depends(require_auth)])
+app.include_router(web_invoices.router, dependencies=[csrf_dependency, Depends(require_auth)])
+app.include_router(web_reports.router, dependencies=[csrf_dependency, Depends(require_auth)])
+app.include_router(web_rooms.router, dependencies=[csrf_dependency, Depends(require_auth)])
+app.include_router(web_workers.router, dependencies=[csrf_dependency, Depends(require_auth)])
+app.include_router(web_stats.router, dependencies=[csrf_dependency, Depends(require_auth)])
+app.include_router(web_analytics.router, dependencies=[csrf_dependency, Depends(require_auth)])
+app.include_router(web_payroll.router, dependencies=[csrf_dependency, Depends(require_auth)])
+app.include_router(web_help.router, dependencies=[csrf_dependency, Depends(require_auth)])

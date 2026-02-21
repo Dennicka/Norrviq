@@ -8,6 +8,7 @@
     |
     <a href="/projects/{{ project.id }}/edit">{{ t('projects.edit') }}</a>
     <form method="post" action="/projects/{{ project.id }}/delete" style="display:inline;">
+        {{ csrf_input(request) }}
         <button type="submit" onclick="return confirm('{{ t("label.delete") }}?');">{{ t('label.delete') }}</button>
     </form>
 </p>
@@ -88,6 +89,7 @@
                 <td>
                     <a href="/projects/{{ project.id }}/rooms/{{ room.id }}/edit">{{ t("projects.edit") }}</a>
                     <form method="post" action="/projects/{{ project.id }}/rooms/{{ room.id }}/delete" style="display:inline;">
+                        {{ csrf_input(request) }}
                         <button type="submit" onclick="return confirm('{{ t("label.delete") }}?');">{{ t("label.delete") }}</button>
                     </form>
                 </td>
@@ -102,6 +104,7 @@
 <section>
     <h2>{{ t("label.add_work_item") }}</h2>
     <form method="post" action="/projects/{{ project.id }}/add-work-item">
+        {{ csrf_input(request) }}
         <div>
             <label>{{ t("label.work_type") }}</label>
             <select name="work_type_id" id="work-type-select" required>
@@ -189,6 +192,7 @@
                 <td>
                     <a href="/projects/{{ project.id }}/items/{{ item.id }}/edit">{{ t('projects.edit') }}</a>
                     <form method="post" action="/projects/{{ project.id }}/items/{{ item.id }}/delete" style="display:inline;">
+                        {{ csrf_input(request) }}
                         <button type="submit" onclick="return confirm('{{ t("label.delete") }}?');">{{ t('label.delete') }}</button>
                     </form>
                 </td>
@@ -209,9 +213,11 @@
         <p>{{ t("label.client_pays_total") }}: {{ project.client_pays_total or '' }}</p>
     </div>
     <form method="post" action="/projects/{{ project.id }}/recalculate">
+        {{ csrf_input(request) }}
         <button type="submit">{{ t("projects.recalculate") }}</button>
     </form>
     <form method="post" action="/projects/{{ project.id }}/recalculate-finance" style="margin-top: 8px;">
+        {{ csrf_input(request) }}
         <button type="submit">{{ t("projects.finance.recalculate") }}</button>
     </form>
 </section>
@@ -238,6 +244,7 @@
                 <td>
                     <a href="/projects/{{ project.id }}/costs/{{ item.id }}/edit">✏ {{ t('label.edit') }}</a>
                     <form method="post" action="/projects/{{ project.id }}/costs/{{ item.id }}/delete" style="display:inline;">
+                        {{ csrf_input(request) }}
                         <button type="submit" onclick="return confirm('{{ t("label.delete") }}?');">🗑 {{ t('label.delete') }}</button>
                     </form>
                 </td>
@@ -250,6 +257,7 @@
 
     <h3>{{ t("projects.cost_items.add") }}</h3>
     <form method="post" action="/projects/{{ project.id }}/add-cost-item">
+        {{ csrf_input(request) }}
         <div>
             <label>{{ t("label.category") }}</label>
             <select name="cost_category_id" required>
@@ -305,6 +313,7 @@
                 <td>
                     <a href="/projects/{{ project.id }}/hours/{{ assignment.id }}/edit">✏ {{ t('label.edit') }}</a>
                     <form method="post" action="/projects/{{ project.id }}/hours/{{ assignment.id }}/delete" style="display:inline;">
+                        {{ csrf_input(request) }}
                         <button type="submit" onclick="return confirm('{{ t("label.delete") }}?');">🗑 {{ t('label.delete') }}</button>
                     </form>
                 </td>
@@ -318,6 +327,7 @@
 
     <h3>{{ t("projects.worker_assignments.add") }}</h3>
     <form method="post" action="/projects/{{ project.id }}/add-worker-assignment">
+        {{ csrf_input(request) }}
         <div>
             <label>{{ t("label.worker") }}</label>
             <select name="worker_id" required>

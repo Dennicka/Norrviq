@@ -2,6 +2,7 @@
 {% block content %}
 <h1>{{ t("settings.title") }}</h1>
 <form method="post" class="form-grid">
+    {{ csrf_input(request) }}
     <div class="form-row">
         <label for="hourly_rate_company">{{ t("settings.hourly_rate_company") }}</label>
         <input type="number" step="0.01" id="hourly_rate_company" name="hourly_rate_company" value="{{ settings_obj.hourly_rate_company }}">

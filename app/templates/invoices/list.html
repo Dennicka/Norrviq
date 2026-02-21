@@ -33,6 +33,7 @@
             <td>
                 <a href="/projects/{{ project.id }}/invoices/{{ invoice.id }}/edit">{{ t("projects.edit") }}</a>
                 <form method="post" action="/projects/{{ project.id }}/invoices/{{ invoice.id }}/delete" style="display:inline;">
+                    {{ csrf_input(request) }}
                     <button type="submit" onclick="return confirm('{{ t("label.delete") }}?');">{{ t("label.delete") }}</button>
                 </form>
             </td>
