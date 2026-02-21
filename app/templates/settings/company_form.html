@@ -69,6 +69,9 @@
     <label>{{ t("company.offer_prefix") }}</label>
     <input type="text" name="offer_prefix" value="{{ src.offer_prefix }}" required>
 
+    <label>{{ t("company.document_number_padding") }}</label>
+    <input type="number" min="2" max="8" name="document_number_padding" value="{{ src.document_number_padding or 4 }}" required>
+
     <button type="submit">{{ t("label.save") }}</button>
 </form>
 {% endblock %}

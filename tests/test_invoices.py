@@ -1,6 +1,5 @@
 from datetime import date
 from decimal import Decimal
-import uuid
 
 from fastapi.testclient import TestClient
 
@@ -34,14 +33,11 @@ def test_create_invoice_and_list():
     finally:
         db.close()
 
-    invoice_number = f"INV-TEST-{uuid.uuid4()}"
-
     response = client.post(
         f"/projects/{project_id}/invoices/create",
         data={
-            "invoice_number": invoice_number,
             "issue_date": date.today().isoformat(),
-            "status": "sent",
+            "status": "draft",
             "work_sum_without_moms": "100.00",
             "moms_amount": "25.00",
             "rot_amount": "0.00",
@@ -61,4 +57,4 @@ def test_create_invoice_and_list():
 
     list_response = client.get(f"/projects/{project_id}/invoices/")
     assert list_response.status_code == 200
-    assert invoice_number in list_response.text
+    assert "Черновик" in list_response.text or "Utkast" in list_response.text

@@ -10,6 +10,8 @@ from .legal_note import LegalNote
 from .invoice import Invoice
 from .user import User
 from .company_profile import CompanyProfile
+from .document_sequence import DocumentSequence
+from .audit_event import AuditEvent
 
 __all__ = [
     "Client",
@@ -27,4 +29,6 @@ __all__ = [
     "Invoice",
     "User",
     "CompanyProfile",
+    "DocumentSequence",
+    "AuditEvent",
 ]

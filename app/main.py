@@ -32,6 +32,7 @@ from .routers import (
     web_analytics,
     web_auth,
     web_clients,
+    web_documents,
     web_costs,
     web_help,
     web_invoices,
@@ -172,3 +173,4 @@ app.include_router(web_stats.router, dependencies=[csrf_dependency, Depends(requ
 app.include_router(web_analytics.router, dependencies=[csrf_dependency, Depends(require_auth)])
 app.include_router(web_payroll.router, dependencies=[csrf_dependency, Depends(require_auth)])
 app.include_router(web_help.router, dependencies=[csrf_dependency, Depends(require_auth)])
+app.include_router(web_documents.router, dependencies=[csrf_dependency, Depends(require_auth)])

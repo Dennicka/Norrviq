@@ -101,6 +101,15 @@ async def update_company(request: Request, db: Session = Depends(get_db), lang: 
     if not (bankgiro or plusgiro or iban):
         errors.append("company.validation.payment_method")
 
+    padding_raw = (data.get("document_number_padding") or "4").strip()
+    try:
+        document_number_padding = int(padding_raw)
+        if document_number_padding < 2 or document_number_padding > 8:
+            errors.append("company.validation.document_number_padding")
+    except ValueError:
+        errors.append("company.validation.document_number_padding")
+        document_number_padding = profile.document_number_padding
+
     if errors:
         context = template_context(request, lang)
         context.update({"company": profile, "errors": errors, "form_data": data})
@@ -124,6 +133,7 @@ async def update_company(request: Request, db: Session = Depends(get_db), lang: 
     profile.payment_terms_days = payment_terms_days
     profile.invoice_prefix = (data.get("invoice_prefix") or "TR-").strip() or "TR-"
     profile.offer_prefix = (data.get("offer_prefix") or "OF-").strip() or "OF-"
+    profile.document_number_padding = document_number_padding
 
     db.add(profile)
     db.commit()

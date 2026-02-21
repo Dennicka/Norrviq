@@ -42,6 +42,16 @@
 
 Эти данные автоматически используются в Offert/Faktura шаблонах.
 
+
+## Offer/Invoice numbering and finalize flow
+
+- Draft documents are created without official number.
+- Number is assigned only on **Finalize/Issue** actions (`POST /offers/{id}/finalize`, `POST /invoices/{id}/finalize`).
+- Status lifecycle: `draft -> issued`.
+- Format: `<prefix><year>-<seq>` where `seq` uses left-zero padding from `company_profile.document_number_padding` (default `4`).
+- Sequences are stored in DB table `document_sequences` (separate for `offer` and `invoice`, unique by type+year).
+- Finalize is idempotent: repeated finalize returns the same number and does not consume a new one.
+
 ## Environment variables
 
 - `APP_SECRET_KEY` — обязательный секрет для сессий в production (`ALLOW_DEV_DEFAULTS=false`), минимум 32 байта (raw/hex/base64).

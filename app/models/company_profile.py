@@ -28,6 +28,7 @@ class CompanyProfile(Base):
     payment_terms_days = Column(Integer, nullable=False, default=10)
     invoice_prefix = Column(String(16), nullable=False, default="TR-")
     offer_prefix = Column(String(16), nullable=False, default="OF-")
+    document_number_padding = Column(Integer, nullable=False, default=4)
 
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
