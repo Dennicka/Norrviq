@@ -36,6 +36,8 @@
 - `APP_SECRET_KEY` — обязательный секрет для сессий в production (`ALLOW_DEV_DEFAULTS=false`), минимум 32 байта (raw/hex/base64).
 - `ADMIN_EMAIL` / `ADMIN_PASSWORD` — учётные данные для bootstrap admin-пользователя при первом запуске (idempotent).
 - `ALLOW_DEV_DEFAULTS` — только для локальной разработки; по умолчанию `false`.
+- `LOG_FORMAT` — формат логов: `pretty` (dev) или `json` (production).
+- `LOG_LEVEL` — уровень логирования (`INFO`, `WARN`, `ERROR`).
 
 ## Database initialization and migrations
 
@@ -74,6 +76,15 @@ uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload
 
 При старте приложение создаёт admin-пользователя из `ADMIN_EMAIL`/`ADMIN_PASSWORD`, если такого пользователя ещё нет.
 Если admin уже существует, запись не изменяется.
+
+
+## Observability endpoints
+
+- `GET /healthz` — liveness (процесс жив).
+- `GET /readyz` — readiness (проверка подключения к БД и актуальности миграций Alembic).
+- `GET /metrics/basic` — базовые метрики (`request_latency_seconds`, `request_count_total`, `errors_total`).
+
+Подробности: `docs/OBSERVABILITY.md`.
 
 ## How to run tests
 

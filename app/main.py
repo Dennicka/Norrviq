@@ -2,33 +2,49 @@ import logging
 
 import itsdangerous
 import multipart
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
 from . import models  # noqa: F401
 from .config import get_settings
 from .db import SessionLocal, ensure_schema_up_to_date
-from .dependencies import enforce_csrf, get_current_lang
+from .dependencies import enforce_csrf
 from .models.settings import get_or_create_settings
+from .observability import (
+    REQUEST_ID_HEADER,
+    configure_logging,
+    ensure_lang,
+    handle_readiness,
+    http_exception_handler,
+    log_access,
+    metrics_registry,
+    now_ms,
+    record_metrics,
+    resolve_request_id,
+    unhandled_exception_handler,
+    validation_exception_handler,
+)
 from .routers import (
-    web_auth,
     web_analytics,
+    web_auth,
     web_clients,
     web_costs,
-    web_legal,
     web_help,
+    web_invoices,
+    web_legal,
+    web_materials,
+    web_payroll,
     web_projects,
+    web_reports,
     web_root,
+    web_rooms,
     web_settings,
     web_stats,
-    web_payroll,
-    web_materials,
-    web_reports,
-    web_rooms,
-    web_invoices,
-    web_worktypes,
     web_workers,
+    web_worktypes,
 )
 from .security import require_auth, require_role, validate_security_settings
 from .services.auth import ensure_admin_user
@@ -39,6 +55,7 @@ from .services.bootstrap import (
 )
 
 settings = get_settings()
+configure_logging(settings)
 logger = logging.getLogger("uvicorn.error")
 
 app = FastAPI(title=settings.app_name)
@@ -76,11 +93,62 @@ def startup_event():
 
 
 @app.middleware("http")
-async def add_lang_to_request(request: Request, call_next):
-    lang = await get_current_lang(request)
-    request.state.lang = lang
-    response = await call_next(request)
+async def observability_middleware(request: Request, call_next):
+    request.state.request_id = resolve_request_id(request)
+    await ensure_lang(request)
+
+    started = now_ms()
+    try:
+        response = await call_next(request)
+    except Exception:
+        latency_ms = now_ms() - started
+        log_access(request, 500, latency_ms)
+        record_metrics(request, 500, latency_ms)
+        raise
+
+    latency_ms = now_ms() - started
+    response.headers[REQUEST_ID_HEADER] = request.state.request_id
+
+    log_access(request, response.status_code, latency_ms)
+    record_metrics(request, response.status_code, latency_ms)
     return response
+
+
+@app.exception_handler(HTTPException)
+async def app_http_exception_handler(request: Request, exc: HTTPException):
+    return await http_exception_handler(request, exc)
+
+
+@app.exception_handler(RequestValidationError)
+async def app_validation_exception_handler(request: Request, exc: RequestValidationError):
+    return await validation_exception_handler(request, exc)
+
+
+@app.exception_handler(Exception)
+async def app_unhandled_exception_handler(request: Request, exc: Exception):
+    return await unhandled_exception_handler(request, exc, settings)
+
+
+@app.get("/healthz")
+async def healthz():
+    return {"status": "ok"}
+
+
+@app.get("/readyz")
+async def readyz(request: Request):
+    is_ready, reason = await handle_readiness()
+    if not is_ready:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "not_ready", "reason": reason, "request_id": request.state.request_id},
+            headers={REQUEST_ID_HEADER: request.state.request_id},
+        )
+    return {"status": "ready"}
+
+
+@app.get("/metrics/basic")
+async def basic_metrics():
+    return metrics_registry.export()
 
 
 csrf_dependency = Depends(enforce_csrf)

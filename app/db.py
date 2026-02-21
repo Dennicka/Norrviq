@@ -1,7 +1,7 @@
 from alembic.config import Config
 from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from .config import get_settings
@@ -42,3 +42,23 @@ def ensure_schema_up_to_date() -> None:
         raise RuntimeError(
             "Database schema is out of date. Run 'alembic upgrade head' and restart the application."
         )
+
+
+def get_schema_status() -> tuple[bool, str]:
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+
+        config = Config("alembic.ini")
+        script = ScriptDirectory.from_config(config)
+        expected_heads = set(script.get_heads())
+
+        with engine.connect() as connection:
+            context = MigrationContext.configure(connection)
+            current_heads = set(context.get_current_heads())
+
+        if current_heads != expected_heads:
+            return False, "migrations_not_at_head"
+        return True, "ok"
+    except Exception:
+        return False, "db_unavailable"
