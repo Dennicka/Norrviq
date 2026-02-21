@@ -10,7 +10,6 @@ from app.models.buffer_rule import BufferRule
 from app.models.project import Project
 from app.models.project_buffer_settings import ProjectBufferSettings
 from app.models.user import User
-from app.models.worktype import WorkType
 from app.security import hash_password
 from app.services.pricing import compute_project_baseline
 
