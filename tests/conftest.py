@@ -1,6 +1,8 @@
 import os
 import re
 import sys
+import tempfile
+import uuid
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -10,7 +12,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-TEST_DB_PATH = PROJECT_ROOT / "tests" / "test_app.sqlite3"
+TEST_DB_PATH = Path(tempfile.gettempdir()) / f"norrviq-test-{uuid.uuid4().hex}.sqlite3"
 os.environ["DATABASE_URL"] = f"sqlite:///{TEST_DB_PATH}"
 os.environ.setdefault("APP_SECRET_KEY", "test-secret-key-0123456789-0123456789")
 os.environ.setdefault("ADMIN_EMAIL", "admin@example.com")
