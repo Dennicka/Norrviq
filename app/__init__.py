@@ -1,1 +1,1 @@
-"""Application package for Norrviq estimator."""
+"""Application package for estimator."""

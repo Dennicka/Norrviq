@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.dependencies import add_flash_message, get_current_lang, get_db, template_context, templates
 from app.models.client import Client
+from app.models.company_profile import get_or_create_company_profile
 from app.models.cost import CostCategory, ProjectCostItem
 from app.models.legal_note import LegalNote
 from app.models.material import Material
@@ -248,6 +249,7 @@ def project_offer(
     }
 
     context = template_context(request, lang)
+    company_profile = get_or_create_company_profile(db)
     context.update(
         {
             "project": project,
@@ -255,6 +257,8 @@ def project_offer(
             "work_items": project.work_items,
             "offer_date": project.created_at.date() if project.created_at else date.today(),
             "legal_notes": legal_notes,
+            "company_profile": company_profile,
+            "offer_number": getattr(project, "offer_number", None),
         }
     )
 

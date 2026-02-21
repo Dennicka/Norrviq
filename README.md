@@ -1,6 +1,6 @@
-# Norrviq Måleri AB — сметы и финансы
+# Estimator — сметы и финансы
 
-Внутренняя двуязычная (RU/SV) система на FastAPI для расчёта смет, финансов и управления проектами компании Norrviq Måleri AB. Приложение использует SQLite, SQLAlchemy, Alembic и Jinja2-шаблоны с переключением языков.
+Внутренняя двуязычная (RU/SV) система на FastAPI для расчёта смет, финансов и управления проектами. Приложение использует SQLite, SQLAlchemy, Alembic и Jinja2-шаблоны с переключением языков.
 
 ## Python version
 
@@ -10,8 +10,8 @@
 
 1. Клонируйте репозиторий:
    ```bash
-   git clone https://github.com/Dennicka/Norrviq.git
-   cd Norrviq
+   git clone <your-repo-url>
+   cd <your-repo-dir>
    ```
 2. Создайте виртуальное окружение и активируйте его:
    ```bash
@@ -30,6 +30,17 @@
    ```bash
    alembic upgrade head
    ```
+
+## Company profile (Trenor Måleri AB)
+
+После первого запуска откройте `Settings → Company` (`/settings/company`) и заполните реквизиты:
+- `legal_name`: `Trenor Måleri AB`
+- `org_number`, `vat_number`
+- адрес и контакты
+- минимум один платёжный метод (`bankgiro` / `plusgiro` / `iban`)
+- `payment_terms_days`, `invoice_prefix`, `offer_prefix`
+
+Эти данные автоматически используются в Offert/Faktura шаблонах.
 
 ## Environment variables
 
@@ -72,35 +83,12 @@ uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload
 
 Откройте http://127.0.0.1:8001 и переключайте язык через ссылки RU/SV в верхнем меню.
 
-## Admin bootstrap
-
-При старте приложение создаёт admin-пользователя из `ADMIN_EMAIL`/`ADMIN_PASSWORD`, если такого пользователя ещё нет.
-Если admin уже существует, запись не изменяется.
-
-
-## Observability endpoints
-
-- `GET /healthz` — liveness (процесс жив).
-- `GET /readyz` — readiness (проверка подключения к БД и актуальности миграций Alembic).
-- `GET /metrics/basic` — базовые метрики (`request_latency_seconds`, `request_count_total`, `errors_total`).
-
-Подробности: `docs/OBSERVABILITY.md`.
-
 ## How to run tests
 
 ```bash
 ruff check .
 pytest
 ```
-
-## CSRF protection: how it works
-
-- Все state-changing запросы (`POST`, `PUT`, `PATCH`, `DELETE`) требуют CSRF-токен.
-- Токен хранится в сессии (`session["csrf_token"]`) и автоматически создаётся на первом безопасном запросе (`GET/HEAD/OPTIONS`).
-- Для HTML-форм токен передаётся через скрытое поле `csrf_token` (через шаблонный helper `csrf_input(request)`).
-- Для JS/fetch токен публикуется в `<meta name="csrf-token">` и должен отправляться в заголовке `X-CSRF-Token`.
-- Исключения: только `GET/HEAD/OPTIONS`, `/api/health`, `/static/*`.
-- При отсутствии/невалидности токена сервер возвращает `403 Invalid or missing CSRF token`.
 
 ## How to send token from JS
 
@@ -120,4 +108,4 @@ await fetch('/clients/new', {
 });
 ```
 
-Для встроенного UI также доступен helper `window.norrviqFetch(url, options)`, который автоматически добавляет `X-CSRF-Token`.
+Для встроенного UI также доступен helper `window.appFetch(url, options)`, который автоматически добавляет `X-CSRF-Token`.
