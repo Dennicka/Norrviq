@@ -19,7 +19,7 @@
     <tbody>
         {% for invoice in invoices %}
         <tr>
-            <td>{{ invoice.invoice_number }}</td>
+            <td>{{ invoice.invoice_number if invoice.invoice_number else t("label.draft") }}</td>
             <td>{{ invoice.issue_date }}</td>
             <td>{{ t('invoice.status.' ~ invoice.status) }}</td>
             <td>{{ invoice.client_pays_total }}</td>

@@ -32,11 +32,9 @@ def test_invoice_create_form_post():
     finally:
         db.close()
 
-    invoice_number = f"INV-FORM-{uuid4().hex[:8]}"
     response = client.post(
         f"/projects/{project_id}/invoices/create",
         data={
-            "invoice_number": invoice_number,
             "issue_date": date.today().isoformat(),
             "status": "draft",
             "work_sum_without_moms": "100.00",
@@ -50,8 +48,9 @@ def test_invoice_create_form_post():
 
     db = SessionLocal()
     try:
-        created = db.query(Invoice).filter(Invoice.invoice_number == invoice_number).first()
+        created = db.query(Invoice).filter(Invoice.project_id == project_id).first()
         assert created is not None
+        assert created.invoice_number is None
         assert created.project_id == project_id
     finally:
         db.close()

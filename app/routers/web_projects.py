@@ -258,7 +258,8 @@ def project_offer(
             "offer_date": project.created_at.date() if project.created_at else date.today(),
             "legal_notes": legal_notes,
             "company_profile": company_profile,
-            "offer_number": getattr(project, "offer_number", None),
+            "offer_number": project.offer_number,
+            "offer_status": project.offer_status,
         }
     )
 

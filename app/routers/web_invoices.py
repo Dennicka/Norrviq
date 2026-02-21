@@ -14,7 +14,7 @@ from app.services.finance import compute_project_finance
 
 router = APIRouter(prefix="/projects/{project_id}/invoices", tags=["invoices"])
 
-INVOICE_STATUSES = ["draft", "sent", "paid", "overdue", "cancelled"]
+INVOICE_STATUSES = ["draft", "issued", "paid", "overdue", "cancelled"]
 
 
 def _parse_date(value: str | None):
@@ -91,7 +91,7 @@ async def create_invoice_form(
     company_profile = get_or_create_company_profile(db)
 
     defaults = {
-        "invoice_number": f"{company_profile.invoice_prefix}",
+        "invoice_number": None,
         "issue_date": date.today(),
         "due_date": None,
         "status": "draft",
@@ -126,17 +126,13 @@ async def create_invoice(
     project = _get_project(db, project_id)
     form = await request.form()
 
-    invoice_number = form.get("invoice_number")
-    if not invoice_number:
-        raise HTTPException(status_code=400, detail="Invoice number required")
-
     invoice = Invoice(
         project_id=project.id,
-        invoice_number=invoice_number,
+        invoice_number=None,
         issue_date=_parse_date(form.get("issue_date")) or date.today(),
         due_date=_parse_date(form.get("due_date")),
         paid_date=_parse_date(form.get("paid_date")),
-        status=form.get("status") if form.get("status") in INVOICE_STATUSES else "draft",
+        status="draft",
         work_sum_without_moms=Decimal(form.get("work_sum_without_moms") or "0"),
         moms_amount=Decimal(form.get("moms_amount") or "0"),
         rot_amount=Decimal(form.get("rot_amount") or "0"),
@@ -204,13 +200,12 @@ async def update_invoice(
     invoice = _get_invoice(db, project_id, invoice_id)
     form = await request.form()
 
-    invoice.invoice_number = form.get("invoice_number") or invoice.invoice_number
     invoice.issue_date = _parse_date(form.get("issue_date")) or invoice.issue_date
     invoice.due_date = _parse_date(form.get("due_date"))
     invoice.paid_date = _parse_date(form.get("paid_date"))
-    invoice.status = (
-        form.get("status") if form.get("status") in INVOICE_STATUSES else invoice.status
-    )
+    requested_status = form.get("status")
+    if requested_status in INVOICE_STATUSES and requested_status != "issued":
+        invoice.status = requested_status
     invoice.work_sum_without_moms = Decimal(form.get("work_sum_without_moms") or "0")
     invoice.moms_amount = Decimal(form.get("moms_amount") or "0")
     invoice.rot_amount = Decimal(form.get("rot_amount") or "0")

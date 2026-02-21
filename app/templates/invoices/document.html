@@ -6,42 +6,34 @@
 <div class="offer-wrapper">
     <div class="offer-toolbar">
         <button type="button" onclick="window.print()">{{ t("offer.print") }}</button>
+        {% if invoice.status != 'issued' %}
+        <form method="post" action="/invoices/{{ invoice.id }}/finalize" onsubmit="finalizeInvoice(this)">
+            {{ csrf_input(request) }}
+            <button type="submit" class="js-finalize-btn">Issue</button>
+        </form>
+        {% endif %}
     </div>
     <div class="offer-page">
-        {% if not company_profile.is_document_ready() %}
-        <div class="flash error">{{ t("company.document_not_ready") }}</div>
-        {% endif %}
         <div class="offer-header">
             <div class="offer-company">
-                <h1>{{ t("invoice.title") }}</h1>
-                <p><strong>{{ company_profile.legal_name }}</strong></p>
-                <p>{{ company_profile.address_line1 }}{% if company_profile.address_line2 %}, {{ company_profile.address_line2 }}{% endif %}</p>
-                <p>{{ company_profile.postal_code }} {{ company_profile.city }}, {{ company_profile.country }}</p>
-                <p>{{ company_profile.email }}{% if company_profile.phone %} · {{ company_profile.phone }}{% endif %}</p>
+                <h1>{{ t("menu.invoices") }}</h1>
+                <p>{{ company_profile.legal_name }}</p>
             </div>
             <div class="offer-meta">
                 <div>{{ t("invoice.field.number") }}: {{ invoice.invoice_number if invoice.invoice_number else t("label.draft") }}</div>
+                <div>{{ t("label.status") }}: {{ invoice.status|upper }}</div>
                 <div>{{ t("invoice.field.issue_date") }}: {{ invoice.issue_date }}</div>
-                <div>{{ t("invoice.field.due_date") }}: {{ invoice.due_date if invoice.due_date else t("label.not_specified") }}</div>
             </div>
-        </div>
-
-        <div class="offer-section">
-            <h2>{{ t("offer.client") }}</h2>
-            <p><strong>{{ project.client.name if project.client else '' }}</strong></p>
-            <p>{{ t("offer.site_address") }}: {{ project.address or (project.client.address if project.client else '') }}</p>
-        </div>
-
-        <div class="offer-section">
-            <table class="offer-table">
-                <tbody>
-                    <tr><th>{{ t("label.work_sum_without_moms") }}</th><td>{{ invoice.work_sum_without_moms }}</td></tr>
-                    <tr><th>{{ t("label.moms_amount") }}</th><td>{{ invoice.moms_amount }}</td></tr>
-                    <tr><th>{{ t("label.rot_amount") }}</th><td>{{ invoice.rot_amount }}</td></tr>
-                    <tr><th>{{ t("label.client_pays_total") }}</th><td><strong>{{ invoice.client_pays_total }}</strong></td></tr>
-                </tbody>
-            </table>
         </div>
     </div>
 </div>
+<script>
+function finalizeInvoice(form) {
+    const btn = form.querySelector('.js-finalize-btn');
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Issuing...';
+    }
+}
+</script>
 {% endblock %}

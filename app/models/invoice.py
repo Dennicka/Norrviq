@@ -10,7 +10,7 @@ class Invoice(Base):
     id = Column(Integer, primary_key=True, index=True)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
 
-    invoice_number = Column(String, unique=True, index=True, nullable=False)
+    invoice_number = Column(String, unique=True, index=True, nullable=True)
     issue_date = Column(Date, nullable=False)
     due_date = Column(Date, nullable=True)
     paid_date = Column(Date, nullable=True)
