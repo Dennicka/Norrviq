@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Buffer rules</h1>
+<p>Setup/Cleanup/Travel — подготовка, уборка, логистика. Risk — непредвиденные работы.</p>
+<p>Fixed добавляет фикс, Percent считает от raw базы (часы или себестоимость).</p>
+
+<form method="post" action="/settings/buffers" class="form-grid">
+  {{ csrf_input(request) }}
+  <label>Kind</label>
+  <select name="kind"><option>SETUP</option><option>CLEANUP</option><option>TRAVEL</option><option>RISK</option></select>
+  <label>Basis</label>
+  <select name="basis"><option>LABOR_HOURS</option><option>INTERNAL_COST</option></select>
+  <label>Unit</label>
+  <select name="unit"><option>PERCENT</option><option>FIXED_HOURS</option><option>FIXED_SEK</option></select>
+  <label>Value</label><input type="number" step="0.01" name="value" required>
+  <label>Scope</label>
+  <select name="scope_type"><option>GLOBAL</option><option>PROJECT</option><option>WORKTYPE</option><option>CATEGORY</option></select>
+  <label>Scope ID</label><input type="number" name="scope_id">
+  <label>Priority</label><input type="number" name="priority" value="0">
+  <label><input type="checkbox" name="is_active" checked> Active</label>
+  <button type="submit">Save rule</button>
+</form>
+
+<table>
+<tr><th>ID</th><th>Kind</th><th>Basis</th><th>Unit</th><th>Value</th><th>Scope</th><th>Priority</th><th>Active</th><th>Action</th></tr>
+{% for r in rules %}
+<tr>
+<td>{{ r.id }}</td><td>{{ r.kind }}</td><td>{{ r.basis }}</td><td>{{ r.unit }}</td><td>{{ r.value }}</td><td>{{ r.scope_type }}{% if r.scope_id %}#{{ r.scope_id }}{% endif %}</td><td>{{ r.priority }}</td><td>{{ 'yes' if r.is_active else 'no' }}</td>
+<td>
+<form method="post" action="/settings/buffers">{{ csrf_input(request) }}<input type="hidden" name="rule_id" value="{{ r.id }}"><input type="hidden" name="action" value="deactivate"><button type="submit">Deactivate</button></form>
+</td>
+</tr>
+{% endfor %}
+</table>
+{% endblock %}

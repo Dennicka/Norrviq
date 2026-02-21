@@ -6,8 +6,10 @@ from decimal import Decimal, InvalidOperation
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.audit_event import AuditEvent
+from app.models.buffer_rule import BufferRule
 from app.models.cost import ProjectCostItem
 from app.models.project import Project, ProjectWorkItem, ProjectWorkerAssignment
+from app.models.project_buffer_settings import ProjectBufferSettings
 from app.models.project_pricing import ProjectPricing
 from app.models.pricing_policy import PricingPolicy
 from app.models.settings import get_or_create_settings
@@ -52,6 +54,8 @@ class FloorResult:
 
 @dataclass
 class ProjectBaseline:
+    raw_labor_hours_total: Decimal
+    raw_internal_cost: Decimal
     labor_hours_total: Decimal
     labor_cost_internal: Decimal
     materials_cost_internal: Decimal
@@ -61,6 +65,9 @@ class ProjectBaseline:
     total_m2: Decimal
     rooms_count: int
     items_count: int
+    buffers_hours_total: Decimal
+    buffers_cost_total: Decimal
+    buffers: list[dict]
 
 
 @dataclass
@@ -146,6 +153,17 @@ def get_or_create_project_pricing(db: Session, project_id: int) -> ProjectPricin
     return pricing
 
 
+def get_or_create_project_buffer_settings(db: Session, project_id: int) -> ProjectBufferSettings:
+    settings = db.query(ProjectBufferSettings).filter(ProjectBufferSettings.project_id == project_id).first()
+    if settings:
+        return settings
+    settings = ProjectBufferSettings(project_id=project_id)
+    db.add(settings)
+    db.commit()
+    db.refresh(settings)
+    return settings
+
+
 def _parse_decimal(value: str | None, *, field: str, errors: dict[str, str], allow_empty: bool = True):
     if value is None or value == "":
         if allow_empty:
@@ -169,6 +187,7 @@ def compute_project_baseline(
     *,
     include_materials: bool,
     include_travel_setup_buffers: bool,
+    request_id: str | None = None,
 ) -> ProjectBaseline:
     project = (
         db.query(Project)
@@ -201,7 +220,8 @@ def compute_project_baseline(
         for item in project.work_items:
             labor_hours_total += Decimal(str(item.calculated_hours or 0))
 
-    labor_hours_total = _quantize_hours(labor_hours_total)
+    raw_labor_hours_total = _quantize_hours(labor_hours_total)
+    labor_hours_total = raw_labor_hours_total
     labor_cost_internal = _quantize_money(salary_fund + (salary_fund * employer_pct))
 
     materials_cost_internal = Decimal("0")
@@ -229,12 +249,103 @@ def compute_project_baseline(
     overhead_pct = Decimal(str(settings.default_overhead_percent or 0)) / Decimal("100")
     overhead_cost_internal = _quantize_money(overhead_base * overhead_pct)
 
-    internal_total_cost = _quantize_money(
+    raw_internal_cost = _quantize_money(
         labor_cost_internal
         + materials_cost_internal
         + travel_setup_cost_internal
         + _quantize_money(other_cost_internal)
         + overhead_cost_internal
+    )
+    internal_total_cost = raw_internal_cost
+
+    project_buffer_settings = (
+        db.query(ProjectBufferSettings).filter(ProjectBufferSettings.project_id == project_id).first()
+    )
+    include_setup_cleanup_travel = include_travel_setup_buffers
+    include_risk = True
+    if project_buffer_settings:
+        include_setup_cleanup_travel = project_buffer_settings.include_setup_cleanup_travel
+        include_risk = project_buffer_settings.include_risk
+
+    rules = (
+        db.query(BufferRule)
+        .filter(BufferRule.is_active.is_(True))
+        .order_by(BufferRule.scope_type.asc(), BufferRule.priority.desc(), BufferRule.id.asc())
+        .all()
+    )
+    worktype_ids = {wi.work_type_id for wi in project.work_items if wi.work_type_id is not None}
+    category_ids = {ci.cost_category_id for ci in project.cost_items if ci.cost_category_id is not None}
+
+    matched_rules: list[BufferRule] = []
+    seen: set[int] = set()
+
+    def _add_rules(scope: str, allowed_ids):
+        for rule in rules:
+            if rule.id in seen or rule.scope_type != scope:
+                continue
+            if scope == "GLOBAL" or rule.scope_id in allowed_ids:
+                matched_rules.append(rule)
+                seen.add(rule.id)
+
+    _add_rules("PROJECT", {project.id})
+    _add_rules("WORKTYPE", worktype_ids)
+    _add_rules("CATEGORY", category_ids)
+    _add_rules("GLOBAL", set())
+
+    fixed_hours = Decimal("0")
+    percent_hours = Decimal("0")
+    fixed_cost = Decimal("0")
+    percent_cost = Decimal("0")
+    breakdown: list[dict] = []
+    for rule in matched_rules:
+        if rule.kind in {"SETUP", "CLEANUP", "TRAVEL"} and not include_setup_cleanup_travel:
+            continue
+        if rule.kind == "RISK" and not include_risk:
+            continue
+        value = Decimal(str(rule.value or 0))
+        base = raw_labor_hours_total if rule.basis == "LABOR_HOURS" else raw_internal_cost
+        delta = Decimal("0")
+        if rule.unit == "PERCENT":
+            delta = base * (value / Decimal("100"))
+            if rule.basis == "LABOR_HOURS":
+                percent_hours += delta
+            else:
+                percent_cost += delta
+        elif rule.unit == "FIXED_HOURS" and rule.basis == "LABOR_HOURS":
+            delta = value
+            fixed_hours += delta
+        elif rule.unit == "FIXED_SEK" and rule.basis == "INTERNAL_COST":
+            delta = value
+            fixed_cost += delta
+
+        breakdown.append(
+            {
+                "rule_id": rule.id,
+                "kind": rule.kind,
+                "basis": rule.basis,
+                "unit": rule.unit,
+                "scope_type": rule.scope_type,
+                "scope_id": rule.scope_id,
+                "priority": rule.priority,
+                "hours_delta": _quantize_hours(delta) if rule.basis == "LABOR_HOURS" else Decimal("0.00"),
+                "sek_delta": _quantize_money(delta) if rule.basis == "INTERNAL_COST" else Decimal("0.00"),
+                "reason": f"{rule.kind} {rule.unit} ({rule.scope_type})",
+            }
+        )
+
+    buffers_hours_total = _quantize_hours(fixed_hours + percent_hours)
+    buffers_cost_total = _quantize_money(fixed_cost + percent_cost)
+    labor_hours_total = _quantize_hours(raw_labor_hours_total + buffers_hours_total)
+    internal_total_cost = _quantize_money(raw_internal_cost + buffers_cost_total)
+
+    logger.info(
+        "event=baseline_recomputed project_id=%s request_id=%s raw_hours=%s raw_cost=%s buffer_hours=%s buffer_cost=%s",
+        project_id,
+        request_id or "-",
+        raw_labor_hours_total,
+        raw_internal_cost,
+        buffers_hours_total,
+        buffers_cost_total,
     )
 
     total_m2 = _quantize_hours(
@@ -244,6 +355,8 @@ def compute_project_baseline(
     items_count = len(project.work_items)
 
     return ProjectBaseline(
+        raw_labor_hours_total=raw_labor_hours_total,
+        raw_internal_cost=raw_internal_cost,
         labor_hours_total=labor_hours_total,
         labor_cost_internal=labor_cost_internal,
         materials_cost_internal=materials_cost_internal,
@@ -253,6 +366,9 @@ def compute_project_baseline(
         total_m2=total_m2,
         rooms_count=rooms_count,
         items_count=items_count,
+        buffers_hours_total=buffers_hours_total,
+        buffers_cost_total=buffers_cost_total,
+        buffers=breakdown,
     )
 
 
@@ -300,13 +416,14 @@ def _build_scenario(
     )
 
 
-def compute_pricing_scenarios(db: Session, project_id: int) -> tuple[ProjectBaseline, list[PricingScenario]]:
+def compute_pricing_scenarios(db: Session, project_id: int, *, request_id: str | None = None) -> tuple[ProjectBaseline, list[PricingScenario]]:
     pricing = get_or_create_project_pricing(db, project_id)
     baseline = compute_project_baseline(
         db,
         project_id,
         include_materials=pricing.include_materials,
         include_travel_setup_buffers=pricing.include_travel_setup_buffers,
+        request_id=request_id,
     )
     settings = get_or_create_settings(db)
     vat_pct = Decimal(str(settings.moms_percent if settings.moms_percent is not None else DEFAULT_VAT_PCT))

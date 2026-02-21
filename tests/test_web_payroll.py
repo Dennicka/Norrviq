@@ -4,12 +4,12 @@ from decimal import Decimal
 from fastapi.testclient import TestClient
 
 from app.config import get_settings
-from sqlalchemy import text
 
 from app.db import SessionLocal
 from app.models import Project, ProjectWorkerAssignment, Worker
 from app.models.settings import get_or_create_settings
 from app.main import app
+from tests.db_utils import clear_selected_tables
 
 
 client = TestClient(app)
@@ -19,25 +19,27 @@ settings = get_settings()
 def reset_db():
     db = SessionLocal()
     try:
-        table_names = [
-            "project_worker_assignments",
-            "project_cost_items",
-            "project_work_items",
-            "rooms",
-            "invoices",
-            "projects",
-            "workers",
-            "work_types",
-            "materials",
-            "legal_notes",
-            "cost_categories",
-            "users",
-            "settings",
-            "clients",
-        ]
-        for table_name in table_names:
-            db.execute(text(f"DELETE FROM {table_name}"))
-        db.commit()
+        clear_selected_tables(
+            db,
+            {
+                "project_worker_assignments",
+                "project_cost_items",
+                "project_work_items",
+                "project_pricing",
+                "project_buffer_settings",
+                "rooms",
+                "invoices",
+                "projects",
+                "workers",
+                "work_types",
+                "materials",
+                "legal_notes",
+                "cost_categories",
+                "users",
+                "settings",
+                "clients",
+            },
+        )
     finally:
         db.close()
 

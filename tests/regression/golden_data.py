@@ -7,6 +7,7 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
+from app.models.buffer_rule import BufferRule
 from app.models.cost import CostCategory, ProjectCostItem
 from app.models.pricing_policy import PricingPolicy, get_or_create_pricing_policy
 from app.models.project import Project, ProjectWorkItem, ProjectWorkerAssignment
@@ -233,6 +234,8 @@ def _populate_case(db: Session, case_name: str) -> tuple[int, Decimal, Decimal]:
 
 
 def render_case_snapshot(db: Session, case_name: str) -> dict:
+    db.query(BufferRule).delete()
+    db.commit()
     _configure_defaults(db)
     started = time.perf_counter()
     project_id, desired_hourly, target_margin = _populate_case(db, case_name)
