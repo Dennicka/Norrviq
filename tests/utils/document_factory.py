@@ -25,7 +25,6 @@ class DocumentFixture:
     invoice_id: int
 
 
-
 def create_stable_document_fixture(*, enable_rot: bool, issue_documents: bool) -> DocumentFixture:
     db = SessionLocal()
     try:
@@ -107,31 +106,18 @@ def create_stable_document_fixture(*, enable_rot: bool, issue_documents: bool) -
         db.add(invoice)
         db.flush()
 
-        db.add_all(
-            [
-                InvoiceLine(
-                    invoice_id=invoice.id,
-                    position=1,
-                    kind="LABOR",
-                    description="Målning väggar — Vardagsrum",
-                    unit="h",
-                    quantity=Decimal("12.00"),
-                    unit_price_ex_vat=Decimal("550.00"),
-                    vat_rate_pct=Decimal("25.00"),
-                    source_type="MANUAL",
-                ),
-                InvoiceLine(
-                    invoice_id=invoice.id,
-                    position=2,
-                    kind="MATERIAL",
-                    description="Färg och skyddsmaterial",
-                    unit="st",
-                    quantity=Decimal("1.00"),
-                    unit_price_ex_vat=Decimal("400.00"),
-                    vat_rate_pct=Decimal("25.00"),
-                    source_type="MANUAL",
-                ),
-            ]
+        db.add(
+            InvoiceLine(
+                invoice_id=invoice.id,
+                position=1,
+                kind="LABOR",
+                description="Målning väggar — Vardagsrum",
+                unit="h",
+                quantity=Decimal("12.00"),
+                unit_price_ex_vat=Decimal("550.00"),
+                vat_rate_pct=Decimal("25.00"),
+                source_type="MANUAL",
+            )
         )
 
         rot_case = RotCase(invoice_id=invoice.id, is_enabled=enable_rot, rot_pct=Decimal("30.00"))

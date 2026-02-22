@@ -1,4 +1,5 @@
 import logging
+import json
 from datetime import date
 from decimal import Decimal
 import uuid
@@ -18,6 +19,7 @@ from app.models.rot_case import RotCase
 from app.models.settings import get_or_create_settings
 from app.security import ADMIN_ROLE, OPERATOR_ROLE, require_role
 from app.services.finance import compute_project_finance
+from app.services.invoice_commercial import compute_invoice_commercial
 from app.services.invoice_lines import (
     MERGE_APPEND,
     MERGE_REPLACE_ALL,
@@ -214,8 +216,18 @@ async def invoice_document(
         )
         terms_title = terms_template.title
         terms_body = terms_template.body_text
+    commercial = compute_invoice_commercial(db, invoice.project_id, invoice.id, lang=lang)
+    if invoice.status == "issued" and invoice.commercial_mode_snapshot:
+        commercial.mode = invoice.commercial_mode_snapshot
+        if invoice.units_snapshot:
+            commercial.units = json.loads(invoice.units_snapshot)
+        if invoice.rates_snapshot:
+            commercial.rate = json.loads(invoice.rates_snapshot)
+        commercial.price_ex_vat = Decimal(str(invoice.subtotal_ex_vat_snapshot or invoice.subtotal_ex_vat))
+        commercial.vat_amount = Decimal(str(invoice.vat_total_snapshot or invoice.vat_total))
+        commercial.price_inc_vat = Decimal(str(invoice.total_inc_vat_snapshot or invoice.total_inc_vat))
     context = template_context(request, lang)
-    context.update({"project": invoice.project, "invoice": invoice, "company_profile": company_profile, "terms_title": terms_title, "terms_body": terms_body})
+    context.update({"project": invoice.project, "invoice": invoice, "company_profile": company_profile, "terms_title": terms_title, "terms_body": terms_body, "commercial": commercial})
     return templates.TemplateResponse(request, "invoices/document.html", context)
 
 
@@ -232,6 +244,7 @@ async def edit_invoice_form(
     company_profile = get_or_create_company_profile(db)
 
     context = template_context(request, lang)
+    commercial = compute_invoice_commercial(db, invoice.project_id, invoice.id, lang=lang)
     can_edit = request.session.get("user_role") in {ADMIN_ROLE, OPERATOR_ROLE} and invoice.status != "issued"
     context.update(
         {
@@ -243,6 +256,7 @@ async def edit_invoice_form(
             "company_profile": company_profile,
             "can_edit": can_edit,
             "merge_strategies": [MERGE_REPLACE_ALL, MERGE_APPEND, MERGE_UPSERT_BY_SOURCE],
+            "commercial": commercial,
         }
     )
     return templates.TemplateResponse(request, "invoices/form.html", context)

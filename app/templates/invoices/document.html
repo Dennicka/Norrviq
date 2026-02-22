@@ -29,6 +29,11 @@
         </div>
 
         <div class="offer-section">
+            <h2>Commercial</h2>
+            <p><strong>Pricing model:</strong> {{ commercial.mode }}</p>
+            <p><strong>Units:</strong> m²={{ commercial.units.total_m2 }}, rum={{ commercial.units.rooms_count }}, st={{ commercial.units.items_count }}</p>
+            {% if commercial.mode == "PER_M2" %}<p><strong>PER_M2:</strong> {{ commercial.units.total_m2 }} × {{ commercial.rate.rate_per_m2 }}</p>{% endif %}
+            {% if commercial.mode == "PER_ROOM" %}<p><strong>PER_ROOM:</strong> {{ commercial.units.rooms_count }} × {{ commercial.rate.rate_per_room }}</p>{% endif %}
             <h2>Lines</h2>
             <table border="1" cellpadding="6" cellspacing="0" style="width:100%;">
                 <thead><tr><th>#</th><th>Description</th><th>Qty</th><th>Unit</th><th>Price ex VAT</th><th>Total ex VAT</th></tr></thead>

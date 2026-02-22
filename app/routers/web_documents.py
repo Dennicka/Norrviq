@@ -1,6 +1,8 @@
 import logging
+import json
 from pathlib import Path
 from datetime import date
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse, Response
@@ -17,6 +19,7 @@ from app.observability import REQUEST_ID_HEADER
 from app.security import require_role
 from app.services.estimates import calculate_project_totals, recalculate_project_work_items
 from app.services.offer_commercial import compute_offer_commercial, deserialize_offer_commercial
+from app.services.invoice_commercial import compute_invoice_commercial
 from app.services.document_numbering import (
     CompletenessViolationError,
     FloorPolicyViolationError,
@@ -239,10 +242,22 @@ async def invoice_pdf(
         terms_title = template.title
         terms_body = template.body_text
 
+    commercial = compute_invoice_commercial(db, invoice.project_id, invoice.id, lang=lang)
+    if invoice.status == "issued" and invoice.commercial_mode_snapshot:
+        commercial.mode = invoice.commercial_mode_snapshot
+        if invoice.units_snapshot:
+            commercial.units = json.loads(invoice.units_snapshot)
+        if invoice.rates_snapshot:
+            commercial.rate = json.loads(invoice.rates_snapshot)
+        commercial.price_ex_vat = Decimal(str(invoice.subtotal_ex_vat_snapshot or invoice.subtotal_ex_vat))
+        commercial.vat_amount = Decimal(str(invoice.vat_total_snapshot or invoice.vat_total))
+        commercial.price_inc_vat = Decimal(str(invoice.total_inc_vat_snapshot or invoice.total_inc_vat))
+
     context = template_context(request, lang)
     context.update(
         {
             "invoice": invoice,
+            "commercial": commercial,
             "company_profile": profile,
             "terms_title": terms_title,
             "terms_body": terms_body,
@@ -365,6 +380,14 @@ async def finalize_invoice_action(
             return JSONResponse(status_code=409, content={"detail": str(exc), "reasons": exc.reasons, "pricing_url": f"/projects/{invoice.project_id}/pricing"})
         add_flash_message(request, f"{exc}. Перейдите в Pricing.", "error")
         return RedirectResponse(url=f"/projects/{invoice.project_id}/pricing", status_code=status.HTTP_303_SEE_OTHER)
+    except ValueError as exc:
+        if "Invoice totals mismatch pricing scenario" in str(exc):
+            req_id = getattr(request.state, "request_id", "")
+            payload = {"detail": "Invoice totals mismatch pricing scenario", "request_id": req_id}
+            if "application/json" in request.headers.get("accept", ""):
+                return JSONResponse(status_code=409, content=payload)
+            add_flash_message(request, f"{payload['detail']} (request_id={req_id})", "error")
+            return RedirectResponse(url=f"/projects/{invoice.project_id}/invoices/{invoice_id}", status_code=status.HTTP_303_SEE_OTHER)
 
     response = RedirectResponse(url=f"/projects/{invoice.project_id}/invoices/{invoice_id}", status_code=status.HTTP_303_SEE_OTHER)
     response.headers[REQUEST_ID_HEADER] = getattr(request.state, "request_id", "")

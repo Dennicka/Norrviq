@@ -35,6 +35,13 @@ class Invoice(Base):
     rot_snapshot_eligible_labor_ex_vat = Column(Numeric(12, 2), nullable=False, default=0)
     rot_snapshot_amount = Column(Numeric(12, 2), nullable=False, default=0)
 
+    commercial_mode_snapshot = Column(String(20), nullable=True)
+    units_snapshot = Column(Text, nullable=True)
+    rates_snapshot = Column(Text, nullable=True)
+    subtotal_ex_vat_snapshot = Column(Numeric(12, 2), nullable=True)
+    vat_total_snapshot = Column(Numeric(12, 2), nullable=True)
+    total_inc_vat_snapshot = Column(Numeric(12, 2), nullable=True)
+
     comment = Column(String, nullable=True)
     invoice_terms_snapshot_title = Column(Text, nullable=True)
     invoice_terms_snapshot_body = Column(Text, nullable=True)

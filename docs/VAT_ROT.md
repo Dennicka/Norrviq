@@ -39,3 +39,7 @@ ROT в v1:
 - `customer_personnummer`
 - `property_identifier`
 - `notes`
+
+
+## Invoice consistency note
+ROT affects payable total (`Att betala`) only. It must not change `subtotal_ex_vat` or scenario `price_ex_vat`.
