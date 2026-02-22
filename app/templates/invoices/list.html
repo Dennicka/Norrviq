@@ -22,7 +22,7 @@
             <td>{{ invoice.invoice_number if invoice.invoice_number else t("label.draft") }}</td>
             <td>{{ invoice.issue_date }}</td>
             <td>{{ t('invoice.status.' ~ invoice.status) }}</td>
-            <td>{{ invoice.client_pays_total }}</td>
+            <td>{{ invoice.total_inc_vat if invoice.total_inc_vat is not none else invoice.client_pays_total }}</td>
             <td>
                 {% if invoice.paid_date %}
                     {{ invoice.paid_date }}

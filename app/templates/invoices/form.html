@@ -15,19 +15,19 @@
     </div>
     <div>
         <label>{{ t("invoice.field.issue_date") }}</label>
-        <input type="date" name="issue_date" value="{{ (invoice.issue_date if invoice else defaults.issue_date) }}">
+        <input type="date" name="issue_date" value="{{ (invoice.issue_date if invoice else defaults.issue_date) }}" {% if invoice and not can_edit %}disabled{% endif %}>
     </div>
     <div>
         <label>{{ t("invoice.field.due_date") }}</label>
-        <input type="date" name="due_date" value="{{ (invoice.due_date if invoice and invoice.due_date else (defaults.due_date or '')) }}">
+        <input type="date" name="due_date" value="{{ (invoice.due_date if invoice and invoice.due_date else (defaults.due_date or '')) }}" {% if invoice and not can_edit %}disabled{% endif %}>
     </div>
     <div>
         <label>{{ t("invoice.field.paid_date") }}</label>
-        <input type="date" name="paid_date" value="{{ invoice.paid_date if invoice and invoice.paid_date else '' }}">
+        <input type="date" name="paid_date" value="{{ invoice.paid_date if invoice and invoice.paid_date else '' }}" {% if invoice and not can_edit %}disabled{% endif %}>
     </div>
     <div>
         <label>{{ t("invoice.field.status") }}</label>
-        <select name="status">
+        <select name="status" {% if invoice and not can_edit %}disabled{% endif %}>
             {% for status_value in statuses %}
             <option value="{{ status_value }}" {% if (invoice and invoice.status == status_value) or (not invoice and defaults.status == status_value) %}selected{% endif %}>
                 {{ t('invoice.status.' ~ status_value) }}
@@ -36,25 +36,85 @@
         </select>
     </div>
     <div>
-        <label>{{ t("label.work_sum_without_moms") }}</label>
-        <input type="number" step="0.01" name="work_sum_without_moms" value="{{ invoice.work_sum_without_moms if invoice else defaults.work_sum_without_moms }}" required>
-    </div>
-    <div>
-        <label>{{ t("label.moms_amount") }}</label>
-        <input type="number" step="0.01" name="moms_amount" value="{{ invoice.moms_amount if invoice else defaults.moms_amount }}" required>
-    </div>
-    <div>
-        <label>{{ t("label.rot_amount") }}</label>
-        <input type="number" step="0.01" name="rot_amount" value="{{ invoice.rot_amount if invoice else defaults.rot_amount }}" required>
-    </div>
-    <div>
-        <label>{{ t("label.client_pays_total") }}</label>
-        <input type="number" step="0.01" name="client_pays_total" value="{{ invoice.client_pays_total if invoice else defaults.client_pays_total }}" required>
-    </div>
-    <div>
         <label>{{ t("label.comment") }}</label>
-        <textarea name="comment">{{ invoice.comment if invoice and invoice.comment else (defaults.comment or '') }}</textarea>
+        <textarea name="comment" {% if invoice and not can_edit %}disabled{% endif %}>{{ invoice.comment if invoice and invoice.comment else (defaults.comment or '') }}</textarea>
     </div>
-    <button type="submit">{{ t("label.save") }}</button>
+    <button type="submit" {% if invoice and not can_edit %}disabled{% endif %}>{{ t("label.save") }}</button>
 </form>
+
+{% if invoice %}
+<hr>
+<h2>Invoice lines</h2>
+{% if can_edit %}
+<form method="post" action="/projects/{{ project.id }}/invoices/{{ invoice.id }}/generate-lines" onsubmit="return confirm('Regenerate lines? Existing lines may be replaced.');">
+    {{ csrf_input(request) }}
+    <input type="hidden" name="include_labor" value="true">
+    <label>Merge strategy</label>
+    <select name="merge_strategy">
+        {% for strategy in merge_strategies %}
+        <option value="{{ strategy }}">{{ strategy }}</option>
+        {% endfor %}
+    </select>
+    <button type="submit">Regenerate from project</button>
+</form>
+<form method="post" action="/projects/{{ project.id }}/invoices/{{ invoice.id }}/lines/add">
+    {{ csrf_input(request) }}
+    <button type="submit">Add line</button>
+</form>
+{% endif %}
+<table border="1" cellpadding="6" cellspacing="0" style="width:100%; margin-top:12px;">
+    <thead>
+        <tr><th>#</th><th>Description</th><th>Qty</th><th>Unit</th><th>Unit price ex VAT</th><th>Line total</th><th></th></tr>
+    </thead>
+    <tbody>
+        {% for line in invoice.lines %}
+        <tr data-line-id="{{ line.id }}">
+            <td>{{ line.position }}</td>
+            <td><input data-field="description" value="{{ line.description }}" {% if not can_edit %}disabled{% endif %}></td>
+            <td><input type="number" step="0.01" data-field="quantity" value="{{ line.quantity }}" {% if not can_edit %}disabled{% endif %}></td>
+            <td><input data-field="unit" value="{{ line.unit if line.unit else '' }}" {% if not can_edit %}disabled{% endif %}></td>
+            <td><input type="number" step="0.01" data-field="unit_price_ex_vat" value="{{ line.unit_price_ex_vat }}" {% if not can_edit %}disabled{% endif %}></td>
+            <td>{{ line.line_total_ex_vat }}</td>
+            <td>
+                {% if can_edit %}
+                <form method="post" action="/projects/{{ project.id }}/invoices/{{ invoice.id }}/lines/{{ line.id }}/delete">
+                    {{ csrf_input(request) }}
+                    <button type="submit">Delete</button>
+                </form>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+<div style="margin-top:12px;">
+    <strong>Subtotal:</strong> {{ invoice.subtotal_ex_vat }}<br>
+    <strong>VAT:</strong> {{ invoice.vat_total }}<br>
+    <strong>Total:</strong> <span id="invoice-total">{{ invoice.total_inc_vat }}</span>
+</div>
+{% endif %}
+
+<script>
+(function(){
+  const csrf = "{{ csrf_token }}";
+  document.querySelectorAll('tr[data-line-id] input[data-field]').forEach((input) => {
+    input.addEventListener('change', async () => {
+      const row = input.closest('tr[data-line-id]');
+      const lineId = row.dataset.lineId;
+      const payload = {};
+      row.querySelectorAll('input[data-field]').forEach((el) => payload[el.dataset.field] = el.value);
+      const resp = await fetch(`/projects/{{ project.id }}/invoices/{{ invoice.id }}/lines/${lineId}`, {
+        method: 'PATCH',
+        headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrf},
+        body: JSON.stringify(payload)
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        const totalNode = document.getElementById('invoice-total');
+        if (totalNode) totalNode.textContent = data.invoice_total;
+      }
+    });
+  });
+})();
+</script>
 {% endblock %}
