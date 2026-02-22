@@ -119,7 +119,7 @@
     }
   },
   "performance": {
-    "compute_seconds": "0.0915"
+    "compute_seconds": "0.1029"
   },
   "scenarios": {
     "FIXED_TOTAL": {

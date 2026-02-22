@@ -8,10 +8,12 @@ from sqlalchemy import text
 from app.config import get_settings
 from app.db import SessionLocal
 from app.main import app
-from app.models.project import Project, ProjectWorkerAssignment
+from app.models.project import Project, ProjectWorkItem, ProjectWorkerAssignment
 from app.models.speed_profile import SpeedProfile
+from app.models.room import Room
 from app.models.user import User
 from app.models.worker import Worker
+from app.models.worktype import WorkType
 from app.security import hash_password
 from app.services.pricing import compute_project_baseline, get_or_create_project_pricing
 
@@ -36,8 +38,33 @@ def _make_project(hours: Decimal = Decimal("10.00")) -> int:
     try:
         p = Project(name=f"Speed-{uuid4().hex[:8]}")
         w = Worker(name=f"W-{uuid4().hex[:6]}", hourly_rate=Decimal("200.00"), is_active=True)
-        db.add_all([p, w])
+        wt = WorkType(
+            code=f"WT-{uuid4().hex[:6]}",
+            category="paint",
+            unit="m2",
+            name_ru="Тест",
+            name_sv="Test",
+            description_ru=None,
+            description_sv=None,
+            hours_per_unit=Decimal("1.00"),
+            base_difficulty_factor=Decimal("1.00"),
+            is_active=True,
+        )
+        db.add_all([p, w, wt])
         db.flush()
+        room = Room(project_id=p.id, name="R", floor_area_m2=Decimal("10.00"))
+        db.add(room)
+        db.flush()
+        item = ProjectWorkItem(
+            project_id=p.id,
+            room_id=room.id,
+            work_type_id=wt.id,
+            quantity=hours,
+            difficulty_factor=Decimal("1.00"),
+            calculated_hours=hours,
+            calculated_cost_without_moms=Decimal("0.00"),
+        )
+        db.add(item)
         db.add(ProjectWorkerAssignment(project_id=p.id, worker_id=w.id, planned_hours=hours, actual_hours=hours))
         db.commit()
         get_or_create_project_pricing(db, p.id)
