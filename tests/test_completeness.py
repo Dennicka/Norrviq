@@ -103,6 +103,17 @@ def test_finalize_blocked_by_completeness_when_fixed():
     project_id = _project(with_rooms=False)
     db = SessionLocal()
     try:
+        pricing = db.query(ProjectPricing).filter(ProjectPricing.project_id == project_id).first()
+        if pricing is None:
+            pricing = ProjectPricing(project_id=project_id)
+        pricing.mode = "FIXED_TOTAL"
+        pricing.fixed_total_price = Decimal("10000")
+        db.add(pricing)
+
+        policy = get_or_create_pricing_policy(db)
+        policy.warn_only_mode = False
+        db.add(policy)
+
         invoice = Invoice(project_id=project_id, issue_date=date.today(), status="draft", work_sum_without_moms=Decimal("1"), moms_amount=Decimal("0"), rot_amount=Decimal("0"), client_pays_total=Decimal("1"))
         db.add(invoice)
         db.commit()
