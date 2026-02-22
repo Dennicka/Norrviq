@@ -6,9 +6,41 @@
     <a href="/projects/{{ project.id }}">{{ project.name }}</a> |
     <a href="/projects/{{ project.id }}/rooms/create">{{ t("label.create") }}</a>
 </p>
+<h2>Bulk actions</h2>
+<section>
+    <h3>Create rooms from template</h3>
+    <form method="post" action="/projects/{{ project.id }}/rooms/bulk_create" id="bulk-create-form">
+        {{ csrf_input(request) }}
+        <label>Name template <input type="text" name="name_template" value="Room {i}" id="bulk-name-template"></label>
+        <label>N <input type="number" name="n" value="5" min="1" max="200" id="bulk-n"></label>
+        <label>Floor area m² <input type="number" name="floor_area_m2" step="0.01" min="0"></label>
+        <label>Perimeter m <input type="number" name="wall_perimeter_m" step="0.01" min="0"></label>
+        <label>Height m <input type="number" name="wall_height_m" step="0.01" min="0"></label>
+        <label>Ceiling area m² <input type="number" name="ceiling_area_m2" step="0.01" min="0"></label>
+        <button type="submit" onclick="return confirm('Create rooms in bulk?');">Create</button>
+    </form>
+    <p>Preview (first 5 rows):</p>
+    <table id="bulk-preview-table">
+        <thead><tr><th>#</th><th>Name</th></tr></thead>
+        <tbody></tbody>
+    </table>
+    <p id="bulk-preview-total"></p>
+</section>
+
+<section>
+    <h3>Edit selected</h3>
+    <form method="post" action="/projects/{{ project.id }}/rooms/bulk_update" id="bulk-update-form">
+        {{ csrf_input(request) }}
+        <label>Height m <input type="number" name="wall_height_m" step="0.01" min="0"></label>
+        <label>Description/tag <input type="text" name="description"></label>
+        <label><input type="checkbox" name="apply_if_empty"> Apply only if empty</label>
+        <button type="submit" onclick="return confirmBulkUpdate();">Apply to selected</button>
+    </form>
+</section>
 <table>
     <thead>
         <tr>
+            <th>Select</th>
             <th>{{ t("label.name") }}</th>
             <th>{{ t("rooms.field.floor_area") }}</th>
             <th>{{ t("rooms.field.wall_perimeter") }}</th>
@@ -22,6 +54,7 @@
     <tbody>
         {% for room in rooms %}
         <tr>
+            <td><input type="checkbox" form="bulk-update-form" name="room_ids" value="{{ room.id }}"></td>
             <td>{{ room.name }}</td>
             <td>{{ room.floor_area_m2 or '' }}</td>
             <td>{{ room.wall_perimeter_m or '' }}</td>
@@ -31,6 +64,16 @@
             <td>{{ room.baseboard_length_m or '' }}</td>
             <td>
                 <a href="/projects/{{ project.id }}/rooms/{{ room.id }}/edit">{{ t("projects.edit") }}</a>
+                <form method="post" action="/projects/{{ project.id }}/rooms/{{ room.id }}/duplicate" style="display:inline;">
+                    {{ csrf_input(request) }}
+                    <button type="submit">Duplicate</button>
+                </form>
+                <form method="post" action="/projects/{{ project.id }}/rooms/{{ room.id }}/duplicate_many" style="display:inline;">
+                    {{ csrf_input(request) }}
+                    <input type="number" name="n" min="1" max="200" value="2" style="width:70px;">
+                    <input type="text" name="name_prefix" placeholder="Prefix (optional)">
+                    <button type="submit">Create copies…</button>
+                </form>
                 <form method="post" action="/projects/{{ project.id }}/rooms/{{ room.id }}/delete" style="display:inline;">
                     {{ csrf_input(request) }}
                     <button type="submit" onclick="return confirm('{{ t("label.delete") }}?');">{{ t("label.delete") }}</button>
@@ -38,8 +81,37 @@
             </td>
         </tr>
         {% else %}
-        <tr><td colspan="8">—</td></tr>
+        <tr><td colspan="9">—</td></tr>
         {% endfor %}
     </tbody>
 </table>
+<script>
+function updateBulkPreview() {
+    const template = document.getElementById('bulk-name-template').value || 'Room {i}';
+    const n = Number(document.getElementById('bulk-n').value || 0);
+    const tbody = document.querySelector('#bulk-preview-table tbody');
+    tbody.innerHTML = '';
+    const previewCount = Math.min(5, Math.max(0, n));
+    for (let i = 1; i <= previewCount; i += 1) {
+        const tr = document.createElement('tr');
+        const name = template.replaceAll('{i}', String(i));
+        tr.innerHTML = `<td>${i}</td><td>${name}</td>`;
+        tbody.appendChild(tr);
+    }
+    document.getElementById('bulk-preview-total').textContent = `Total to create: ${Math.max(0, n)}`;
+}
+
+function confirmBulkUpdate() {
+    const selected = document.querySelectorAll('input[name="room_ids"]:checked').length;
+    if (!selected) {
+        alert('Select at least one room.');
+        return false;
+    }
+    return confirm(`This will update ${selected} room(s). Continue?`);
+}
+
+document.getElementById('bulk-name-template').addEventListener('input', updateBulkPreview);
+document.getElementById('bulk-n').addEventListener('input', updateBulkPreview);
+updateBulkPreview();
+</script>
 {% endblock %}
