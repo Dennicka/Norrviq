@@ -37,6 +37,29 @@
     {% endif %}
 </section>
 
+
+<section>
+    <h2>Качество данных</h2>
+    {% if quality_report.blocks_count == 0 and quality_report.warnings_count == 0 %}
+    <p style="color:green;">Статус: OK</p>
+    {% elif quality_report.blocks_count == 0 %}
+    <p style="color:#9a7d00;">Статус: WARNING ({{ quality_report.warnings_count }})</p>
+    {% else %}
+    <p style="color:#b00020;">Статус: BLOCK ({{ quality_report.blocks_count }})</p>
+    {% endif %}
+    <ul>
+        {% for issue in quality_report.issues %}
+        <li>
+            <strong>[{{ issue.severity }}]</strong> {{ issue.message }}
+            {% if issue.current_value %}<code>{{ issue.current_value }}</code>{% endif %}
+            {% if issue.go_fix_url %}<a href="{{ issue.go_fix_url }}">Go fix</a>{% endif %}
+        </li>
+        {% else %}
+        <li>Проблем не найдено.</li>
+        {% endfor %}
+    </ul>
+</section>
+
 <section>
     <h2>{{ t("menu.invoices") }}</h2>
     <p>

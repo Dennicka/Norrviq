@@ -25,6 +25,7 @@ from app.services.estimates import calculate_project_totals, recalculate_project
 from app.services.finance import calculate_project_financials, compute_project_finance
 from app.services.terms_templates import DOC_TYPE_OFFER, resolve_terms_template
 from app.services.buffer_audit import log_buffer_audit
+from app.services.quality import evaluate_project_quality
 from app.services.pricing import (
     LOW_MARGIN_WARN_PCT,
     WARNING_LOW_MARGIN,
@@ -170,6 +171,13 @@ def _parse_date(value: str | None):
         return None
 
 
+def build_project_context(db: Session, request: Request, project: Project, lang: str, **extra):
+    context = template_context(request, lang)
+    context.update({"project": project, "quality_report": evaluate_project_quality(db, project.id, lang=lang)})
+    context.update(extra)
+    return context
+
+
 @router.get("/")
 async def list_projects(
     request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang)
@@ -249,19 +257,19 @@ async def project_detail(
     recent_invoices = sorted(
         project.invoices, key=lambda inv: inv.issue_date or inv.created_at or date.min, reverse=True
     )[:2]
-    context = template_context(request, lang)
-    context.update(
-        {
-            "project": project,
-            "worktypes": worktypes,
-            "cost_categories": cost_categories,
-            "workers": workers,
-            "materials": materials,
-            "rooms": rooms,
-            "finance_summary": finance_summary,
-            "recent_invoices": recent_invoices,
-            "baseline": baseline,
-        }
+    context = build_project_context(
+        db,
+        request,
+        project,
+        lang,
+        worktypes=worktypes,
+        cost_categories=cost_categories,
+        workers=workers,
+        materials=materials,
+        rooms=rooms,
+        finance_summary=finance_summary,
+        recent_invoices=recent_invoices,
+        baseline=baseline,
     )
     return templates.TemplateResponse(request, "projects/detail.html", context)
 
@@ -278,8 +286,7 @@ async def edit_project_form(
         raise HTTPException(status_code=404, detail="Project not found")
 
     clients = db.query(Client).all()
-    context = template_context(request, lang)
-    context.update({"clients": clients, "project": project})
+    context = build_project_context(db, request, project, lang, clients=clients)
     return templates.TemplateResponse(request, "projects/form.html", context)
 
 
@@ -387,7 +394,6 @@ def project_offer(
         .all()
     }
 
-    context = template_context(request, lang)
     company_profile = get_or_create_company_profile(db)
     if project.offer_status == "issued":
         terms_title = project.offer_terms_snapshot_title or ""
@@ -402,19 +408,20 @@ def project_offer(
         )
         terms_title = terms_template.title
         terms_body = terms_template.body_text
-    context.update(
-        {
-            "project": project,
-            "client": project.client,
-            "work_items": project.work_items,
-            "offer_date": project.created_at.date() if project.created_at else date.today(),
-            "legal_notes": legal_notes,
-            "company_profile": company_profile,
-            "offer_number": project.offer_number,
-            "offer_status": project.offer_status,
-            "terms_title": terms_title,
-            "terms_body": terms_body,
-        }
+    context = build_project_context(
+        db,
+        request,
+        project,
+        lang,
+        client=project.client,
+        work_items=project.work_items,
+        offer_date=project.created_at.date() if project.created_at else date.today(),
+        legal_notes=legal_notes,
+        company_profile=company_profile,
+        offer_number=project.offer_number,
+        offer_status=project.offer_status,
+        terms_title=terms_title,
+        terms_body=terms_body,
     )
 
     return templates.TemplateResponse(request, "projects/offer.html", context)
@@ -451,8 +458,17 @@ async def add_work_item(
         comment=form.get("comment"),
     )
     db.add(item)
-    db.commit()
+    db.flush()
+    quality_report = evaluate_project_quality(db, project.id, lang=lang)
+    item_issues = [issue for issue in quality_report.issues if issue.entity == "WORK_ITEM" and issue.entity_id == item.id]
+    block_issues = [issue for issue in item_issues if issue.severity == "BLOCK"]
+    for issue in item_issues:
+        add_flash_message(request, issue.message, "error" if issue.severity == "BLOCK" else "warning")
+    if block_issues:
+        db.rollback()
+        return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
 
+    db.commit()
     return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
@@ -477,8 +493,7 @@ async def edit_work_item_form(
     rooms = sorted(project.rooms, key=lambda room: room.name.lower() if room.name else "")
     worktypes = db.query(WorkType).filter(WorkType.is_active).all()
 
-    context = template_context(request, lang)
-    context.update({"project": project, "item": item, "rooms": rooms, "worktypes": worktypes})
+    context = build_project_context(db, request, project, lang, item=item, rooms=rooms, worktypes=worktypes)
     return templates.TemplateResponse(request, "projects/work_item_form.html", context)
 
 
@@ -521,6 +536,16 @@ async def update_work_item(
     item.comment = form.get("comment")
 
     db.add(item)
+    db.flush()
+    quality_report = evaluate_project_quality(db, item.project_id, lang=lang)
+    item_issues = [issue for issue in quality_report.issues if issue.entity == "WORK_ITEM" and issue.entity_id == item.id]
+    block_issues = [issue for issue in item_issues if issue.severity == "BLOCK"]
+    for issue in item_issues:
+        add_flash_message(request, issue.message, "error" if issue.severity == "BLOCK" else "warning")
+    if block_issues:
+        db.rollback()
+        return RedirectResponse(url=f"/projects/{item.project_id}/items/{item.id}/edit", status_code=status.HTTP_303_SEE_OTHER)
+
     recalculate_project_work_items(db, item.project)
     calculate_project_totals(db, item.project)
     add_flash_message(request, translator("projects.work_items.updated"), "success")
@@ -688,14 +713,14 @@ async def edit_cost_item_form(
 
     cost_categories = db.query(CostCategory).all()
     materials = db.query(Material).filter(Material.is_active).all()
-    context = template_context(request, lang)
-    context.update(
-        {
-            "project": project,
-            "cost_item": cost_item,
-            "cost_categories": cost_categories,
-            "materials": materials,
-        }
+    context = build_project_context(
+        db,
+        request,
+        project,
+        lang,
+        cost_item=cost_item,
+        cost_categories=cost_categories,
+        materials=materials,
     )
     return templates.TemplateResponse(request, "projects/cost_item_form.html", context)
 
@@ -785,8 +810,7 @@ async def edit_assignment_form(
         raise HTTPException(status_code=404, detail="Assignment not found")
 
     workers = db.query(Worker).all()
-    context = template_context(request, lang)
-    context.update({"project": project, "assignment": assignment, "workers": workers})
+    context = build_project_context(db, request, project, lang, assignment=assignment, workers=workers)
     return templates.TemplateResponse(request, "projects/worker_assignment_form.html", context)
 
 
@@ -924,33 +948,33 @@ async def project_pricing_screen(
             }
         )
 
-    context = template_context(request, lang)
     effective_by_mode = {scenario.mode: _format_hourly(scenario.effective_hourly_sell_rate) for scenario in scenarios}
-    context.update(
-        {
-            "project": project,
-            "pricing": pricing,
-            "form_data": {
-                "mode": pricing.mode,
-                "hourly_rate_override": pricing.hourly_rate_override,
-                "fixed_total_price": pricing.fixed_total_price,
-                "rate_per_m2": pricing.rate_per_m2,
-                "rate_per_room": pricing.rate_per_room,
-                "rate_per_piece": pricing.rate_per_piece,
-                "target_margin_pct": pricing.target_margin_pct,
-                "include_materials": pricing.include_materials,
-                "include_travel_setup_buffers": pricing.include_travel_setup_buffers,
-                "currency": pricing.currency,
-            },
-            "converter_input": {},
-            "conversion_result": None,
-            "errors": {},
-            "is_readonly": is_readonly,
-            "baseline": baseline,
-            "scenarios": scenario_views,
-            "effective_by_mode": effective_by_mode,
-            "pricing_policy": policy,
-        }
+    context = build_project_context(
+        db,
+        request,
+        project,
+        lang,
+        pricing=pricing,
+        form_data={
+            "mode": pricing.mode,
+            "hourly_rate_override": pricing.hourly_rate_override,
+            "fixed_total_price": pricing.fixed_total_price,
+            "rate_per_m2": pricing.rate_per_m2,
+            "rate_per_room": pricing.rate_per_room,
+            "rate_per_piece": pricing.rate_per_piece,
+            "target_margin_pct": pricing.target_margin_pct,
+            "include_materials": pricing.include_materials,
+            "include_travel_setup_buffers": pricing.include_travel_setup_buffers,
+            "currency": pricing.currency,
+        },
+        converter_input={},
+        conversion_result=None,
+        errors={},
+        is_readonly=is_readonly,
+        baseline=baseline,
+        scenarios=scenario_views,
+        effective_by_mode=effective_by_mode,
+        pricing_policy=policy,
     )
     return templates.TemplateResponse(request, "projects/pricing.html", context)
 
@@ -1014,32 +1038,32 @@ async def update_project_pricing_screen(
         baseline, scenarios = compute_pricing_scenarios(db, project_id, request_id=getattr(request.state, "request_id", None))
         policy = get_or_create_pricing_policy(db)
         scenario_views = [_scenario_view_model(scenario, evaluate_floor(baseline, scenario, policy)) for scenario in scenarios]
-        context = template_context(request, lang)
-        context.update(
-            {
-                "project": project,
-                "pricing": pricing,
-                "form_data": {
-                    "mode": pricing.mode,
-                    "hourly_rate_override": pricing.hourly_rate_override,
-                    "fixed_total_price": pricing.fixed_total_price,
-                    "rate_per_m2": pricing.rate_per_m2,
-                    "rate_per_room": pricing.rate_per_room,
-                    "rate_per_piece": pricing.rate_per_piece,
-                    "target_margin_pct": pricing.target_margin_pct,
-                    "include_materials": pricing.include_materials,
-                    "include_travel_setup_buffers": pricing.include_travel_setup_buffers,
-                    "currency": pricing.currency,
-                },
-                "converter_input": converter_input,
-                "conversion_result": _conversion_view_model(conversion_result),
-                "errors": {},
-                "is_readonly": role not in {ADMIN_ROLE, OPERATOR_ROLE},
-                "baseline": baseline,
-                "scenarios": scenario_views,
-                "effective_by_mode": {scenario.mode: _format_hourly(scenario.effective_hourly_sell_rate) for scenario in scenarios},
-                "pricing_policy": policy,
-            }
+        context = build_project_context(
+            db,
+            request,
+            project,
+            lang,
+            pricing=pricing,
+            form_data={
+                "mode": pricing.mode,
+                "hourly_rate_override": pricing.hourly_rate_override,
+                "fixed_total_price": pricing.fixed_total_price,
+                "rate_per_m2": pricing.rate_per_m2,
+                "rate_per_room": pricing.rate_per_room,
+                "rate_per_piece": pricing.rate_per_piece,
+                "target_margin_pct": pricing.target_margin_pct,
+                "include_materials": pricing.include_materials,
+                "include_travel_setup_buffers": pricing.include_travel_setup_buffers,
+                "currency": pricing.currency,
+            },
+            converter_input=converter_input,
+            conversion_result=_conversion_view_model(conversion_result),
+            errors={},
+            is_readonly=role not in {ADMIN_ROLE, OPERATOR_ROLE},
+            baseline=baseline,
+            scenarios=scenario_views,
+            effective_by_mode={scenario.mode: _format_hourly(scenario.effective_hourly_sell_rate) for scenario in scenarios},
+            pricing_policy=policy,
         )
         return templates.TemplateResponse(request, "projects/pricing.html", context)
 
@@ -1113,21 +1137,21 @@ async def update_project_pricing_screen(
         baseline, scenarios = compute_pricing_scenarios(db, project_id, request_id=getattr(request.state, "request_id", None))
         policy = get_or_create_pricing_policy(db)
         scenario_views = [_scenario_view_model(scenario, evaluate_floor(baseline, scenario, policy)) for scenario in scenarios]
-        context = template_context(request, lang)
-        context.update(
-            {
-                "project": project,
-                "pricing": pricing,
-                "form_data": payload,
-                "converter_input": converter_input,
-                "conversion_result": None,
-                "errors": exc.errors,
-                "is_readonly": False,
-                "baseline": baseline,
-                "scenarios": scenario_views,
-                "effective_by_mode": {scenario.mode: _format_hourly(scenario.effective_hourly_sell_rate) for scenario in scenarios},
-                "pricing_policy": policy,
-            }
+        context = build_project_context(
+            db,
+            request,
+            project,
+            lang,
+            pricing=pricing,
+            form_data=payload,
+            converter_input=converter_input,
+            conversion_result=None,
+            errors=exc.errors,
+            is_readonly=False,
+            baseline=baseline,
+            scenarios=scenario_views,
+            effective_by_mode={scenario.mode: _format_hourly(scenario.effective_hourly_sell_rate) for scenario in scenarios},
+            pricing_policy=policy,
         )
         return templates.TemplateResponse(request, "projects/pricing.html", context, status_code=400)
 
@@ -1154,8 +1178,16 @@ async def project_buffers_page(
     execution_profile = get_or_create_project_execution_profile(db, project_id)
     speed_profiles = db.query(SpeedProfile).filter(SpeedProfile.is_active.is_(True)).order_by(SpeedProfile.code.asc()).all()
     baseline, _ = compute_pricing_scenarios(db, project_id, request_id=getattr(request.state, "request_id", None))
-    context = template_context(request, lang)
-    context.update({"project": project, "buffer_settings": buffer_settings, "baseline": baseline, "execution_profile": execution_profile, "speed_profiles": speed_profiles})
+    context = build_project_context(
+        db,
+        request,
+        project,
+        lang,
+        buffer_settings=buffer_settings,
+        baseline=baseline,
+        execution_profile=execution_profile,
+        speed_profiles=speed_profiles,
+    )
     return templates.TemplateResponse(request, "projects/buffers.html", context)
 
 

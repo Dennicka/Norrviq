@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>{{ t("settings.title") }}</h1>
+<p><a href="/settings/sanity-rules">Sanity rules</a></p>
 <form method="post" class="form-grid">
     {{ csrf_input(request) }}
     <div class="form-row">

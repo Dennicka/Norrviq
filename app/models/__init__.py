@@ -19,6 +19,7 @@ from .buffer_rule import BufferRule
 from .project_buffer_settings import ProjectBufferSettings
 from .speed_profile import SpeedProfile
 from .project_execution_profile import ProjectExecutionProfile
+from .sanity_rule import SanityRule
 
 __all__ = [
     "Client",
@@ -45,4 +46,5 @@ __all__ = [
     "ProjectBufferSettings",
     "SpeedProfile",
     "ProjectExecutionProfile",
+    "SanityRule",
 ]
