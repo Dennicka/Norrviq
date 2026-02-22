@@ -15,6 +15,9 @@ from app.models.terms_template import TermsTemplate
 from app.models.speed_profile import SpeedProfile
 from app.models.paint_system import PaintSystem, PaintSystemStep, PaintSystemSurface
 from app.models.sanity_rule import SanityRule
+from app.models.supplier import Supplier
+from app.models.supplier_material_price import SupplierMaterialPrice
+from app.models.material import Material
 from app.services.terms_templates import create_versioned_template
 
 router = APIRouter(prefix="/settings", tags=["settings"])
@@ -526,3 +529,40 @@ async def update_sanity_rule(rule_id: int, request: Request, db: Session = Depen
     db.add(rule)
     db.commit()
     return RedirectResponse(url="/settings/sanity-rules", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.get("/suppliers")
+async def suppliers_page(request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang)):
+    suppliers = db.query(Supplier).order_by(Supplier.name.asc()).all()
+    materials = db.query(Material).filter(Material.is_active.is_(True)).order_by(Material.name_sv.asc()).all()
+    context = template_context(request, lang)
+    context.update({"suppliers": suppliers, "materials": materials})
+    return templates.TemplateResponse(request, "settings/suppliers.html", context)
+
+
+@router.post("/suppliers")
+async def suppliers_create(request: Request, db: Session = Depends(get_db)):
+    form = await request.form()
+    db.add(Supplier(name=(form.get("name") or "").strip(), website=(form.get("website") or "").strip() or None, phone=(form.get("phone") or "").strip() or None, notes=(form.get("notes") or "").strip() or None, is_active=form.get("is_active") in ("on", "true", "1", True, 1)))
+    db.commit()
+    return RedirectResponse(url="/settings/suppliers", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/suppliers/{supplier_id}/prices")
+async def suppliers_add_price(supplier_id: int, request: Request, db: Session = Depends(get_db)):
+    supplier = db.get(Supplier, supplier_id)
+    if not supplier:
+        raise HTTPException(status_code=404, detail="Supplier not found")
+    form = await request.form()
+    material_id = int(form.get("material_id"))
+    pack_size = Decimal(str(form.get("pack_size") or "0"))
+    row = db.query(SupplierMaterialPrice).filter_by(supplier_id=supplier_id, material_id=material_id, pack_size=pack_size).first()
+    if row is None:
+        row = SupplierMaterialPrice(supplier_id=supplier_id, material_id=material_id, pack_size=pack_size)
+    material = db.get(Material, material_id)
+    row.pack_unit = material.unit if material else (form.get("pack_unit") or "unit")
+    row.pack_price_ex_vat = Decimal(str(form.get("pack_price_ex_vat") or "0"))
+    row.currency = (form.get("currency") or "SEK").strip() or "SEK"
+    db.add(row)
+    db.commit()
+    return RedirectResponse(url="/settings/suppliers", status_code=status.HTTP_303_SEE_OTHER)

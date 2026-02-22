@@ -26,3 +26,4 @@ class Material(Base):
 
     cost_items = relationship("ProjectCostItem", back_populates="material")
     recipes = relationship("MaterialRecipe", back_populates="material")
+    supplier_prices = relationship("SupplierMaterialPrice", back_populates="material", cascade="all, delete-orphan")

@@ -27,6 +27,8 @@ class ProjectCostItem(Base):
     moms_amount = Column(Numeric(12, 2), nullable=True)
     comment = Column(Text, nullable=True)
     is_material = Column(Boolean, nullable=False, default=True)
+    source_type = Column(String(50), nullable=True)
+    source_hash = Column(String(64), nullable=True, index=True)
 
     project = relationship("Project", back_populates="cost_items")
     category = relationship("CostCategory", back_populates="project_cost_items")

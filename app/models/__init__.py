@@ -30,6 +30,9 @@ from .project_material_settings import ProjectMaterialSettings
 from .db_backup import DBBackup
 from .commercial_snapshot import CommercialSnapshot
 from .paint_system import PaintSystem, PaintSystemStep, PaintSystemSurface, ProjectPaintSettings, RoomPaintSettings
+from .supplier import Supplier
+from .supplier_material_price import SupplierMaterialPrice
+from .project_procurement_settings import ProjectProcurementSettings, RoundingMode
 
 __all__ = [
     "Client",
@@ -71,4 +74,8 @@ __all__ = [
     "PaintSystemSurface",
     "ProjectPaintSettings",
     "RoomPaintSettings",
+    "Supplier",
+    "SupplierMaterialPrice",
+    "ProjectProcurementSettings",
+    "RoundingMode",
 ]

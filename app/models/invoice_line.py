@@ -24,6 +24,7 @@ class InvoiceLine(Base):
     line_total_inc_vat = Column(Numeric(12, 2), nullable=False, default=0)
     source_type = Column(String(20), nullable=True)
     source_id = Column(Integer, nullable=True)
+    source_hash = Column(String(64), nullable=True, index=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 
