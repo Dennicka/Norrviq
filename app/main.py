@@ -56,6 +56,7 @@ from .services.bootstrap import (
     ensure_default_cost_categories,
     ensure_default_legal_notes,
     ensure_default_worktypes,
+    ensure_default_speed_profiles,
 )
 
 settings = get_settings()
@@ -76,6 +77,7 @@ async def lifespan(_app: FastAPI):
         ensure_default_cost_categories(db)
         ensure_default_legal_notes(db)
         ensure_default_worktypes(db)
+        ensure_default_speed_profiles(db)
     finally:
         db.close()
     yield

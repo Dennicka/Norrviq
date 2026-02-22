@@ -216,6 +216,9 @@
                     <ul>
                         {% for line in row.details_lines %}<li>{{ line }}</li>{% endfor %}
                     </ul>
+                    <div><strong>Raw labor hours:</strong> {{ baseline.raw_labor_hours_total }}</div>
+                    <div><strong>Speed multiplier applied:</strong> {{ baseline.speed_multiplier }} ({{ baseline.speed_profile_code }})</div>
+                    <div><strong>Labor hours after speed:</strong> {{ baseline.labor_hours_after_speed }} (delta {{ baseline.speed_hours_delta }})</div>
                     <div><strong>Raw baseline:</strong> hours={{ baseline.raw_labor_hours_total }}, internal_total={{ baseline.raw_internal_cost }}</div>
                     <div><strong>Buffers breakdown:</strong> setup/cleanup/travel +{{ baseline.buffers_hours_total }} h / +{{ baseline.buffers_cost_total }} SEK</div>
                     <div><strong>Risk:</strong> {% set risk_hours = baseline.buffers | selectattr("kind", "equalto", "RISK") | map(attribute="hours_delta") | list %}{% set risk_sek = baseline.buffers | selectattr("kind", "equalto", "RISK") | map(attribute="sek_delta") | list %}+{{ (risk_hours | sum) if risk_hours else "0.00" }} h / +{{ (risk_sek | sum) if risk_sek else "0.00" }} SEK</div>

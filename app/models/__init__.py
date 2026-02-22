@@ -17,6 +17,8 @@ from .terms_template import TermsTemplate
 from .pricing_policy import PricingPolicy
 from .buffer_rule import BufferRule
 from .project_buffer_settings import ProjectBufferSettings
+from .speed_profile import SpeedProfile
+from .project_execution_profile import ProjectExecutionProfile
 
 __all__ = [
     "Client",
@@ -41,4 +43,6 @@ __all__ = [
     "PricingPolicy",
     "BufferRule",
     "ProjectBufferSettings",
+    "SpeedProfile",
+    "ProjectExecutionProfile",
 ]

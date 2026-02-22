@@ -12,6 +12,7 @@ from app.models.company_profile import get_or_create_company_profile
 from app.models.pricing_policy import get_or_create_pricing_policy
 from app.models.settings import get_or_create_settings
 from app.models.terms_template import TermsTemplate
+from app.models.speed_profile import SpeedProfile
 from app.services.terms_templates import create_versioned_template
 
 router = APIRouter(prefix="/settings", tags=["settings"])
@@ -357,3 +358,38 @@ async def upsert_buffer_rule(request: Request, db: Session = Depends(get_db)):
     )
     db.commit()
     return RedirectResponse(url="/settings/buffers", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.get("/speed-profiles")
+async def speed_profiles_page(request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang)):
+    profiles = db.query(SpeedProfile).order_by(SpeedProfile.code.asc()).all()
+    context = template_context(request, lang)
+    context.update({"profiles": profiles})
+    return templates.TemplateResponse(request, "settings/speed_profiles.html", context)
+
+
+@router.post("/speed-profiles")
+async def upsert_speed_profile(request: Request, db: Session = Depends(get_db)):
+    form = await request.form()
+    data = _load_form_data(form)
+    profile_id = data.get("profile_id")
+    profile = db.get(SpeedProfile, int(profile_id)) if profile_id else SpeedProfile()
+
+    profile.code = (data.get("code") or profile.code or "CUSTOM").strip().upper()
+    profile.name_ru = (data.get("name_ru") or profile.name_ru or profile.code or "").strip()
+    profile.name_sv = (data.get("name_sv") or profile.name_sv or profile.code or "").strip()
+    profile.multiplier = Decimal((data.get("multiplier") or profile.multiplier or "1.000")).quantize(Decimal("0.001"))
+    profile.is_active = data.get("is_active") in ("on", "true", "1", True, 1)
+
+    db.add(profile)
+    user_id = request.session.get("user_email") if hasattr(request, "session") else None
+    _audit(
+        db,
+        event_type="speed_profile_updated" if profile_id else "speed_profile_created",
+        user_id=user_id,
+        entity_type="speed_profile",
+        entity_id=profile.id or 0,
+        details={"code": profile.code, "multiplier": str(profile.multiplier), "is_active": profile.is_active},
+    )
+    db.commit()
+    return RedirectResponse(url="/settings/speed-profiles", status_code=status.HTTP_303_SEE_OTHER)
