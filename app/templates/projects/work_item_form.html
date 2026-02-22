@@ -2,7 +2,7 @@
 {% block content %}
 <h1>{{ t('projects.edit') }}: {{ t('label.work_type') }}</h1>
 <p><a href="/projects/{{ project.id }}">{{ t('projects.detail') }}</a></p>
-<form method="post" action="/projects/{{ project.id }}/items/{{ item.id }}/edit">
+<form method="post" action="/projects/{{ project.id }}/items/{{ item.id }}/edit" data-autosave="true" data-autosave-entity="work-item" data-autosave-id="{{ item.id }}" data-autosave-fieldhash="main" data-server-updated-at="" data-autosave-endpoint="/api/projects/{{ project.id }}/work-items/{{ item.id }}">
     {{ csrf_input(request) }}
     <div>
         <label>{{ t("label.room") }}</label>
@@ -36,9 +36,14 @@
         <label>{{ t("label.comment") }}</label>
         <textarea name="comment">{{ item.comment or '' }}</textarea>
     </div>
+    <div data-autosave-restore hidden>Restore draft? <button type="button" data-restore>Restore</button> <button type="button" data-discard>Discard</button></div>
+    <div data-autosave-status></div>
+    <div data-autosave-form-error class="autosave-field-error"></div>
     <div class="actions">
         <button type="submit">{{ t('label.save') }}</button>
         <a href="/projects/{{ project.id }}">{{ t('label.back') }}</a>
     </div>
 </form>
 {% endblock %}
+
+{% block extra_head %}<script defer src="{{ url_for('static', path='js/autosave.js') }}"></script>{% endblock %}
