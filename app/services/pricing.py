@@ -246,26 +246,35 @@ def compute_project_baseline(
     default_worker_rate = Decimal(str(settings.default_worker_hourly_rate or 0))
     employer_pct = Decimal(str(settings.employer_contributions_percent or 0)) / Decimal("100")
 
-    labor_hours_total = Decimal("0")
-    salary_fund = Decimal("0")
-    for assignment in project.worker_assignments:
-        hours = Decimal(str(assignment.actual_hours or assignment.planned_hours or 0))
-        worker_rate = assignment.worker.hourly_rate if assignment.worker else None
-        hourly_rate = Decimal(str(worker_rate if worker_rate is not None else default_worker_rate))
-        labor_hours_total += hours
-        salary_fund += hours * hourly_rate
-
-    if labor_hours_total <= 0:
-        for item in project.work_items:
-            labor_hours_total += Decimal(str(item.calculated_hours or 0))
-
-    raw_labor_hours_total = _quantize_hours(labor_hours_total)
+    estimated_hours_raw = sum((Decimal(str(item.calculated_hours or 0)) for item in project.work_items), Decimal("0"))
+    raw_labor_hours_total = _quantize_hours(estimated_hours_raw)
     speed_profile = resolve_project_speed_profile(db, project)
     speed_multiplier = Decimal(str(speed_profile.multiplier or 1))
     labor_hours_after_speed = _quantize_hours(raw_labor_hours_total * speed_multiplier)
     speed_hours_delta = _quantize_hours(labor_hours_after_speed - raw_labor_hours_total)
     labor_hours_total = labor_hours_after_speed
-    labor_cost_internal = _quantize_money(salary_fund + (salary_fund * employer_pct))
+
+    weighted_hours = Decimal("0")
+    weighted_rate_cost = Decimal("0")
+    for assignment in project.worker_assignments:
+        hours = Decimal(str(assignment.actual_hours if assignment.actual_hours not in (None, 0) else assignment.planned_hours or 0))
+        if hours <= 0:
+            continue
+        worker_rate = assignment.worker.hourly_rate if assignment.worker else None
+        hourly_rate = Decimal(str(worker_rate if worker_rate is not None else default_worker_rate))
+        if hourly_rate <= 0:
+            continue
+        weighted_hours += hours
+        weighted_rate_cost += hours * hourly_rate
+
+    internal_hourly_rate = default_worker_rate
+    if weighted_hours > 0:
+        internal_hourly_rate = weighted_rate_cost / weighted_hours
+
+    salary_fund = labor_hours_after_speed * internal_hourly_rate
+    labor_cost_internal = _quantize_money(salary_fund * (Decimal("1") + employer_pct))
+    if labor_hours_after_speed > 0 and internal_hourly_rate > 0 and labor_cost_internal <= 0:
+        raise ValueError("Invalid labor baseline: non-zero hours and rate must produce positive labor_cost_internal")
 
     materials_cost_internal = Decimal("0")
     travel_setup_cost_internal = Decimal("0")

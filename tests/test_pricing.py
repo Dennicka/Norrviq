@@ -7,7 +7,7 @@ from app.config import get_settings
 from app.db import SessionLocal
 from app.main import app
 from app.models.cost import CostCategory, ProjectCostItem
-from app.models.project import Project, ProjectWorkItem
+from app.models.project import Project, ProjectWorkItem, ProjectWorkerAssignment
 from app.models.project_pricing import ProjectPricing
 from app.models.pricing_policy import PricingPolicy
 from app.models.room import Room
@@ -104,8 +104,6 @@ def _make_golden_project() -> int:
         db.add(worker)
         db.flush()
 
-        from app.models.project import ProjectWorkerAssignment
-
         db.add(
             ProjectWorkerAssignment(
                 project_id=project.id,
@@ -143,6 +141,60 @@ def _make_golden_project() -> int:
         return project.id
     finally:
         db.close()
+
+
+
+
+def _create_project_with_estimated_hours(db, *, estimated_hours: Decimal, assignments: list[tuple[Decimal, Decimal | None]] | None = None) -> int:
+    project = Project(name=f"Baseline hours {uuid4().hex[:8]}")
+    db.add(project)
+    db.commit()
+    db.refresh(project)
+
+    wt = WorkType(
+        code=f"WT-{uuid4().hex[:6]}",
+        category="paint",
+        unit="m2",
+        name_ru="Тест",
+        name_sv="Test",
+        description_ru=None,
+        description_sv=None,
+        hours_per_unit=Decimal("1.00"),
+        base_difficulty_factor=Decimal("1.00"),
+        is_active=True,
+    )
+    db.add(wt)
+    db.flush()
+
+    room = Room(project_id=project.id, name="R", floor_area_m2=Decimal("10.00"))
+    db.add(room)
+    db.flush()
+
+    item = ProjectWorkItem(
+        project_id=project.id,
+        room_id=room.id,
+        work_type_id=wt.id,
+        quantity=estimated_hours,
+        difficulty_factor=Decimal("1.00"),
+    )
+    calculate_work_item(item, wt, Decimal("500.00"))
+    db.add(item)
+
+    for hours, rate in assignments or []:
+        worker = Worker(name=f"Worker {uuid4().hex[:5]}", hourly_rate=rate, is_active=True)
+        db.add(worker)
+        db.flush()
+        db.add(
+            ProjectWorkerAssignment(
+                project_id=project.id,
+                worker_id=worker.id,
+                planned_hours=hours,
+                actual_hours=hours,
+            )
+        )
+
+    db.commit()
+    return project.id
 
 
 def test_project_pricing_created_on_project_create():
@@ -599,3 +651,70 @@ def test_pricing_ui_shows_below_floor_badge_and_recommendations():
     assert "BELOW FLOOR" in page.text
     assert "Recommended minimum" in page.text
     assert "Apply recommended values" in page.text
+
+
+def test_internal_labor_cost_not_zero_when_work_hours_present_and_no_workers_assigned():
+    db = SessionLocal()
+    try:
+        project_id = _create_project_with_estimated_hours(db, estimated_hours=Decimal("8.00"))
+        baseline = compute_project_baseline(db, project_id, include_materials=True, include_travel_setup_buffers=True)
+
+        assert baseline.labor_hours_after_speed > 0
+        assert baseline.labor_cost_internal > 0
+    finally:
+        db.close()
+
+
+def test_internal_rate_weighted_average_when_workers_assigned():
+    db = SessionLocal()
+    try:
+        project_id = _create_project_with_estimated_hours(
+            db,
+            estimated_hours=Decimal("8.00"),
+            assignments=[(Decimal("2.00"), Decimal("100.00")), (Decimal("6.00"), Decimal("250.00"))],
+        )
+        baseline = compute_project_baseline(db, project_id, include_materials=True, include_travel_setup_buffers=True)
+
+        expected_rate = ((Decimal("2.00") * Decimal("100.00")) + (Decimal("6.00") * Decimal("250.00"))) / Decimal("8.00")
+        expected_labor = (Decimal("8.00") * expected_rate * Decimal("1.3142")).quantize(Decimal("0.01"))
+        assert baseline.labor_cost_internal == expected_labor
+    finally:
+        db.close()
+
+
+def test_estimated_hours_from_work_items_not_worker_assignments():
+    db = SessionLocal()
+    try:
+        project_id = _create_project_with_estimated_hours(
+            db,
+            estimated_hours=Decimal("5.00"),
+            assignments=[(Decimal("20.00"), Decimal("200.00"))],
+        )
+        baseline = compute_project_baseline(db, project_id, include_materials=True, include_travel_setup_buffers=True)
+
+        assert baseline.raw_labor_hours_total == Decimal("5.00")
+        assert baseline.labor_hours_after_speed == Decimal("5.00")
+    finally:
+        db.close()
+
+
+def test_floor_blocks_when_internal_cost_nonzero():
+    db = SessionLocal()
+    try:
+        project_id = _create_project_with_estimated_hours(db, estimated_hours=Decimal("6.00"))
+        pricing = get_or_create_project_pricing(db, project_id)
+        pricing.mode = "FIXED_TOTAL"
+        pricing.fixed_total_price = Decimal("10.00")
+        db.add(pricing)
+        db.commit()
+
+        baseline, scenarios = compute_pricing_scenarios(db, project_id)
+        scenario = next(sc for sc in scenarios if sc.mode == "FIXED_TOTAL")
+        policy = PricingPolicy(min_margin_pct=Decimal("10.00"), min_profit_sek=Decimal("500.00"), min_effective_hourly_ex_vat=Decimal("100.00"))
+
+        floor = evaluate_floor(baseline, scenario, policy)
+
+        assert baseline.internal_total_cost > 0
+        assert floor.is_below_floor is True
+    finally:
+        db.close()
