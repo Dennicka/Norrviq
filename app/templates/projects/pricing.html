@@ -3,6 +3,10 @@
 <h1>Pricing — {{ project.name }}</h1>
 <p><a href="/projects/{{ project.id }}">← {{ t('projects.detail') }}</a></p>
 
+<div data-autosave-restore hidden>Restore draft? <button type="button" data-restore>Restore</button> <button type="button" data-discard>Discard</button></div>
+<div data-autosave-status></div>
+<div data-autosave-form-error class="autosave-field-error"></div>
+
 {% if errors %}
 <div class="flash flash-error">
     <strong>Проверьте форму:</strong>
@@ -14,7 +18,7 @@
 </div>
 {% endif %}
 
-<form method="post" action="/projects/{{ project.id }}/pricing" class="js-pricing-form">
+<form method="post" action="/projects/{{ project.id }}/pricing" class="js-pricing-form" data-autosave="true" data-autosave-entity="project-pricing" data-autosave-id="{{ project.id }}" data-autosave-fieldhash="pricing" data-server-updated-at="{{ pricing.updated_at.isoformat() if pricing.updated_at else '' }}" data-autosave-endpoint="/api/projects/{{ project.id }}/pricing">
     {{ csrf_input(request) }}
 
     <section>
@@ -287,4 +291,5 @@
     updateModePanels();
 })();
 </script>
+<script defer src="{{ url_for('static', path='js/autosave.js') }}"></script>
 {% endblock %}

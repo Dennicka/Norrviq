@@ -2,7 +2,7 @@
 {% block content %}
 <h1>Project buffers — {{ project.name }}</h1>
 <p><a href="/projects/{{ project.id }}">← Back</a></p>
-<form method="post" action="/projects/{{ project.id }}/buffers">
+<form method="post" action="/projects/{{ project.id }}/buffers" data-autosave="true" data-autosave-entity="project-settings" data-autosave-id="{{ project.id }}" data-autosave-fieldhash="buffers" data-server-updated-at="{{ buffer_settings.updated_at.isoformat() if buffer_settings.updated_at else '' }}" data-autosave-endpoint="/api/projects/{{ project.id }}/settings">
   {{ csrf_input(request) }}
   <label><input type="checkbox" name="include_setup_cleanup_travel" {% if buffer_settings.include_setup_cleanup_travel %}checked{% endif %}> Include setup/cleanup/travel</label><br>
   <label><input type="checkbox" name="include_risk" {% if buffer_settings.include_risk %}checked{% endif %}> Include risk</label><br>
@@ -14,7 +14,7 @@
       {% endfor %}
     </select>
   </label><br>
-  <button type="submit">Save</button>
+  <div data-autosave-restore hidden>Restore draft? <button type="button" data-restore>Restore</button> <button type="button" data-discard>Discard</button></div><div data-autosave-status></div><div data-autosave-form-error class="autosave-field-error"></div><button type="submit">Save</button>
 </form>
 
 <h3>Preview</h3>
@@ -30,3 +30,5 @@
 </ul>
 {% endif %}
 {% endblock %}
+
+{% block extra_head %}<script defer src="{{ url_for('static', path='js/autosave.js') }}"></script>{% endblock %}

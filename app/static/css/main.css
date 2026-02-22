@@ -95,3 +95,10 @@ p {
     border-color: #fca5a5;
     color: #991b1b;
 }
+
+.autosave-error { border-color: #b00020; }
+.autosave-field-error { color: #b00020; font-size: 12px; margin-top: 2px; }
+[data-autosave-status][data-status-kind="saving"] { color: #555; }
+[data-autosave-status][data-status-kind="saved"] { color: #0f6; }
+[data-autosave-status][data-status-kind="error"],
+[data-autosave-status][data-status-kind="offline"] { color: #b00020; }

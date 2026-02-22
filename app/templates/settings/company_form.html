@@ -12,7 +12,7 @@
 </div>
 {% endif %}
 
-<form method="post" action="/settings/company" class="form-grid">
+<form method="post" action="/settings/company" class="form-grid" data-autosave="true" data-autosave-entity="company-profile" data-autosave-id="{{ company.id }}" data-autosave-fieldhash="company" data-server-updated-at="{{ company.updated_at.isoformat() if company.updated_at else '' }}">
     {{ csrf_input(request) }}
     {% set src = form_data if form_data else company %}
     <label>{{ t("company.legal_name") }}</label>
@@ -91,6 +91,8 @@
         {% endfor %}
     </select>
 
-    <button type="submit">{{ t("label.save") }}</button>
+    <div data-autosave-restore hidden>Restore draft? <button type="button" data-restore>Restore</button> <button type="button" data-discard>Discard</button></div><div data-autosave-status></div><div data-autosave-form-error class="autosave-field-error"></div><button type="submit">{{ t("label.save") }}</button>
 </form>
 {% endblock %}
+
+{% block extra_head %}<script defer src="{{ url_for('static', path='js/autosave.js') }}"></script>{% endblock %}

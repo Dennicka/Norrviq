@@ -2,7 +2,7 @@
 {% block content %}
 <h1>{{ room and t('projects.edit') or t('label.create') }}: {{ t('rooms.section_title') }}</h1>
 <p><a href="/projects/{{ project.id }}/rooms/">{{ t('rooms.section_title') }}</a></p>
-<form method="post">
+<form method="post" data-autosave="true" data-autosave-entity="room" data-autosave-id="{{ room.id if room else 'new' }}" data-autosave-fieldhash="main" data-server-updated-at="{{ room.updated_at.isoformat() if room and room.updated_at else '' }}" data-autosave-endpoint="{{ room and ('/api/projects/' ~ project.id ~ '/rooms/' ~ room.id) or '' }}">
     {{ csrf_input(request) }}
     <div>
         <label>{{ t("label.name") }}</label>
@@ -41,6 +41,10 @@
         <p>{{ t("rooms.field.ceiling_area") }}: {{ room.ceiling_area_m2 if room else '' }}</p>
         <p>{{ t("rooms.field.baseboard_length") }}: {{ room.baseboard_length_m if room else '' }}</p>
     </div>
+    <div data-autosave-restore hidden>Restore draft? <button type="button" data-restore>Restore</button> <button type="button" data-discard>Discard</button></div>
+    <div data-autosave-status></div>
     <button type="submit">{{ t("label.save") }}</button>
 </form>
 {% endblock %}
+
+{% block extra_head %}<script defer src="{{ url_for('static', path='js/autosave.js') }}"></script>{% endblock %}
