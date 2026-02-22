@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 from starlette.status import HTTP_302_FOUND
 
 from app.dependencies import get_current_lang, get_db, template_context, templates
-from app.security import get_current_user_email, log_auth_event
+from app.audit import log_event
+from app.security import get_current_user_email
 from app.services.auth import authenticate_user
 
 router = APIRouter(tags=["auth"])
@@ -39,10 +40,12 @@ async def login(request: Request, db: Session = Depends(get_db), lang: str = Dep
         request.session["sid"] = str(uuid4())
         request.session["user_email"] = user.email
         request.session["user_role"] = user.role
-        log_auth_event("login_success", user_email=user.email, role=user.role)
+        log_event(db, request, "login_success", entity_type="SYSTEM", severity="SECURITY", metadata={"user_email": user.email, "role": user.role})
+        db.commit()
         return RedirectResponse(url=next_path or "/", status_code=HTTP_302_FOUND)
 
-    log_auth_event("login_failed", user_email=email.strip().lower())
+    log_event(db, request, "login_failed", entity_type="SYSTEM", severity="SECURITY", metadata={"user_email": email.strip().lower()})
+    db.commit()
     context = template_context(request, lang)
     context["next_path"] = next_path
     context["invalid_credentials"] = True
@@ -50,9 +53,10 @@ async def login(request: Request, db: Session = Depends(get_db), lang: str = Dep
 
 
 @router.get("/logout")
-async def logout(request: Request):
+async def logout(request: Request, db: Session = Depends(get_db)):
     user_email = request.session.get("user_email")
     request.session.clear()
     if user_email:
-        log_auth_event("logout", user_email=user_email)
+        log_event(db, request, "logout", entity_type="SYSTEM", severity="SECURITY", metadata={"user_email": user_email})
+        db.commit()
     return RedirectResponse(url="/login", status_code=HTTP_302_FOUND)

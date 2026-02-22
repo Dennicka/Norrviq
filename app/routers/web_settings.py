@@ -1,4 +1,3 @@
-import json
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Request, status
@@ -6,7 +5,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_current_lang, get_db, template_context, templates
-from app.models.audit_event import AuditEvent
+from app.audit import log_event
 from app.models.buffer_rule import BufferRule
 from app.models.company_profile import get_or_create_company_profile
 from app.models.pricing_policy import get_or_create_pricing_policy
@@ -27,15 +26,15 @@ def _load_form_data(form) -> dict:
     return dict(form)
 
 
-def _audit(db: Session, *, event_type: str, user_id: str | None, entity_type: str, entity_id: int, details: dict) -> None:
-    db.add(
-        AuditEvent(
-            event_type=event_type,
-            user_id=user_id,
-            entity_type=entity_type,
-            entity_id=entity_id,
-            details=json.dumps(details, ensure_ascii=False),
-        )
+def _audit(request: Request, db: Session, *, event_type: str, entity_type: str, entity_id: int | str | None, details: dict, severity: str = "INFO") -> None:
+    log_event(
+        db,
+        request,
+        event_type,
+        entity_type=entity_type.upper(),
+        entity_id=entity_id,
+        severity=severity,
+        metadata=details,
     )
 
 
@@ -150,11 +149,10 @@ async def update_pricing_policy(request: Request, db: Session = Depends(get_db),
     policy.min_completeness_score_for_per_room = min_completeness_score_for_per_room
     policy.warn_only_below_score = data.get("warn_only_below_score") in ("on", "true", "1", True, 1)
 
-    user_id = request.session.get("user_email") if hasattr(request, "session") else None
     _audit(
+        request,
         db,
         event_type="policy_updated",
-        user_id=user_id,
         entity_type="pricing_policy",
         entity_id=policy.id,
         details={
@@ -263,11 +261,10 @@ async def update_company(request: Request, db: Session = Depends(get_db), lang: 
     profile.default_offer_terms_template_id = _to_int(data.get("default_offer_terms_template_id"))
     profile.default_invoice_terms_template_id = _to_int(data.get("default_invoice_terms_template_id"))
 
-    user_id = request.session.get("user_email") if hasattr(request, "session") else None
     _audit(
+        request,
         db,
         event_type="company_defaults_updated",
-        user_id=user_id,
         entity_type="company_profile",
         entity_id=profile.id,
         details={
@@ -318,11 +315,10 @@ async def create_terms_template(request: Request, db: Session = Depends(get_db))
         body_text=body_text or "",
         is_active=bool(form.get("is_active", "1")),
     )
-    user_id = request.session.get("user_email") if hasattr(request, "session") else None
     _audit(
+        request,
         db,
         event_type="terms_template_versioned" if source_template_id else "terms_template_created",
-        user_id=user_id,
         entity_type="terms_template",
         entity_id=template.id,
         details={"segment": template.segment, "doc_type": template.doc_type, "lang": template.lang, "version": template.version},
@@ -365,11 +361,10 @@ async def upsert_buffer_rule(request: Request, db: Session = Depends(get_db)):
         event_type = "buffer_rule_updated" if rule_id else "buffer_rule_created"
 
     db.add(rule)
-    user_id = request.session.get("user_email") if hasattr(request, "session") else None
     _audit(
+        request,
         db,
         event_type=event_type,
-        user_id=user_id,
         entity_type="buffer_rule",
         entity_id=rule.id or 0,
         details={
@@ -407,11 +402,10 @@ async def upsert_speed_profile(request: Request, db: Session = Depends(get_db)):
     profile.is_active = data.get("is_active") in ("on", "true", "1", True, 1)
 
     db.add(profile)
-    user_id = request.session.get("user_email") if hasattr(request, "session") else None
     _audit(
+        request,
         db,
         event_type="speed_profile_updated" if profile_id else "speed_profile_created",
-        user_id=user_id,
         entity_type="speed_profile",
         entity_id=profile.id or 0,
         details={"code": profile.code, "multiplier": str(profile.multiplier), "is_active": profile.is_active},
@@ -448,11 +442,10 @@ async def update_sanity_rule(rule_id: int, request: Request, db: Session = Depen
     if form.get("message_sv") is not None:
         rule.message_sv = (form.get("message_sv") or "").strip() or rule.message_sv
 
-    user_id = request.session.get("user_email") if hasattr(request, "session") else None
     _audit(
+        request,
         db,
         event_type="sanity_rule_updated",
-        user_id=user_id,
         entity_type="sanity_rule",
         entity_id=rule.id,
         details={"severity": rule.severity, "is_active": rule.is_active},

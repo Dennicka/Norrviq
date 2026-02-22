@@ -1,6 +1,5 @@
 import csv
 import io
-import json
 import logging
 from decimal import Decimal, InvalidOperation
 
@@ -16,7 +15,7 @@ from app.models.company_profile import get_or_create_company_profile
 from app.models.cost import CostCategory, ProjectCostItem
 from app.models.legal_note import LegalNote
 from app.models.material import Material
-from app.models.audit_event import AuditEvent
+from app.audit import log_event
 from app.models.project import Project, ProjectWorkItem, ProjectWorkerAssignment
 from app.models.speed_profile import SpeedProfile
 from app.models.pricing_policy import get_or_create_pricing_policy
@@ -202,15 +201,15 @@ def _read_csv_rows(file_bytes: bytes) -> tuple[list[str], list[dict[str, str]]]:
     return [h.strip() for h in reader.fieldnames], [{(k or "").strip(): (v or "").strip() for k, v in row.items()} for row in reader]
 
 
-def _audit_event(db: Session, *, event_type: str, user_id: str | None, project_id: int, details: dict) -> None:
-    db.add(
-        AuditEvent(
-            event_type=event_type,
-            user_id=user_id,
-            entity_type="project",
-            entity_id=project_id,
-            details=json.dumps(details, ensure_ascii=False),
-        )
+def _audit_event(request: Request, db: Session, *, event_type: str, project_id: int, details: dict, severity: str = "INFO") -> None:
+    log_event(
+        db,
+        request,
+        event_type,
+        entity_type="PROJECT",
+        entity_id=project_id,
+        severity=severity,
+        metadata=details,
     )
 
 
@@ -641,7 +640,7 @@ async def export_rooms_csv(project_id: int, request: Request, db: Session = Depe
     rooms = db.query(Room).filter(Room.project_id == project_id).order_by(Room.id.asc()).all()
     for room in rooms:
         writer.writerow([room.id, room.name or "", room.floor_area_m2 or "", room.wall_perimeter_m or "", room.wall_height_m or "", room.description or ""])
-    _audit_event(db, event_type="csv_export_downloaded", user_id=get_current_user_email(request), project_id=project_id, details={"type": "rooms", "rows": len(rooms)})
+    _audit_event(request, db, event_type="csv_export_downloaded", project_id=project_id, details={"type": "rooms", "rows": len(rooms)})
     db.commit()
     logger.info("csv_export_downloaded type=rooms project_id=%s rows=%s request_id=%s", project_id, len(rooms), getattr(request.state, "request_id", None))
     return Response(content=output.getvalue(), media_type="text/csv; charset=utf-8", headers={"Content-Disposition": 'attachment; filename="rooms_export.csv"'})
@@ -664,7 +663,7 @@ async def export_work_items_csv(project_id: int, request: Request, db: Session =
     )
     for item in items:
         writer.writerow([item.id, item.room_id or "", item.room.name if item.room else "", item.work_type.code if item.work_type else "", item.work_type.name_ru if item.work_type else "", item.quantity or "", item.work_type.unit if item.work_type else "", item.comment or ""])
-    _audit_event(db, event_type="csv_export_downloaded", user_id=get_current_user_email(request), project_id=project_id, details={"type": "workitems", "rows": len(items)})
+    _audit_event(request, db, event_type="csv_export_downloaded", project_id=project_id, details={"type": "workitems", "rows": len(items)})
     db.commit()
     logger.info("csv_export_downloaded type=workitems project_id=%s rows=%s request_id=%s", project_id, len(items), getattr(request.state, "request_id", None))
     return Response(content=output.getvalue(), media_type="text/csv; charset=utf-8", headers={"Content-Disposition": 'attachment; filename="work_items_export.csv"'})
@@ -693,7 +692,7 @@ async def preview_rooms_import(project_id: int, request: Request, file: UploadFi
     token = f"rooms-{project_id}-{len(rows)}"
     previews = _get_import_previews(request)
     previews[token] = preview
-    _audit_event(db, event_type="csv_import_previewed", user_id=get_current_user_email(request), project_id=project_id, details={"type": "rooms", "created": preview["created"], "updated": preview["updated"], "blocks": preview["block_count"]})
+    _audit_event(request, db, event_type="csv_import_previewed", project_id=project_id, details={"type": "rooms", "created": preview["created"], "updated": preview["updated"], "blocks": preview["block_count"]})
     db.commit()
     return JSONResponse({"preview_token": token, **preview})
 
@@ -712,7 +711,7 @@ async def preview_work_items_import(project_id: int, request: Request, file: Upl
     token = f"workitems-{project_id}-{len(rows)}"
     previews = _get_import_previews(request)
     previews[token] = preview
-    _audit_event(db, event_type="csv_import_previewed", user_id=get_current_user_email(request), project_id=project_id, details={"type": "workitems", "created": preview["created"], "updated": preview["updated"], "blocks": preview["block_count"]})
+    _audit_event(request, db, event_type="csv_import_previewed", project_id=project_id, details={"type": "workitems", "created": preview["created"], "updated": preview["updated"], "blocks": preview["block_count"]})
     db.commit()
     return JSONResponse({"preview_token": token, **preview})
 
@@ -758,7 +757,7 @@ async def apply_import(project_id: int, request: Request, preview_token: str = F
         if project:
             recalculate_project_work_items(db, project)
             calculate_project_totals(db, project)
-        _audit_event(db, event_type="csv_import_applied", user_id=get_current_user_email(request), project_id=project_id, details={"type": preview["type"], "created": created, "updated": updated})
+        _audit_event(request, db, event_type="csv_import_applied", project_id=project_id, details={"type": preview["type"], "created": created, "updated": updated})
         db.commit()
     except Exception:
         db.rollback()
@@ -1235,15 +1234,7 @@ async def project_pricing_screen(
     scenario_views = [_scenario_view_model(scenario, evaluate_floor(baseline, scenario, policy)) for scenario in scenarios]
     segment = (project.client.client_segment if project.client and project.client.client_segment else "ANY")
     completeness_by_mode = {scenario.mode: compute_completeness(db, project_id, mode=scenario.mode, segment=segment, lang=lang) for scenario in scenarios}
-    db.add(
-        AuditEvent(
-            event_type="pricing_scenarios_viewed",
-            user_id=get_current_user_email(request),
-            entity_type="project",
-            entity_id=project_id,
-            details=json.dumps({"project_id": project_id}, ensure_ascii=False),
-        )
-    )
+    log_event(db, request, "pricing_scenarios_viewed", entity_type="PROJECT", entity_id=project_id, metadata={"project_id": project_id})
     db.commit()
     is_readonly = get_current_user_role(request) not in {ADMIN_ROLE, OPERATOR_ROLE}
     wants_json = "application/json" in request.headers.get("accept", "")
@@ -1361,22 +1352,18 @@ async def update_project_pricing_screen(
                     setattr(desired, field_name, value)
                     break
         conversion_result = compute_conversions(db, project_id, desired)
-        db.add(
-            AuditEvent(
-                event_type="pricing_conversion_calculated",
-                user_id=get_current_user_email(request),
-                entity_type="project",
-                entity_id=project_id,
-                details=json.dumps(
-                    {
-                        "project_id": project_id,
-                        "desired_effective_hourly_ex_vat": converter_input["desired_effective_hourly_ex_vat"] or None,
-                        "desired_margin_pct": converter_input["desired_margin_pct"] or None,
-                        "warnings": conversion_result.warnings,
-                    },
-                    ensure_ascii=False,
-                ),
-            )
+        log_event(
+            db,
+            request,
+            "pricing_conversion_calculated",
+            entity_type="PROJECT",
+            entity_id=project_id,
+            metadata={
+                "project_id": project_id,
+                "desired_effective_hourly_ex_vat": converter_input["desired_effective_hourly_ex_vat"] or None,
+                "desired_margin_pct": converter_input["desired_margin_pct"] or None,
+                "warnings": conversion_result.warnings,
+            },
         )
         db.commit()
 
@@ -1454,15 +1441,7 @@ async def update_project_pricing_screen(
             raise HTTPException(status_code=400, detail="Invalid conversion apply payload")
         setattr(pricing, field_name, apply_value)
         db.add(pricing)
-        db.add(
-            AuditEvent(
-                event_type="pricing_conversion_applied",
-                user_id=get_current_user_email(request),
-                entity_type="project",
-                entity_id=project_id,
-                details=json.dumps({"project_id": project_id, "mode": apply_mode, "value": str(apply_value)}, ensure_ascii=False),
-            )
-        )
+        log_event(db, request, "pricing_conversion_applied", entity_type="PROJECT", entity_id=project_id, metadata={"project_id": project_id, "mode": apply_mode, "value": str(apply_value)})
         db.commit()
         add_flash_message(request, "Conversion applied", "success")
         return RedirectResponse(url=f"/projects/{project_id}/pricing", status_code=status.HTTP_303_SEE_OTHER)
@@ -1578,12 +1557,6 @@ async def update_project_buffers(
         after={"include_setup_cleanup_travel": settings_obj.include_setup_cleanup_travel, "include_risk": settings_obj.include_risk},
         request_id=getattr(request.state, "request_id", None),
     )
-    db.add(AuditEvent(
-        event_type="project_speed_profile_updated",
-        user_id=get_current_user_email(request),
-        entity_type="project",
-        entity_id=project.id,
-        details=json.dumps({"speed_profile_id": execution_profile.speed_profile_id}, ensure_ascii=False),
-    ))
+    log_event(db, request, "project_speed_profile_updated", entity_type="PROJECT", entity_id=project.id, metadata={"speed_profile_id": execution_profile.speed_profile_id})
     db.commit()
     return RedirectResponse(url=f"/projects/{project_id}/buffers", status_code=status.HTTP_303_SEE_OTHER)

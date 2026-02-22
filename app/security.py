@@ -13,7 +13,8 @@ logger = logging.getLogger("uvicorn.error")
 ADMIN_ROLE = "admin"
 OPERATOR_ROLE = "operator"
 VIEWER_ROLE = "viewer"
-VALID_ROLES = {ADMIN_ROLE, OPERATOR_ROLE, VIEWER_ROLE}
+AUDITOR_ROLE = "auditor"
+VALID_ROLES = {ADMIN_ROLE, OPERATOR_ROLE, VIEWER_ROLE, AUDITOR_ROLE}
 CSRF_SESSION_KEY = "csrf_token"
 
 

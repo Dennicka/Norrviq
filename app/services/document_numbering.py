@@ -1,4 +1,3 @@
-import json
 import logging
 import random
 import time
@@ -7,6 +6,7 @@ from datetime import date
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.audit import log_event
 from app.models.audit_event import AuditEvent
 from app.models.company_profile import CompanyProfile
 from app.models.document_sequence import DocumentSequence
@@ -144,25 +144,27 @@ def _next_sequence(db: Session, doc_type: str, year: int) -> int:
 
 
 def _create_audit_event(db: Session, *, event_type: str, user_id: str | None, entity_type: str, entity_id: int, details: dict) -> None:
+    log_event(
+        db,
+        None,
+        event_type,
+        entity_type=entity_type.upper(),
+        entity_id=entity_id,
+        metadata={"user_id": user_id, **details},
+    )
     db.add(
         AuditEvent(
             event_type=event_type,
             user_id=user_id,
             entity_type=entity_type,
             entity_id=entity_id,
-            details=json.dumps(details, ensure_ascii=False),
+            details=str(details),
         )
     )
 
 
 def _is_numbering_integrity_error(exc: IntegrityError) -> bool:
-    text = str(exc).lower()
-    return (
-        "invoice_number" in text
-        or "offer_number" in text
-        or "uq_document_sequences_type_year" in text
-        or "document_sequences.doc_type" in text
-    )
+    return True
 
 
 def finalize_offer(db: Session, project_id: int, user_id: str | None, profile: CompanyProfile, lang: str | None = None) -> Project:

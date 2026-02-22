@@ -33,6 +33,7 @@ from .routers import (
     api_projects_autosave,
     api_buffer_rules,
     web_analytics,
+    web_audit,
     web_auth,
     web_buffer_rules,
     web_clients,
@@ -164,6 +165,7 @@ async def basic_metrics():
 csrf_dependency = Depends(enforce_csrf)
 
 app.include_router(web_root.router, dependencies=[csrf_dependency])
+app.include_router(web_audit.router, dependencies=[csrf_dependency, Depends(require_role("admin", "auditor"))])
 app.include_router(api_buffer_rules.router, dependencies=[csrf_dependency, Depends(require_role("admin"))])
 app.include_router(api_projects_autosave.router, dependencies=[csrf_dependency])
 app.include_router(web_auth.router, dependencies=[csrf_dependency])

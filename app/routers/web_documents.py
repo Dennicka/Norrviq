@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session, selectinload
 
 from app.dependencies import add_flash_message, get_current_lang, get_db
-from app.models.audit_event import AuditEvent
+from app.audit import log_event
 from app.models.company_profile import get_or_create_company_profile
 from app.models.invoice import Invoice
 from app.models.pricing_policy import get_or_create_pricing_policy
@@ -106,15 +106,13 @@ def _filename(*, kind: str, number: str | None, fallback: str) -> str:
 
 def _audit_pdf_download(db: Session, *, request: Request, event_type: str, entity_type: str, entity_id: int, status_value: str) -> None:
     request_id = getattr(request.state, "request_id", None)
-    user_id = request.session.get("user_email") if hasattr(request, "session") else None
-    db.add(
-        AuditEvent(
-            event_type=event_type,
-            user_id=user_id,
-            entity_type=entity_type,
-            entity_id=entity_id,
-            details=f"status={status_value};request_id={request_id}",
-        )
+    log_event(
+        db,
+        request,
+        event_type,
+        entity_type=entity_type.upper(),
+        entity_id=entity_id,
+        metadata={"status": status_value, "request_id": request_id},
     )
     db.commit()
     logger.info(
@@ -275,7 +273,7 @@ async def finalize_offer_action(
     quality_report = evaluate_project_quality(db, project_id, lang=_lang)
     if quality_report.blocks_count > 0:
         issues = [{"field": i.field, "message": i.message, "entity": i.entity, "entity_id": i.entity_id} for i in quality_report.issues if i.severity == "BLOCK"]
-        db.add(AuditEvent(event_type="issue_blocked_document_issue", user_id=user_id, entity_type="project", entity_id=project_id, details=str(issues)))
+        log_event(db, request, "issue_blocked_document_issue", entity_type="PROJECT", entity_id=project_id, severity="WARN", metadata={"issues": issues, "user_id": user_id})
         db.commit()
         return _quality_gate_response(request, project_id=project_id, issues=issues)
     if quality_report.warnings_count > 0:
@@ -322,7 +320,7 @@ async def finalize_invoice_action(
     quality_report = evaluate_project_quality(db, invoice.project_id, lang=_lang)
     if quality_report.blocks_count > 0:
         issues = [{"field": i.field, "message": i.message, "entity": i.entity, "entity_id": i.entity_id} for i in quality_report.issues if i.severity == "BLOCK"]
-        db.add(AuditEvent(event_type="issue_blocked_document_issue", user_id=user_id, entity_type="invoice", entity_id=invoice_id, details=str(issues)))
+        log_event(db, request, "issue_blocked_document_issue", entity_type="INVOICE", entity_id=invoice_id, severity="WARN", metadata={"issues": issues, "user_id": user_id})
         db.commit()
         return _quality_gate_response(request, project_id=invoice.project_id, issues=issues)
     if quality_report.warnings_count > 0:
