@@ -33,6 +33,7 @@ from .paint_system import PaintSystem, PaintSystemStep, PaintSystemSurface, Proj
 from .supplier import Supplier
 from .supplier_material_price import SupplierMaterialPrice
 from .project_procurement_settings import ProjectProcurementSettings, RoundingMode
+from .material_actuals import MaterialPurchase, MaterialPurchaseLine, ProjectMaterialActuals, ProjectMaterialStock
 
 __all__ = [
     "Client",
@@ -78,4 +79,8 @@ __all__ = [
     "SupplierMaterialPrice",
     "ProjectProcurementSettings",
     "RoundingMode",
+    "MaterialPurchase",
+    "MaterialPurchaseLine",
+    "ProjectMaterialActuals",
+    "ProjectMaterialStock",
 ]

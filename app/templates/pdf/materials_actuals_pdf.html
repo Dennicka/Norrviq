@@ -1,0 +1,9 @@
+<!doctype html><html><body>
+<h1>Materials Actuals Report</h1>
+<p>Project: {{ project.name }}</p>
+<p>Planned: {{ plan_actual.planned_cost_ex_vat }} | Actual: {{ plan_actual.actual_cost_ex_vat }} | Delta: {{ plan_actual.delta_cost_ex_vat }}</p>
+<table>
+<thead><tr><th>Material</th><th>Planned</th><th>Actual</th><th>Delta</th><th>Status</th></tr></thead>
+<tbody>{% for row in plan_actual.rows %}<tr><td>{{ row.material_name }}</td><td>{{ row.planned_qty_unit }}</td><td>{{ row.actual_qty_unit }}</td><td>{{ row.delta_qty }}</td><td>{{ row.status }}</td></tr>{% endfor %}</tbody>
+</table>
+</body></html>

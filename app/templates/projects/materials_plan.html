@@ -8,6 +8,7 @@
   <label>Default markup % <input type="number" name="default_markup_pct" step="0.01" value="{{ material_settings.default_markup_pct }}" {% if is_readonly %}disabled{% endif %}></label>
   <label><input type="checkbox" name="use_material_sell_price" {% if material_settings.use_material_sell_price %}checked{% endif %} {% if is_readonly %}disabled{% endif %}> Use material sell price</label>
   <label><input type="checkbox" name="include_materials_in_pricing" {% if material_settings.include_materials_in_pricing %}checked{% endif %} {% if is_readonly %}disabled{% endif %}> Include BOM in pricing baseline</label>
+  <label><input type="checkbox" name="use_actual_material_costs" {% if material_settings.use_actual_material_costs %}checked{% endif %} {% if is_readonly %}disabled{% endif %}> Use actual material costs in baseline</label>
   {% if not is_readonly %}<button type="submit">Save settings</button>{% endif %}
 </form>
 
