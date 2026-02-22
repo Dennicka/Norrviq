@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>Pricing — {{ project.name }}</h1>
-<p><a href="/projects/{{ project.id }}">← {{ t('projects.detail') }}</a></p>
+<p><a href="/projects/{{ project.id }}">← {{ t('projects.detail') }}</a> · <a href="/projects/{{ project.id }}/takeoff">Takeoff m² basis</a></p>
 
 <div data-autosave-restore hidden>Restore draft? <button type="button" data-restore>Restore</button> <button type="button" data-discard>Discard</button></div>
 <div data-autosave-status></div>
@@ -64,6 +64,7 @@
         <h3>Rate per m² {{ help_icon('pricing.rate_per_m2') }}</h3>
         <input type="number" step="0.01" min="0" name="rate_per_m2" value="{{ form_data.get('rate_per_m2') or '' }}" {% if is_readonly %}disabled{% endif %}>
         <div><small>Effective hourly: {{ effective_by_mode.get('PER_M2') or '—' }}</small></div>
+        <div><small>M² basis: <strong>{{ baseline.m2_basis }}</strong> (units={{ baseline.total_m2 }})</small></div>
     </section>
 
     <section data-mode-panel="PER_ROOM">

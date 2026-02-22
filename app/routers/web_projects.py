@@ -17,6 +17,7 @@ from app.models.legal_note import LegalNote
 from app.models.material import Material
 from app.audit import log_event
 from app.models.project import Project, ProjectWorkItem, ProjectWorkerAssignment
+from app.models.project_takeoff_settings import M2_BASIS_CHOICES
 from app.models.speed_profile import SpeedProfile
 from app.models.pricing_policy import get_or_create_pricing_policy
 from app.models.room import Room
@@ -35,6 +36,7 @@ from app.services.pricing import (
     WARNING_MISSING_BASELINE,
     WARNING_MISSING_ITEMS,
     WARNING_MISSING_UNITS_M2,
+    WARNING_MISSING_PERIMETER_HEIGHT,
     WARNING_MISSING_UNITS_ROOMS,
     WARNING_NEGATIVE_MARGIN,
     WARNING_INVALID_TARGET_MARGIN,
@@ -50,6 +52,7 @@ from app.services.pricing import (
     update_project_pricing,
     evaluate_floor,
 )
+from app.services.takeoff import compute_project_areas, get_or_create_project_takeoff_settings, validate_m2_basis
 from app.security import OPERATOR_ROLE, ADMIN_ROLE, get_current_user_email, get_current_user_role, require_auth, require_role
 from app.i18n import make_t
 
@@ -101,6 +104,8 @@ def _format_margin_pct(value: Decimal | None) -> str:
 def _warning_text(code: str) -> str:
     if code == WARNING_MISSING_UNITS_M2:
         return "Нет площади (0 м²), режим за м² недоступен"
+    if code == WARNING_MISSING_PERIMETER_HEIGHT:
+        return "Для выбранной базы m² не хватает perimeter/height в комнатах"
     if code == WARNING_MISSING_UNITS_ROOMS:
         return "Нет комнат (0), режим за комнату недоступен"
     if code == WARNING_MISSING_ITEMS:
@@ -114,6 +119,14 @@ def _warning_text(code: str) -> str:
     if code == WARNING_INVALID_TARGET_MARGIN:
         return "Невозможно: target margin должен быть меньше 100%"
     return code
+
+
+M2_BASIS_LABELS_RU = {
+    "FLOOR_AREA": "Площадь пола",
+    "WALL_AREA": "Площадь стен",
+    "CEILING_AREA": "Площадь потолка",
+    "PAINTABLE_TOTAL": "Покрашиваемая площадь (стены + потолок)",
+}
 
 
 def _scenario_view_model(scenario, floor_result=None):
@@ -1261,6 +1274,11 @@ async def project_pricing_screen(
                     "overhead_cost_internal": str(baseline.overhead_cost_internal),
                     "internal_total_cost": str(baseline.internal_total_cost),
                     "total_m2": str(baseline.total_m2),
+                    "m2_basis": baseline.m2_basis,
+                    "total_floor_m2": str(baseline.total_floor_m2),
+                    "total_wall_m2": str(baseline.total_wall_m2),
+                    "total_ceiling_m2": str(baseline.total_ceiling_m2),
+                    "total_paintable_m2": str(baseline.total_paintable_m2),
                     "rooms_count": baseline.rooms_count,
                     "items_count": baseline.items_count,
                 },
@@ -1313,6 +1331,53 @@ async def project_pricing_screen(
         selected_completeness=completeness_by_mode.get(pricing.mode),
     )
     return templates.TemplateResponse(request, "projects/pricing.html", context)
+
+
+@router.get("/{project_id}/takeoff")
+async def project_takeoff_screen(
+    project_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    lang: str = Depends(get_current_lang),
+):
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    takeoff = get_or_create_project_takeoff_settings(db, project_id)
+    areas = compute_project_areas(db, project_id)
+    context = build_project_context(
+        db,
+        request,
+        project,
+        lang,
+        takeoff=takeoff,
+        areas=areas,
+        m2_basis_choices=sorted(M2_BASIS_CHOICES),
+        m2_basis_labels_ru=M2_BASIS_LABELS_RU,
+        is_readonly=get_current_user_role(request) not in {ADMIN_ROLE, OPERATOR_ROLE},
+    )
+    return templates.TemplateResponse(request, "projects/takeoff.html", context)
+
+
+@router.post("/{project_id}/takeoff")
+async def project_takeoff_update(
+    project_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if get_current_user_role(request) not in {ADMIN_ROLE, OPERATOR_ROLE}:
+        raise HTTPException(status_code=403, detail="Insufficient role")
+
+    form = await request.form()
+    takeoff = get_or_create_project_takeoff_settings(db, project_id)
+    takeoff.m2_basis = validate_m2_basis(form.get("m2_basis"))
+    takeoff.include_openings_subtraction = form.get("include_openings_subtraction") in ("on", "true", "1", True, 1)
+    db.add(takeoff)
+    db.commit()
+    return RedirectResponse(url=f"/projects/{project_id}/takeoff", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/{project_id}/pricing")

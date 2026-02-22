@@ -8,6 +8,7 @@ from app.models.completeness_rule import CompletenessRule
 from app.models.pricing_policy import get_or_create_pricing_policy
 from app.models.project import Project
 from app.services.pricing import compute_project_baseline
+from app.services.takeoff import get_or_create_project_takeoff_settings
 
 
 @dataclass
@@ -50,6 +51,14 @@ def _check_value(project: Project, baseline, company_profile: CompanyProfile, ch
         if not project.rooms:
             return False
         return all(Decimal(str(room.wall_height_m or 0)) > Decimal("0") for room in project.rooms)
+    if check_key == "HAS_PERIMETER_AND_HEIGHT_FOR_WALL_AREA":
+        if not project.rooms:
+            return False
+        return all((room.wall_perimeter_m is not None and Decimal(str(room.wall_perimeter_m or 0)) > 0 and room.wall_height_m is not None and Decimal(str(room.wall_height_m or 0)) > 0) for room in project.rooms)
+    if check_key == "HAS_FLOOR_AREA_FOR_CEILING_OR_FLOOR":
+        if not project.rooms:
+            return False
+        return all(Decimal(str(room.floor_area_m2 or 0)) > Decimal("0") for room in project.rooms)
     if check_key == "HAS_BUFFERS_ENABLED":
         cfg = project.buffer_settings
         return bool(cfg and cfg.include_risk and cfg.include_setup_cleanup_travel)
@@ -84,8 +93,14 @@ def compute_completeness(db: Session, project_id: int, mode: str, segment: str, 
     passed_weight = 0
     missing: list[MissingCompletenessItem] = []
 
+    takeoff = get_or_create_project_takeoff_settings(db, project_id)
+
     for rule in rules:
         weight = max(0, int(rule.weight or 0))
+        if rule.check_key == "HAS_PERIMETER_AND_HEIGHT_FOR_WALL_AREA" and takeoff.m2_basis not in {"WALL_AREA", "PAINTABLE_TOTAL"}:
+            continue
+        if rule.check_key == "HAS_FLOOR_AREA_FOR_CEILING_OR_FLOOR" and takeoff.m2_basis not in {"FLOOR_AREA", "CEILING_AREA"}:
+            continue
         ok = _check_value(project, baseline, company_profile, rule.check_key)
         if ok:
             passed_weight += weight

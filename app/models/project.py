@@ -77,6 +77,13 @@ class Project(Base):
         cascade="all, delete-orphan",
     )
 
+    takeoff_settings = relationship(
+        "ProjectTakeoffSettings",
+        back_populates="project",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+
 
 class ProjectWorkItem(Base):
     __tablename__ = "project_work_items"
