@@ -101,10 +101,11 @@ def test_offer_issue_blocks_on_mismatch(monkeypatch):
     project_id = _seed_project()
     _login()
 
-    def _boom(*args, **kwargs):
-        raise ValueError("Offer totals mismatch pricing scenario")
+    class _Result:
+        ok = False
+        errors = [{"code": "TOTAL_PRICE_EX_VAT_MISMATCH", "message": "boom"}]
 
-    monkeypatch.setattr("app.services.document_numbering.assert_offer_matches_selected_scenario", _boom)
+    monkeypatch.setattr("app.services.document_numbering.validate_pricing_consistency", lambda *args, **kwargs: _Result())
 
     response = client.post(f"/offers/{project_id}/finalize", headers={"accept": "application/json"}, data={"terms_lang": "sv"})
     assert response.status_code == 409

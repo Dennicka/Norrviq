@@ -17,8 +17,10 @@ from app.models.rot_case import RotCase
 from app.models.pricing_policy import get_or_create_pricing_policy
 from app.models.project import Project
 from app.services.pricing import compute_pricing_scenarios, evaluate_floor
-from app.services.offer_commercial import assert_offer_matches_selected_scenario, compute_offer_commercial, serialize_offer_commercial
+from app.services.offer_commercial import compute_offer_commercial, serialize_offer_commercial
 from app.services.invoice_commercial import compute_invoice_commercial
+from app.services.commercial_snapshot import DOC_TYPE_INVOICE as SNAP_INVOICE, DOC_TYPE_OFFER as SNAP_OFFER, write_commercial_snapshot
+from app.services.pricing_consistency import validate_pricing_consistency
 from app.services.completeness import compute_completeness
 from app.services.terms_templates import DOC_TYPE_INVOICE, DOC_TYPE_OFFER, resolve_terms_template
 from app.services.invoice_lines import recalculate_invoice_totals
@@ -186,7 +188,26 @@ def finalize_offer(db: Session, project_id: int, user_id: str | None, profile: C
         _check_completeness_for_project(db, project_id=project.id, mode=selected_mode, user_id=user_id, doc_type="project", doc_id=project.id)
         _check_floor_policy_for_project(db, project_id=project.id, user_id=user_id, doc_type="project", doc_id=project.id)
         commercial = compute_offer_commercial(db, project.id, lang=lang or "sv")
-        assert_offer_matches_selected_scenario(db, project.id, offer=commercial)
+        consistency = validate_pricing_consistency(db, project.id, "OFFER", project.id)
+        if not consistency.ok:
+            _create_audit_event(
+                db,
+                event_type="pricing_consistency_failed",
+                user_id=user_id,
+                entity_type="project",
+                entity_id=project.id,
+                details={"doc_type": "OFFER", "project_id": project.id, "errors": consistency.errors},
+            )
+            raise ValueError("Offer totals mismatch pricing scenario")
+        snapshot_id = write_commercial_snapshot(db, SNAP_OFFER, project.id, commercial)
+        _create_audit_event(
+            db,
+            event_type="commercial_snapshot_written",
+            user_id=user_id,
+            entity_type="project",
+            entity_id=project.id,
+            details={"doc_type": "OFFER", "doc_id": project.id, "mode": commercial.mode, "snapshot_id": snapshot_id},
+        )
 
         year = date.today().year
         seq = _next_sequence(db, DOC_TYPE_OFFER_NUMBERING, year)
@@ -255,6 +276,17 @@ def finalize_invoice(db: Session, invoice_id: int, user_id: str | None, profile:
 
             recalculate_invoice_totals(db, invoice.id, user_id=user_id)
             commercial = compute_invoice_commercial(db, invoice.project_id, invoice.id)
+            consistency = validate_pricing_consistency(db, invoice.project_id, "INVOICE", invoice.id)
+            if not consistency.ok:
+                _create_audit_event(
+                    db,
+                    event_type="pricing_consistency_failed",
+                    user_id=user_id,
+                    entity_type="invoice",
+                    entity_id=invoice.id,
+                    details={"doc_type": "INVOICE", "project_id": invoice.project_id, "errors": consistency.errors},
+                )
+                raise ValueError("Invoice totals mismatch pricing scenario")
             if abs(Decimal(str(invoice.subtotal_ex_vat or 0)) - commercial.price_ex_vat) > Decimal("0.01"):
                 raise ValueError("Invoice totals mismatch pricing scenario")
             expected_vat = Decimal(str(invoice.subtotal_ex_vat or 0)) * Decimal(str(commercial.vat_rot_breakdown.get("vat_rate_pct") or 25)) / Decimal("100")
@@ -290,7 +322,6 @@ def finalize_invoice(db: Session, invoice_id: int, user_id: str | None, profile:
                     entity_id=invoice.id,
                     details={"template_id": template.id, "version": template.version},
                 )
-            invoice.status = STATUS_ISSUED
             invoice.commercial_mode_snapshot = commercial.mode
             invoice.units_snapshot = json.dumps(commercial.units, ensure_ascii=False, sort_keys=True, default=str)
             invoice.rates_snapshot = json.dumps(commercial.rate, ensure_ascii=False, sort_keys=True, default=str)
@@ -301,6 +332,16 @@ def finalize_invoice(db: Session, invoice_id: int, user_id: str | None, profile:
             invoice.rot_snapshot_pct = rot_case.rot_pct if rot_case else 0
             invoice.rot_snapshot_eligible_labor_ex_vat = invoice.labour_ex_vat
             invoice.rot_snapshot_amount = invoice.rot_amount
+            snapshot_id = write_commercial_snapshot(db, SNAP_INVOICE, invoice.id, commercial)
+            invoice.status = STATUS_ISSUED
+            _create_audit_event(
+                db,
+                event_type="commercial_snapshot_written",
+                user_id=user_id,
+                entity_type="invoice",
+                entity_id=invoice.id,
+                details={"doc_type": "INVOICE", "doc_id": invoice.id, "mode": commercial.mode, "snapshot_id": snapshot_id},
+            )
             db.add(invoice)
 
             _create_audit_event(

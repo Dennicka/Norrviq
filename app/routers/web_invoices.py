@@ -1,5 +1,4 @@
 import logging
-import json
 from datetime import date
 from decimal import Decimal
 import uuid
@@ -20,6 +19,7 @@ from app.models.settings import get_or_create_settings
 from app.security import ADMIN_ROLE, OPERATOR_ROLE, require_role
 from app.services.finance import compute_project_finance
 from app.services.invoice_commercial import compute_invoice_commercial
+from app.services.commercial_snapshot import DOC_TYPE_INVOICE as SNAP_INVOICE, read_commercial_snapshot
 from app.services.invoice_lines import (
     MERGE_APPEND,
     MERGE_REPLACE_ALL,
@@ -217,15 +217,15 @@ async def invoice_document(
         terms_title = terms_template.title
         terms_body = terms_template.body_text
     commercial = compute_invoice_commercial(db, invoice.project_id, invoice.id, lang=lang)
-    if invoice.status == "issued" and invoice.commercial_mode_snapshot:
-        commercial.mode = invoice.commercial_mode_snapshot
-        if invoice.units_snapshot:
-            commercial.units = json.loads(invoice.units_snapshot)
-        if invoice.rates_snapshot:
-            commercial.rate = json.loads(invoice.rates_snapshot)
-        commercial.price_ex_vat = Decimal(str(invoice.subtotal_ex_vat_snapshot or invoice.subtotal_ex_vat))
-        commercial.vat_amount = Decimal(str(invoice.vat_total_snapshot or invoice.vat_total))
-        commercial.price_inc_vat = Decimal(str(invoice.total_inc_vat_snapshot or invoice.total_inc_vat))
+    if invoice.status == "issued":
+        snap = read_commercial_snapshot(db, doc_type=SNAP_INVOICE, doc_id=invoice.id)
+        if snap:
+            commercial.mode = snap["mode"]
+            commercial.units = snap["units"]
+            commercial.rate = snap["rates"]
+            commercial.price_ex_vat = Decimal(str(snap["totals"].get("price_ex_vat") or invoice.subtotal_ex_vat))
+            commercial.vat_amount = Decimal(str(snap["totals"].get("vat_amount") or invoice.vat_total))
+            commercial.price_inc_vat = Decimal(str(snap["totals"].get("price_inc_vat") or invoice.total_inc_vat))
     context = template_context(request, lang)
     context.update({"project": invoice.project, "invoice": invoice, "company_profile": company_profile, "terms_title": terms_title, "terms_body": terms_body, "commercial": commercial})
     return templates.TemplateResponse(request, "invoices/document.html", context)

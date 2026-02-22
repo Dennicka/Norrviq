@@ -1,5 +1,4 @@
 import logging
-import json
 from pathlib import Path
 from datetime import date
 from decimal import Decimal
@@ -20,6 +19,7 @@ from app.security import require_role
 from app.services.estimates import calculate_project_totals, recalculate_project_work_items
 from app.services.offer_commercial import compute_offer_commercial, deserialize_offer_commercial
 from app.services.invoice_commercial import compute_invoice_commercial
+from app.services.commercial_snapshot import DOC_TYPE_INVOICE as SNAP_INVOICE, DOC_TYPE_OFFER as SNAP_OFFER, read_commercial_snapshot
 from app.services.document_numbering import (
     CompletenessViolationError,
     FloorPolicyViolationError,
@@ -152,7 +152,22 @@ async def offer_pdf(
     calculate_project_totals(db, project)
 
     if project.offer_status == "issued":
-        commercial = deserialize_offer_commercial(project.offer_commercial_snapshot)
+        snap = read_commercial_snapshot(db, doc_type=SNAP_OFFER, doc_id=project.id)
+        commercial = None
+        if snap:
+            commercial = {
+                "mode": snap["mode"],
+                "units": snap["units"],
+                "rate": snap["rates"],
+                "line_items": snap["line_items"],
+                "price_ex_vat": Decimal(str(snap["totals"].get("price_ex_vat") or 0)),
+                "vat_amount": Decimal(str(snap["totals"].get("vat_amount") or 0)),
+                "price_inc_vat": Decimal(str(snap["totals"].get("price_inc_vat") or 0)),
+                "warnings": [],
+                "math_breakdown": {},
+            }
+        if commercial is None:
+            commercial = deserialize_offer_commercial(project.offer_commercial_snapshot)
     else:
         commercial = None
     if commercial is None:
@@ -243,15 +258,15 @@ async def invoice_pdf(
         terms_body = template.body_text
 
     commercial = compute_invoice_commercial(db, invoice.project_id, invoice.id, lang=lang)
-    if invoice.status == "issued" and invoice.commercial_mode_snapshot:
-        commercial.mode = invoice.commercial_mode_snapshot
-        if invoice.units_snapshot:
-            commercial.units = json.loads(invoice.units_snapshot)
-        if invoice.rates_snapshot:
-            commercial.rate = json.loads(invoice.rates_snapshot)
-        commercial.price_ex_vat = Decimal(str(invoice.subtotal_ex_vat_snapshot or invoice.subtotal_ex_vat))
-        commercial.vat_amount = Decimal(str(invoice.vat_total_snapshot or invoice.vat_total))
-        commercial.price_inc_vat = Decimal(str(invoice.total_inc_vat_snapshot or invoice.total_inc_vat))
+    if invoice.status == "issued":
+        snap = read_commercial_snapshot(db, doc_type=SNAP_INVOICE, doc_id=invoice.id)
+        if snap:
+            commercial.mode = snap["mode"]
+            commercial.units = snap["units"]
+            commercial.rate = snap["rates"]
+            commercial.price_ex_vat = Decimal(str(snap["totals"].get("price_ex_vat") or invoice.subtotal_ex_vat))
+            commercial.vat_amount = Decimal(str(snap["totals"].get("vat_amount") or invoice.vat_total))
+            commercial.price_inc_vat = Decimal(str(snap["totals"].get("price_inc_vat") or invoice.total_inc_vat))
 
     context = template_context(request, lang)
     context.update(
@@ -285,6 +300,27 @@ async def invoice_pdf(
             REQUEST_ID_HEADER: getattr(request.state, "request_id", ""),
         },
     )
+
+
+
+
+@router.get("/commercial-snapshots/{doc_type}/{doc_id}")
+async def view_commercial_snapshot(
+    doc_type: str,
+    doc_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_role("admin", "operator")),
+):
+    snap = read_commercial_snapshot(db, doc_type=doc_type.upper(), doc_id=doc_id)
+    if not snap:
+        raise HTTPException(status_code=404, detail="Commercial snapshot not found")
+    return JSONResponse(content={
+        "doc_type": doc_type.upper(),
+        "doc_id": doc_id,
+        "snapshot": snap,
+        "request_id": getattr(request.state, "request_id", ""),
+    })
 
 
 @router.post("/offers/{project_id}/finalize")
