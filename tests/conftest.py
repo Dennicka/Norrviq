@@ -14,21 +14,34 @@ if str(PROJECT_ROOT) not in sys.path:
 
 TEST_DB_PATH = Path(tempfile.gettempdir()) / f"norrviq-test-{uuid.uuid4().hex}.sqlite3"
 os.environ["DATABASE_URL"] = f"sqlite:///{TEST_DB_PATH}"
-os.environ.setdefault("APP_SECRET_KEY", "test-secret-key-0123456789-0123456789")
-os.environ.setdefault("ADMIN_EMAIL", "admin@example.com")
-os.environ.setdefault("ADMIN_PASSWORD", "admin-password")
-os.environ.setdefault("ALLOW_DEV_DEFAULTS", "true")
+os.environ.setdefault("APP_ENV", "local")
+os.environ.setdefault("SESSION_SECRET", "test-secret-key-0123456789-0123456789")
+os.environ.setdefault("ALLOW_DEV_DEFAULTS", "false")
+os.environ.setdefault("COOKIE_SECURE", "false")
+os.environ.setdefault("ADMIN_BOOTSTRAP_ENABLED", "true")
+os.environ.setdefault("ADMIN_EMAIL", "admin.test@example.com")
+os.environ.setdefault("ADMIN_PASSWORD", "Admin#Pass123")
 
 from app.config import get_settings  # noqa: E402
 
 get_settings.cache_clear()
 
 from tests.db_utils import upgrade_database  # noqa: E402
+from app.db import SessionLocal  # noqa: E402
+from app.models.user import User  # noqa: E402
+from app.services.auth import create_admin_user  # noqa: E402
 
 
 if TEST_DB_PATH.exists():
     TEST_DB_PATH.unlink()
 upgrade_database(os.environ["DATABASE_URL"])
+
+_db = SessionLocal()
+try:
+    if not _db.query(User).filter(User.email == os.environ["ADMIN_EMAIL"]).first():
+        create_admin_user(_db, email=os.environ["ADMIN_EMAIL"], password=os.environ["ADMIN_PASSWORD"])
+finally:
+    _db.close()
 
 
 _ORIGINAL_TESTCLIENT_REQUEST = TestClient.request

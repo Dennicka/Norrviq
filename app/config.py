@@ -1,4 +1,5 @@
 from functools import lru_cache
+from secrets import token_urlsafe
 
 from pydantic_settings import BaseSettings
 
@@ -8,16 +9,24 @@ class Settings(BaseSettings):
     default_lang: str = "ru"
     database_url: str = "sqlite:///./norrviq.db"
 
-    app_secret_key: str = ""
+    app_env: str = "local"
+    session_secret: str = ""
+    admin_bootstrap_enabled: bool = False
     admin_email: str = ""
     admin_password: str = ""
     allow_dev_defaults: bool = False
 
     session_cookie_name: str = "norrviq_session"
     session_max_age_seconds: int = 60 * 60 * 24 * 7
+    cookie_secure: bool = False
+    cookie_same_site: str = "lax"
 
     log_format: str = "pretty"
     log_level: str = "INFO"
+
+    def model_post_init(self, __context) -> None:
+        if not self.session_secret and self.app_env == "local":
+            self.session_secret = token_urlsafe(32)
 
     @property
     def admin_username(self) -> str:
@@ -25,7 +34,7 @@ class Settings(BaseSettings):
 
     @property
     def secret_key(self) -> str:
-        return self.app_secret_key
+        return self.session_secret
 
     class Config:
         env_file = ".env"

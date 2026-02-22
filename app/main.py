@@ -52,7 +52,6 @@ from .routers import (
     web_worktypes,
 )
 from .security import require_auth, require_role, validate_security_settings
-from .services.auth import ensure_admin_user
 from .services.bootstrap import (
     ensure_default_cost_categories,
     ensure_default_legal_notes,
@@ -77,7 +76,6 @@ async def lifespan(_app: FastAPI):
         ensure_default_cost_categories(db)
         ensure_default_legal_notes(db)
         ensure_default_worktypes(db)
-        ensure_admin_user(db)
     finally:
         db.close()
     yield
@@ -87,14 +85,14 @@ app = FastAPI(title=settings.app_name, lifespan=lifespan)
 
 validate_security_settings()
 
-resolved_secret = settings.app_secret_key or "dev-insecure-secret-key"
+resolved_secret = settings.secret_key
 
 app.add_middleware(
     SessionMiddleware,
     secret_key=resolved_secret,
     session_cookie=settings.session_cookie_name,
-    https_only=not settings.allow_dev_defaults,
-    same_site="lax",
+    https_only=settings.cookie_secure,
+    same_site=settings.cookie_same_site,
     max_age=settings.session_max_age_seconds,
 )
 

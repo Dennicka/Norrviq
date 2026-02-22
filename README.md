@@ -60,11 +60,26 @@
 
 ## Environment variables
 
-- `APP_SECRET_KEY` — обязательный секрет для сессий в production (`ALLOW_DEV_DEFAULTS=false`), минимум 32 байта (raw/hex/base64).
-- `ADMIN_EMAIL` / `ADMIN_PASSWORD` — учётные данные для bootstrap admin-пользователя при первом запуске (idempotent).
-- `ALLOW_DEV_DEFAULTS` — только для локальной разработки; по умолчанию `false`.
+- `APP_ENV` — среда выполнения (`local`, `test`, `prod`).
+- `SESSION_SECRET` — обязательный секрет сессий для `APP_ENV != local`, минимум 32 байта (raw/hex/base64).
+- `COOKIE_SECURE` — `true` для HTTPS/prod, `false` для локальной разработки.
+- `COOKIE_SAME_SITE` — политика SameSite, по умолчанию `lax`.
+- `ADMIN_BOOTSTRAP_ENABLED` — авто-bootstrap отключён по умолчанию; можно включить только для `APP_ENV=local`.
+- `ADMIN_EMAIL` / `ADMIN_PASSWORD` — используются только при включённом local bootstrap.
+- `ALLOW_DEV_DEFAULTS` — legacy-флаг совместимости; не используется для задания секретов.
 - `LOG_FORMAT` — формат логов: `pretty` (dev) или `json` (production).
 - `LOG_LEVEL` — уровень логирования (`INFO`, `WARN`, `ERROR`).
+
+
+## Bootstrap first admin
+
+Создайте первого администратора вручную (без default credentials):
+
+```bash
+python -m app.scripts.create_admin --email admin@example.com --password "StrongPassword#2026"
+```
+
+Команда идемпотентна по email: при существующем пользователе завершится с ошибкой.
 
 ## Database initialization and migrations
 
