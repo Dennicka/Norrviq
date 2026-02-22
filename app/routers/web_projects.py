@@ -26,6 +26,7 @@ from app.models.worktype import WorkType
 from app.models.settings import get_or_create_settings
 from app.services.estimates import calculate_project_totals, recalculate_project_work_items
 from app.services.offer_commercial import compute_offer_commercial, deserialize_offer_commercial
+from app.services.commercial_snapshot import DOC_TYPE_OFFER as SNAP_OFFER, read_commercial_snapshot
 from app.services.finance import calculate_project_financials, compute_project_finance
 from app.services.terms_templates import DOC_TYPE_OFFER, resolve_terms_template
 from app.services.buffer_audit import log_buffer_audit
@@ -455,7 +456,22 @@ def project_offer(
     calculate_project_totals(db, project)
 
     if project.offer_status == "issued":
-        commercial = deserialize_offer_commercial(project.offer_commercial_snapshot)
+        snap = read_commercial_snapshot(db, doc_type=SNAP_OFFER, doc_id=project.id)
+        commercial = None
+        if snap:
+            commercial = {
+                "mode": snap["mode"],
+                "units": snap["units"],
+                "rate": snap["rates"],
+                "line_items": snap["line_items"],
+                "price_ex_vat": Decimal(str(snap["totals"].get("price_ex_vat") or 0)),
+                "vat_amount": Decimal(str(snap["totals"].get("vat_amount") or 0)),
+                "price_inc_vat": Decimal(str(snap["totals"].get("price_inc_vat") or 0)),
+                "warnings": [],
+                "math_breakdown": {},
+            }
+        if commercial is None:
+            commercial = deserialize_offer_commercial(project.offer_commercial_snapshot)
     else:
         commercial = None
     if commercial is None:

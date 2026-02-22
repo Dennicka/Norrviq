@@ -26,6 +26,7 @@ from .sanity_rule import SanityRule
 from .completeness_rule import CompletenessRule
 from .project_takeoff_settings import ProjectTakeoffSettings
 from .db_backup import DBBackup
+from .commercial_snapshot import CommercialSnapshot
 
 __all__ = [
     "Client",
@@ -59,4 +60,5 @@ __all__ = [
     "CompletenessRule",
     "ProjectTakeoffSettings",
     "DBBackup",
+    "CommercialSnapshot",
 ]
