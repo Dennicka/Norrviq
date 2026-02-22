@@ -2,7 +2,7 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from sqlalchemy.orm import Session, selectinload
 
-from app.models.audit_event import AuditEvent
+from app.audit import log_event
 from app.models.invoice import Invoice
 from app.models.invoice_line import InvoiceLine
 from app.models.rot_case import RotCase
@@ -86,17 +86,20 @@ def recalculate_invoice_totals(db: Session, invoice_id: int, user_id: str | None
     invoice.rot_amount = rot_amount
     invoice.client_pays_total = total_to_pay
 
-    db.add(
-        AuditEvent(
-            event_type="invoice_totals_recalculated",
-            user_id=user_id,
-            entity_type="invoice",
-            entity_id=invoice.id,
-            details=(
-                f"lines={len(invoice.lines)} subtotal={invoice.subtotal_ex_vat} "
-                f"labour={invoice.labour_ex_vat} material={invoice.material_ex_vat} rot={invoice.rot_amount}"
-            ),
-        )
+    log_event(
+        db,
+        None,
+        "invoice_totals_recalculated",
+        entity_type="INVOICE",
+        entity_id=invoice.id,
+        metadata={
+            "user_id": user_id,
+            "lines": len(invoice.lines),
+            "subtotal": str(invoice.subtotal_ex_vat),
+            "labour": str(invoice.labour_ex_vat),
+            "material": str(invoice.material_ex_vat),
+            "rot": str(invoice.rot_amount),
+        },
     )
     db.flush()
     return invoice
@@ -233,14 +236,18 @@ def generate_invoice_lines_from_project(
         db.add(line)
 
     recalculate_invoice_totals(db, invoice.id, user_id=user_id)
-    db.add(
-        AuditEvent(
-            event_type="invoice_lines_generated",
-            user_id=user_id,
-            entity_type="invoice",
-            entity_id=invoice.id,
-            details=f"strategy={merge_strategy} lines={len(generated)} include_materials={include_materials}",
-        )
+    log_event(
+        db,
+        None,
+        "invoice_lines_generated",
+        entity_type="INVOICE",
+        entity_id=invoice.id,
+        metadata={
+            "user_id": user_id,
+            "strategy": merge_strategy,
+            "lines": len(generated),
+            "include_materials": include_materials,
+        },
     )
     db.flush()
     return invoice
