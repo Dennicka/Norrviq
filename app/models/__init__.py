@@ -24,6 +24,7 @@ from .speed_profile import SpeedProfile
 from .project_execution_profile import ProjectExecutionProfile
 from .sanity_rule import SanityRule
 from .completeness_rule import CompletenessRule
+from .db_backup import DBBackup
 
 __all__ = [
     "Client",
@@ -55,4 +56,5 @@ __all__ = [
     "ProjectExecutionProfile",
     "SanityRule",
     "CompletenessRule",
+    "DBBackup",
 ]

@@ -13,6 +13,7 @@ from . import models  # noqa: F401
 from .config import get_settings
 from .db import SessionLocal, ensure_schema_up_to_date
 from .dependencies import enforce_csrf
+from .maintenance import is_enabled
 from .models.settings import get_or_create_settings
 from .models.company_profile import get_or_create_company_profile
 from .observability import (
@@ -33,6 +34,7 @@ from .routers import (
     api_projects_autosave,
     api_buffer_rules,
     web_analytics,
+    web_backups,
     web_audit,
     web_auth,
     web_buffer_rules,
@@ -125,6 +127,14 @@ async def observability_middleware(request: Request, call_next):
     return response
 
 
+
+
+@app.middleware("http")
+async def maintenance_middleware(request: Request, call_next):
+    if is_enabled() and request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+        return JSONResponse(status_code=503, content={"detail": "Maintenance mode", "request_id": getattr(request.state, "request_id", None)})
+    return await call_next(request)
+
 @app.exception_handler(HTTPException)
 async def app_http_exception_handler(request: Request, exc: HTTPException):
     return await http_exception_handler(request, exc)
@@ -166,6 +176,7 @@ csrf_dependency = Depends(enforce_csrf)
 
 app.include_router(web_root.router, dependencies=[csrf_dependency])
 app.include_router(web_audit.router, dependencies=[csrf_dependency, Depends(require_role("admin", "auditor"))])
+app.include_router(web_backups.router, dependencies=[csrf_dependency, Depends(require_role("admin", "auditor"))])
 app.include_router(api_buffer_rules.router, dependencies=[csrf_dependency, Depends(require_role("admin"))])
 app.include_router(api_projects_autosave.router, dependencies=[csrf_dependency])
 app.include_router(web_auth.router, dependencies=[csrf_dependency])
