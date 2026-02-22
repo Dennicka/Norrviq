@@ -13,6 +13,10 @@ class PricingPolicy(Base):
     min_effective_hourly_ex_vat = Column(Numeric(12, 2), nullable=False, default=500.00)
     block_issue_below_floor = Column(Boolean, nullable=False, default=True)
     warn_only_mode = Column(Boolean, nullable=False, default=False)
+    min_completeness_score_for_fixed = Column(Integer, nullable=False, default=70)
+    min_completeness_score_for_per_m2 = Column(Integer, nullable=False, default=60)
+    min_completeness_score_for_per_room = Column(Integer, nullable=False, default=60)
+    warn_only_below_score = Column(Boolean, nullable=False, default=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 
 

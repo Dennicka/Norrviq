@@ -34,6 +34,21 @@
         <label><input type="checkbox" name="warn_only_mode" {% if form_data.get('warn_only_mode', policy.warn_only_mode) in [True, 'on', 'true', '1', 1] %}checked{% endif %}> Warning only mode (dev/transition)</label>
     </div>
     <div class="form-row">
+        <label>Min completeness score for fixed</label>
+        <input type="number" min="0" max="100" name="min_completeness_score_for_fixed" value="{{ form_data.get('min_completeness_score_for_fixed', policy.min_completeness_score_for_fixed) }}">
+    </div>
+    <div class="form-row">
+        <label>Min completeness score for per m²</label>
+        <input type="number" min="0" max="100" name="min_completeness_score_for_per_m2" value="{{ form_data.get('min_completeness_score_for_per_m2', policy.min_completeness_score_for_per_m2) }}">
+    </div>
+    <div class="form-row">
+        <label>Min completeness score for per room</label>
+        <input type="number" min="0" max="100" name="min_completeness_score_for_per_room" value="{{ form_data.get('min_completeness_score_for_per_room', policy.min_completeness_score_for_per_room) }}">
+    </div>
+    <div class="form-row">
+        <label><input type="checkbox" name="warn_only_below_score" {% if form_data.get('warn_only_below_score', policy.warn_only_below_score) in [True, 'on', 'true', '1', 1] %}checked{% endif %}> Warn only below completeness threshold</label>
+    </div>
+    <div class="form-row">
         <button type="submit">Save policy</button>
     </div>
 </form>

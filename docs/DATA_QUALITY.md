@@ -24,3 +24,10 @@
 - `/settings/sanity-rules` (только admin).
 - Изменения пишут audit event `sanity_rule_updated`.
 - Блокировка выпуска документа пишет `issue_blocked_document_issue`.
+
+
+## Sanity vs Completeness
+
+- **Sanity**: ловит аномалии/мусор (диапазоны, ratio и т.д.).
+- **Completeness**: проверяет полноту данных для выбранного режима ценообразования и влияет на finalize.
+- См. `docs/COMPLETENESS.md`.

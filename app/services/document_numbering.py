@@ -14,6 +14,7 @@ from app.models.invoice import Invoice
 from app.models.pricing_policy import get_or_create_pricing_policy
 from app.models.project import Project
 from app.services.pricing import compute_pricing_scenarios, evaluate_floor
+from app.services.completeness import compute_completeness
 from app.services.terms_templates import DOC_TYPE_INVOICE, DOC_TYPE_OFFER, resolve_terms_template
 
 logger = logging.getLogger("uvicorn.error")
@@ -36,6 +37,15 @@ class FloorPolicyViolationError(RuntimeError):
         self.project_id = project_id
         self.reasons = reasons
 
+
+class CompletenessViolationError(RuntimeError):
+    def __init__(self, *, doc_type: str, doc_id: int, project_id: int, score: int, missing: list[dict]):
+        super().__init__("Нельзя выпустить документ: недостаточно данных")
+        self.doc_type = doc_type
+        self.doc_id = doc_id
+        self.project_id = project_id
+        self.score = score
+        self.missing = missing
 
 MAX_NUMBERING_RETRIES = 10
 
@@ -74,6 +84,32 @@ def _check_floor_policy_for_project(db: Session, *, project_id: int, user_id: st
     if policy.block_issue_below_floor:
         raise FloorPolicyViolationError(doc_type=doc_type, doc_id=doc_id, project_id=project_id, reasons=reason_payload)
 
+
+
+def _check_completeness_for_project(db: Session, *, project_id: int, mode: str, user_id: str | None, doc_type: str, doc_id: int) -> None:
+    project = db.get(Project, project_id)
+    if project is None:
+        raise ValueError("Project not found")
+
+    segment = project.client.client_segment if project.client and project.client.client_segment else "ANY"
+    policy = get_or_create_pricing_policy(db)
+    report = compute_completeness(db, project_id, mode=mode, segment=segment, lang="ru")
+    if policy.warn_only_mode:
+        return
+    if mode in {"FIXED_TOTAL", "PER_M2", "PER_ROOM"} and not report.can_issue_mode:
+        missing = [
+            {"check_key": item.check_key, "severity": item.severity, "message": item.message, "hint_link": item.hint_link}
+            for item in report.missing[:3]
+        ]
+        _create_audit_event(
+            db,
+            event_type="completeness_blocked_issue",
+            user_id=user_id,
+            entity_type=doc_type,
+            entity_id=doc_id,
+            details={"doc_type": doc_type, "doc_id": doc_id, "project_id": project_id, "mode": mode, "score": report.score, "missing": missing},
+        )
+        raise CompletenessViolationError(doc_type=doc_type, doc_id=doc_id, project_id=project_id, score=report.score, missing=missing)
 
 def format_document_number(prefix: str, year: int, sequence: int, padding: int) -> str:
     effective_padding = max(int(padding or 4), 1)
@@ -138,6 +174,8 @@ def finalize_offer(db: Session, project_id: int, user_id: str | None, profile: C
             db.commit()
             return project
 
+        selected_mode = project.pricing.mode if project.pricing else "HOURLY"
+        _check_completeness_for_project(db, project_id=project.id, mode=selected_mode, user_id=user_id, doc_type="project", doc_id=project.id)
         _check_floor_policy_for_project(db, project_id=project.id, user_id=user_id, doc_type="project", doc_id=project.id)
 
         year = date.today().year
@@ -200,6 +238,8 @@ def finalize_invoice(db: Session, invoice_id: int, user_id: str | None, profile:
                 db.commit()
                 return invoice
 
+            selected_mode = invoice.project.pricing.mode if invoice.project and invoice.project.pricing else "HOURLY"
+            _check_completeness_for_project(db, project_id=invoice.project_id, mode=selected_mode, user_id=user_id, doc_type="invoice", doc_id=invoice.id)
             _check_floor_policy_for_project(db, project_id=invoice.project_id, user_id=user_id, doc_type="invoice", doc_id=invoice.id)
 
             year = date.today().year
