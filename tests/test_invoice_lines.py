@@ -85,7 +85,7 @@ def test_recalculate_totals_matches_sum_of_lines():
     try:
         recalculate_invoice_totals(db, iid)
         inv = db.get(Invoice, iid)
-        summed = sum((Decimal(str(l.line_total_ex_vat or 0)) for l in inv.lines), Decimal("0"))
+        summed = sum((Decimal(str(line.line_total_ex_vat or 0)) for line in inv.lines), Decimal("0"))
         assert inv.subtotal_ex_vat == summed.quantize(Decimal("0.01"))
     finally:
         db.rollback()
