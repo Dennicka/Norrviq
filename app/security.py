@@ -3,7 +3,6 @@ import hashlib
 import hmac
 import logging
 import secrets
-from typing import Optional
 
 from fastapi import HTTPException, Request, status
 
@@ -35,26 +34,26 @@ def _decode_secret(value: str) -> bytes:
 
 def validate_security_settings() -> None:
     settings = get_settings()
-    if settings.allow_dev_defaults:
-        logger.warning("\033[31mALLOW_DEV_DEFAULTS enabled: insecure development defaults are allowed\033[0m")
+    if not settings.session_secret and settings.app_env == "local":
+        logger.warning("SESSION_SECRET is not set in local mode; using ephemeral secret")
         return
 
-    if not settings.app_secret_key:
-        raise SecurityConfigError("APP_SECRET_KEY is required when ALLOW_DEV_DEFAULTS=false")
+    if not settings.session_secret:
+        raise SecurityConfigError("SESSION_SECRET is required when APP_ENV is not local")
 
-    if len(_decode_secret(settings.app_secret_key)) < 32:
-        raise SecurityConfigError("APP_SECRET_KEY must be at least 32 bytes (raw/hex/base64)")
+    if len(_decode_secret(settings.session_secret)) < 32:
+        raise SecurityConfigError("SESSION_SECRET must be at least 32 bytes (raw/hex/base64)")
 
 
-def get_current_user_email(request: Request) -> Optional[str]:
+def get_current_user_email(request: Request) -> str | None:
     return request.session.get("user_email")
 
 
-def get_current_user_role(request: Request) -> Optional[str]:
+def get_current_user_role(request: Request) -> str | None:
     return request.session.get("user_role")
 
 
-def get_current_username(request: Request) -> Optional[str]:
+def get_current_username(request: Request) -> str | None:
     return get_current_user_email(request)
 
 
@@ -120,7 +119,7 @@ def ensure_csrf_token(request: Request) -> str:
     return token
 
 
-def validate_csrf_token(request: Request, token: Optional[str]) -> bool:
+def validate_csrf_token(request: Request, token: str | None) -> bool:
     if not token:
         return False
     expected = request.session.get(CSRF_SESSION_KEY)

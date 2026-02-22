@@ -3,19 +3,19 @@
 ## Secrets
 
 - Секреты не хранятся в коде.
-- Используются только переменные окружения: `APP_SECRET_KEY`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ALLOW_DEV_DEFAULTS`.
-- В production (`ALLOW_DEV_DEFAULTS=false`) приложение не запускается без `APP_SECRET_KEY`.
+- Используются только переменные окружения: `APP_ENV`, `SESSION_SECRET`, `COOKIE_SECURE`, `COOKIE_SAME_SITE`.
+- В non-local средах приложение не запускается без `SESSION_SECRET` (минимум 32 байта).
 
 ## Passwords
 
 - Пароли пользователей хранятся только как `password_hash`.
-- Используется scrypt-хеширование с солью и проверка через verify.
-- Bootstrap admin создаётся из env только при отсутствии пользователя.
+- Используется адаптивное `scrypt`-хеширование с солью и проверка через `verify_password`.
+- Default credentials удалены; первый admin создаётся только через CLI `python -m app.scripts.create_admin`.
 
 ## Sessions / Cookies
 
 - Cookie настроены с `HttpOnly=true`, `SameSite=Lax`.
-- `Secure=true` при `ALLOW_DEV_DEFAULTS=false`, для local dev может быть `false`.
+- `Secure` управляется `COOKIE_SECURE` (обычно `true` в prod/HTTPS).
 - При login выполняется ротация сессии (новый `sid`).
 - Logout очищает сессию.
 

@@ -1,13 +1,14 @@
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.config import get_settings
 from app.db import SessionLocal
 from app.main import app
 from app.models.cost import CostCategory
 from app.models.legal_note import LegalNote
-from app.models.worktype import WorkType
 from app.models.settings import get_or_create_settings
+from app.models.user import User
+from app.models.worktype import WorkType
+from app.services.auth import create_admin_user
 from app.services.bootstrap import (
     ensure_default_cost_categories,
     ensure_default_legal_notes,
@@ -15,13 +16,19 @@ from app.services.bootstrap import (
 )
 
 client = TestClient(app)
-settings = get_settings()
 
 
 def login():
+    db: Session = SessionLocal()
+    try:
+        if not db.query(User).filter(User.email == "admin-settings@test.local").first():
+            create_admin_user(db, email="admin-settings@test.local", password="Admin#Settings123")
+    finally:
+        db.close()
+
     client.post(
         "/login",
-        data={"username": settings.admin_username, "password": settings.admin_password},
+        data={"username": "admin-settings@test.local", "password": "Admin#Settings123"},
     )
 
 
