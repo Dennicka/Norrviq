@@ -15,6 +15,7 @@ from app.models.company_profile import get_or_create_company_profile
 from app.models.cost import CostCategory, ProjectCostItem
 from app.models.legal_note import LegalNote
 from app.models.material import Material
+from app.models.invoice import Invoice
 from app.audit import log_event
 from app.models.project import Project, ProjectWorkItem, ProjectWorkerAssignment
 from app.models.project_takeoff_settings import M2_BASIS_CHOICES
@@ -55,6 +56,12 @@ from app.services.pricing import (
     evaluate_floor,
 )
 from app.services.takeoff import compute_project_areas, get_or_create_project_takeoff_settings, validate_m2_basis
+from app.services.materials_bom import (
+    apply_bom_to_invoice_material_lines,
+    apply_bom_to_project_cost_items,
+    compute_project_bom,
+    get_or_create_project_material_settings,
+)
 from app.security import OPERATOR_ROLE, ADMIN_ROLE, get_current_user_email, get_current_user_role, require_auth, require_role
 from app.i18n import make_t
 
@@ -1413,6 +1420,76 @@ async def project_takeoff_update(
     db.add(takeoff)
     db.commit()
     return RedirectResponse(url=f"/projects/{project_id}/takeoff", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.get("/{project_id}/materials-plan")
+async def project_materials_plan(
+    project_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    lang: str = Depends(get_current_lang),
+):
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    report = compute_project_bom(db, project_id)
+    material_settings = get_or_create_project_material_settings(db, project_id)
+    draft_invoice = (
+        db.query(Invoice)
+        .filter(Invoice.project_id == project_id, Invoice.status == "draft")
+        .order_by(Invoice.id.desc())
+        .first()
+    )
+    context = build_project_context(
+        db,
+        request,
+        project,
+        lang,
+        bom=report,
+        material_settings=material_settings,
+        draft_invoice=draft_invoice,
+        is_readonly=get_current_user_role(request) not in {ADMIN_ROLE, OPERATOR_ROLE},
+    )
+    return templates.TemplateResponse(request, "projects/materials_plan.html", context)
+
+
+@router.post("/{project_id}/materials-plan/apply-costs")
+async def project_materials_plan_apply_costs(project_id: int, request: Request, db: Session = Depends(get_db)):
+    if get_current_user_role(request) not in {ADMIN_ROLE, OPERATOR_ROLE}:
+        raise HTTPException(status_code=403, detail="Insufficient role")
+    if not db.get(Project, project_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    report = compute_project_bom(db, project_id)
+    apply_bom_to_project_cost_items(db, project_id, report)
+    return RedirectResponse(url=f"/projects/{project_id}/materials-plan", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{project_id}/materials-plan/apply-invoice")
+async def project_materials_plan_apply_invoice(project_id: int, request: Request, db: Session = Depends(get_db)):
+    if get_current_user_role(request) not in {ADMIN_ROLE, OPERATOR_ROLE}:
+        raise HTTPException(status_code=403, detail="Insufficient role")
+    if not db.get(Project, project_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    report = compute_project_bom(db, project_id)
+    apply_bom_to_invoice_material_lines(db, project_id, report)
+    return RedirectResponse(url=f"/projects/{project_id}/materials-plan", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{project_id}/materials-plan/settings")
+async def project_materials_plan_update_settings(project_id: int, request: Request, db: Session = Depends(get_db)):
+    if get_current_user_role(request) not in {ADMIN_ROLE, OPERATOR_ROLE}:
+        raise HTTPException(status_code=403, detail="Insufficient role")
+    settings = get_or_create_project_material_settings(db, project_id)
+    form = await request.form()
+    settings.default_markup_pct = Decimal(str(form.get("default_markup_pct") or "20"))
+    settings.use_material_sell_price = form.get("use_material_sell_price") in ("on", "true", "1", True, 1)
+    settings.include_materials_in_pricing = form.get("include_materials_in_pricing") in ("on", "true", "1", True, 1)
+    db.add(settings)
+    pricing = get_or_create_project_pricing(db, project_id)
+    pricing.include_materials = settings.include_materials_in_pricing
+    db.add(pricing)
+    db.commit()
+    return RedirectResponse(url=f"/projects/{project_id}/materials-plan", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/{project_id}/pricing")
