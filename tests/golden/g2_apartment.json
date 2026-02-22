@@ -11,6 +11,25 @@
     "travel_setup_cost_internal": "420.00"
   },
   "case": "g2_apartment",
+  "consistency_gate": {
+    "invoice": {
+      "errors": [
+        {
+          "code": "INVOICE_SUBTOTAL_MISMATCH",
+          "message": "Invoice subtotal_ex_vat differs from pricing scenario"
+        },
+        {
+          "code": "INVOICE_COMMERCIAL_MISMATCH",
+          "message": "Invoice subtotal differs from commercial total"
+        }
+      ],
+      "ok": false
+    },
+    "offer": {
+      "errors": [],
+      "ok": true
+    }
+  },
   "converter": {
     "base_price_ex_vat": "78732.00",
     "effective_hourly_ex_vat": "900.00",
@@ -123,6 +142,20 @@
       "recommended_rate_per_room": "14580.00"
     }
   },
+  "invoice_commercial": {
+    "line_items": [],
+    "mode": "HOURLY",
+    "price_ex_vat": "57787.20",
+    "price_inc_vat": "72234.00",
+    "units": {
+      "items_count": 6,
+      "m2_basis": "FLOOR_AREA",
+      "m2_basis_label": "golvyta",
+      "rooms_count": 3,
+      "total_m2": "52.00"
+    },
+    "vat_amount": "14446.80"
+  },
   "offer_commercial": {
     "line_items": [
       {
@@ -145,7 +178,7 @@
     "vat_amount": "14446.80"
   },
   "performance": {
-    "compute_seconds": "0.0605"
+    "compute_seconds": "0.0665"
   },
   "scenarios": {
     "FIXED_TOTAL": {

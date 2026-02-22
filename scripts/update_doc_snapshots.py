@@ -26,11 +26,16 @@ os.environ.setdefault("ADMIN_PASSWORD", "Admin#Pass123")
 CSRF_META_RE = re.compile(r'<meta\s+name="csrf-token"\s+content="([^"]+)"')
 
 CASES = [
-    ("offer_draft.html", "/projects/{project_id}/offer?lang=sv", False, False),
-    ("offer_issued.html", "/projects/{project_id}/offer?lang=sv", True, False),
-    ("invoice_draft.html", "/projects/{project_id}/invoices/{invoice_id}", False, False),
-    ("invoice_issued_rot_off.html", "/projects/{project_id}/invoices/{invoice_id}", True, False),
-    ("invoice_issued_rot_on.html", "/projects/{project_id}/invoices/{invoice_id}", True, True),
+    ("offer_draft.html", "/projects/{project_id}/offer?lang=sv", False, False, "HOURLY"),
+    ("offer_issued_fixed_total.html", "/projects/{project_id}/offer?lang=sv", True, False, "FIXED_TOTAL"),
+    ("offer_issued_per_m2.html", "/projects/{project_id}/offer?lang=sv", True, False, "PER_M2"),
+    ("offer_issued_per_room.html", "/projects/{project_id}/offer?lang=sv", True, False, "PER_ROOM"),
+    ("offer_issued_piecework.html", "/projects/{project_id}/offer?lang=sv", True, False, "PIECEWORK"),
+    ("invoice_draft.html", "/projects/{project_id}/invoices/{invoice_id}", False, False, "HOURLY"),
+    ("invoice_issued_fixed_total_rot_off.html", "/projects/{project_id}/invoices/{invoice_id}", True, False, "FIXED_TOTAL"),
+    ("invoice_issued_per_m2_rot_off.html", "/projects/{project_id}/invoices/{invoice_id}", True, False, "PER_M2"),
+    ("invoice_issued_per_room_rot_off.html", "/projects/{project_id}/invoices/{invoice_id}", True, False, "PER_ROOM"),
+    ("invoice_issued_piecework_rot_on.html", "/projects/{project_id}/invoices/{invoice_id}", True, True, "PIECEWORK"),
 ]
 
 
@@ -59,8 +64,8 @@ def main() -> None:
     SNAPSHOT_DIR.mkdir(parents=True, exist_ok=True)
     login()
 
-    for snapshot_name, path_tmpl, issue_documents, enable_rot in CASES:
-        fixture = create_stable_document_fixture(enable_rot=enable_rot, issue_documents=issue_documents)
+    for snapshot_name, path_tmpl, issue_documents, enable_rot, pricing_mode in CASES:
+        fixture = create_stable_document_fixture(enable_rot=enable_rot, issue_documents=issue_documents, pricing_mode=pricing_mode)
         path = path_tmpl.format(project_id=fixture.project_id, invoice_id=fixture.invoice_id)
         response = client.get(path)
         response.raise_for_status()

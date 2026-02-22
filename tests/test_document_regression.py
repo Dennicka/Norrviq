@@ -36,21 +36,27 @@ def _extract_pdf_text(content: bytes) -> str:
 
 
 @pytest.mark.parametrize(
-    ("path", "snapshot_name"),
+    ("path", "snapshot_name", "pricing_mode", "enable_rot"),
     [
-        ("/projects/{project_id}/offer?lang=sv", "offer_draft.html"),
-        ("/projects/{project_id}/offer?lang=sv", "offer_issued.html"),
-        ("/projects/{project_id}/invoices/{invoice_id}", "invoice_draft.html"),
-        ("/projects/{project_id}/invoices/{invoice_id}", "invoice_issued_rot_off.html"),
-        ("/projects/{project_id}/invoices/{invoice_id}", "invoice_issued_rot_on.html"),
+        ("/projects/{project_id}/offer?lang=sv", "offer_draft.html", "HOURLY", False),
+        ("/projects/{project_id}/offer?lang=sv", "offer_issued_fixed_total.html", "FIXED_TOTAL", False),
+        ("/projects/{project_id}/offer?lang=sv", "offer_issued_per_m2.html", "PER_M2", False),
+        ("/projects/{project_id}/offer?lang=sv", "offer_issued_per_room.html", "PER_ROOM", False),
+        ("/projects/{project_id}/offer?lang=sv", "offer_issued_piecework.html", "PIECEWORK", False),
+        ("/projects/{project_id}/invoices/{invoice_id}", "invoice_draft.html", "HOURLY", False),
+        ("/projects/{project_id}/invoices/{invoice_id}", "invoice_issued_fixed_total_rot_off.html", "FIXED_TOTAL", False),
+        ("/projects/{project_id}/invoices/{invoice_id}", "invoice_issued_per_m2_rot_off.html", "PER_M2", False),
+        ("/projects/{project_id}/invoices/{invoice_id}", "invoice_issued_per_room_rot_off.html", "PER_ROOM", False),
+        ("/projects/{project_id}/invoices/{invoice_id}", "invoice_issued_piecework_rot_on.html", "PIECEWORK", True),
     ],
 )
-def test_document_html_snapshots(path: str, snapshot_name: str) -> None:
+def test_document_html_snapshots(path: str, snapshot_name: str, pricing_mode: str, enable_rot: bool) -> None:
     _login()
 
     fixture = create_stable_document_fixture(
-        enable_rot=snapshot_name.endswith("rot_on.html"),
+        enable_rot=enable_rot,
         issue_documents="issued" in snapshot_name,
+        pricing_mode=pricing_mode,
     )
     url = path.format(project_id=fixture.project_id, invoice_id=fixture.invoice_id)
 
@@ -62,18 +68,17 @@ def test_document_html_snapshots(path: str, snapshot_name: str) -> None:
 
 
 @pytest.mark.parametrize(
-    ("kind", "issue_documents", "enable_rot"),
+    ("kind", "pricing_mode", "enable_rot"),
     [
-        ("offer", False, False),
-        ("offer", True, False),
-        ("invoice", False, False),
-        ("invoice", True, False),
-        ("invoice", True, True),
+        ("offer", "FIXED_TOTAL", False),
+        ("offer", "PER_M2", False),
+        ("invoice", "FIXED_TOTAL", False),
+        ("invoice", "PER_M2", True),
     ],
 )
-def test_document_pdf_smoke(kind: str, issue_documents: bool, enable_rot: bool) -> None:
+def test_document_pdf_smoke_issued_modes(kind: str, pricing_mode: str, enable_rot: bool) -> None:
     _login()
-    fixture = create_stable_document_fixture(enable_rot=enable_rot, issue_documents=issue_documents)
+    fixture = create_stable_document_fixture(enable_rot=enable_rot, issue_documents=True, pricing_mode=pricing_mode)
 
     db = SessionLocal()
     try:
@@ -97,17 +102,16 @@ def test_document_pdf_smoke(kind: str, issue_documents: bool, enable_rot: bool) 
 
     if kind == "offer":
         assert norm_pdf_text("Offert") in compact_text or norm_pdf_text("Kommersiellt erbjudande") in compact_text
-        if issue_documents:
-            assert norm_pdf_text(offer_prefix) in compact_text
-        else:
-            assert norm_pdf_text("DRAFT") in compact_text or norm_pdf_text("UTKAST") in compact_text
-        return
-
-    assert norm_pdf_text("Faktura") in compact_text
-    assert norm_pdf_text("Moms") in compact_text
-    if issue_documents:
-        assert norm_pdf_text(invoice_prefix) in compact_text
+        assert norm_pdf_text(offer_prefix) in compact_text
     else:
-        assert norm_pdf_text("DRAFT") in compact_text or norm_pdf_text("UTKAST") in compact_text
-    if enable_rot:
-        assert norm_pdf_text("ROT-avdrag") in compact_text
+        assert norm_pdf_text("Faktura") in compact_text
+        assert norm_pdf_text("Moms") in compact_text
+        assert norm_pdf_text(invoice_prefix) in compact_text
+        if enable_rot:
+            assert norm_pdf_text("ROT-avdrag") in compact_text
+
+    totals_by_mode = {"FIXED_TOTAL": "8937", "PER_M2": "29046"}
+    if kind == "invoice" and enable_rot and pricing_mode == "PER_M2":
+        assert norm_pdf_text("22075") in compact_text
+    else:
+        assert norm_pdf_text(totals_by_mode[pricing_mode]) in compact_text

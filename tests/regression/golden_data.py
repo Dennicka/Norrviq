@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import json
 import time
+from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
+from sqlalchemy import inspect
 from sqlalchemy.orm import Session
 
 from app.models.buffer_rule import BufferRule
 from app.models.cost import CostCategory, ProjectCostItem
+from app.models.invoice import Invoice
 from app.models.pricing_policy import PricingPolicy, get_or_create_pricing_policy
 from app.models.project import Project, ProjectWorkItem, ProjectWorkerAssignment
 from app.models.room import Room
@@ -17,11 +20,14 @@ from app.models.project_takeoff_settings import ProjectTakeoffSettings
 from app.models.worker import Worker
 from app.models.worktype import WorkType
 from app.services.estimates import calculate_work_item
+from app.services.invoice_commercial import compute_invoice_commercial
+from app.services.invoice_lines import generate_invoice_lines_from_project
 from app.services.offer_commercial import compute_offer_commercial
 from app.services.pricing import DesiredInput, compute_conversions, compute_pricing_scenarios, evaluate_floor, get_or_create_project_pricing
+from app.services.pricing_consistency import DOC_TYPE_INVOICE, DOC_TYPE_OFFER, validate_pricing_consistency
 
 GOLDEN_DIR = Path("tests/golden")
-GOLDEN_CASES = ("g1_small_room", "g2_apartment", "g3_missing_units", "g4_large", "g5_paintable_basis")
+GOLDEN_CASES = ("g1_small_room", "g2_apartment", "g3_missing_units", "g4_large", "g5_fixed_total", "g6_per_m2_paintable", "g7_per_room", "g8_piecework")
 
 
 def _decimal_str(value: Decimal | None) -> str | None:
@@ -109,7 +115,7 @@ def _configure_defaults(db: Session) -> None:
     db.commit()
 
 
-def _populate_case(db: Session, case_name: str) -> tuple[int, Decimal, Decimal]:
+def _populate_case(db: Session, case_name: str) -> tuple[int, int, Decimal, Decimal]:
     company_rate = Decimal("550.00")
     project = Project(name=f"Golden {case_name}")
     db.add(project)
@@ -218,8 +224,21 @@ def _populate_case(db: Session, case_name: str) -> tuple[int, Decimal, Decimal]:
 
         desired_hourly = Decimal("860.00")
         target_margin = Decimal("32.00")
-    elif case_name == "g5_paintable_basis":
-        wt_wall = _make_work_type(db, "G5-WALL", unit="m2", hours_per_unit=Decimal("1.00"))
+    elif case_name == "g5_fixed_total":
+        wt_wall = _make_work_type(db, "G5-WALL", unit="m2", hours_per_unit=Decimal("1.10"))
+        rooms = [
+            Room(project_id=project.id, name="Fixed A", floor_area_m2=Decimal("18.00")),
+            Room(project_id=project.id, name="Fixed B", floor_area_m2=Decimal("12.00")),
+        ]
+        db.add_all(rooms)
+        db.flush()
+        _add_item(db, project=project, room=rooms[0], work_type=wt_wall, quantity=Decimal("11.00"), difficulty=Decimal("1.00"), company_rate=company_rate)
+        _add_item(db, project=project, room=rooms[1], work_type=wt_wall, quantity=Decimal("8.00"), difficulty=Decimal("1.15"), company_rate=company_rate)
+        db.add(ProjectCostItem(project_id=project.id, cost_category_id=mat.id, title="Primer", amount=Decimal("390.00"), is_material=True))
+        desired_hourly = Decimal("740.00")
+        target_margin = Decimal("26.00")
+    elif case_name == "g6_per_m2_paintable":
+        wt_wall = _make_work_type(db, "G6-WALL", unit="m2", hours_per_unit=Decimal("1.00"))
         room = Room(project_id=project.id, name="Paint room", floor_area_m2=Decimal("20.00"), wall_perimeter_m=Decimal("18.00"), wall_height_m=Decimal("2.50"))
         db.add(room)
         db.flush()
@@ -227,6 +246,21 @@ def _populate_case(db: Session, case_name: str) -> tuple[int, Decimal, Decimal]:
         db.add(ProjectCostItem(project_id=project.id, cost_category_id=mat.id, title="Paint", amount=Decimal("200.00"), is_material=True))
         desired_hourly = Decimal("700.00")
         target_margin = Decimal("25.00")
+    elif case_name == "g7_per_room":
+        wt = _make_work_type(db, "G7-ROOM", unit="piece", hours_per_unit=Decimal("2.00"))
+        rooms = [Room(project_id=project.id, name=f"Room {idx + 1}", floor_area_m2=Decimal("10.00") + Decimal(idx)) for idx in range(5)]
+        db.add_all(rooms)
+        db.flush()
+        for room in rooms:
+            _add_item(db, project=project, room=room, work_type=wt, quantity=Decimal("1.00"), difficulty=Decimal("1.00"), company_rate=company_rate)
+        desired_hourly = Decimal("710.00")
+        target_margin = Decimal("22.00")
+    elif case_name == "g8_piecework":
+        wt = _make_work_type(db, "G8-PIECE", unit="piece", hours_per_unit=Decimal("0.40"))
+        for _ in range(20):
+            _add_item(db, project=project, room=None, work_type=wt, quantity=Decimal("1.00"), difficulty=Decimal("1.00"), company_rate=company_rate)
+        desired_hourly = Decimal("680.00")
+        target_margin = Decimal("24.00")
     else:
         raise ValueError(f"Unknown golden case: {case_name}")
 
@@ -240,22 +274,43 @@ def _populate_case(db: Session, case_name: str) -> tuple[int, Decimal, Decimal]:
     pricing.target_margin_pct = Decimal("30.00")
     pricing.include_materials = True
     pricing.include_travel_setup_buffers = True
-    if case_name == "g5_paintable_basis":
+    mode_by_case = {
+        "g5_fixed_total": "FIXED_TOTAL",
+        "g6_per_m2_paintable": "PER_M2",
+        "g7_per_room": "PER_ROOM",
+        "g8_piecework": "PIECEWORK",
+    }
+    pricing.mode = mode_by_case.get(case_name, "HOURLY")
+    if case_name == "g6_per_m2_paintable":
         takeoff = db.query(ProjectTakeoffSettings).filter(ProjectTakeoffSettings.project_id == project.id).first()
         if takeoff is None:
             takeoff = ProjectTakeoffSettings(project_id=project.id)
         takeoff.m2_basis = "PAINTABLE_TOTAL"
         db.add(takeoff)
+
+    invoice = Invoice(
+        project_id=project.id,
+        issue_date=date(2024, 1, 20),
+        status="draft",
+        work_sum_without_moms=Decimal("0.00"),
+        moms_amount=Decimal("0.00"),
+        rot_amount=Decimal("0.00"),
+        client_pays_total=Decimal("0.00"),
+    )
+    db.add(invoice)
     db.commit()
-    return project.id, desired_hourly, target_margin
+    generate_invoice_lines_from_project(db, project_id=project.id, invoice_id=invoice.id)
+    db.commit()
+    return project.id, invoice.id, desired_hourly, target_margin
 
 
 def render_case_snapshot(db: Session, case_name: str) -> dict:
-    db.query(BufferRule).delete()
-    db.commit()
+    if "buffer_rules" in inspect(db.bind).get_table_names():
+        db.query(BufferRule).delete()
+        db.commit()
     _configure_defaults(db)
     started = time.perf_counter()
-    project_id, desired_hourly, target_margin = _populate_case(db, case_name)
+    project_id, invoice_id, desired_hourly, target_margin = _populate_case(db, case_name)
     baseline, scenarios = compute_pricing_scenarios(db, project_id)
     conversions = compute_conversions(
         db,
@@ -267,6 +322,9 @@ def render_case_snapshot(db: Session, case_name: str) -> dict:
     elapsed_s = Decimal(str(time.perf_counter() - started)).quantize(Decimal("0.0001"))
 
     offer = compute_offer_commercial(db, project_id, lang="sv")
+    invoice = compute_invoice_commercial(db, project_id, invoice_id, lang="sv")
+    offer_consistency = validate_pricing_consistency(db, project_id, DOC_TYPE_OFFER)
+    invoice_consistency = validate_pricing_consistency(db, project_id, DOC_TYPE_INVOICE, invoice_id)
     payload = {
         "case": case_name,
         "baseline": {
@@ -298,6 +356,14 @@ def render_case_snapshot(db: Session, case_name: str) -> dict:
             "price_inc_vat": offer.price_inc_vat,
             "line_items": offer.line_items,
             "units": offer.units,
+        },
+        "invoice_commercial": {
+            "mode": invoice.mode,
+            "price_ex_vat": invoice.price_ex_vat,
+            "vat_amount": invoice.vat_amount,
+            "price_inc_vat": invoice.price_inc_vat,
+            "line_items": invoice.line_items,
+            "units": invoice.units,
         },
         "converter": {
             "input": {
@@ -338,6 +404,16 @@ def render_case_snapshot(db: Session, case_name: str) -> dict:
         },
         "performance": {
             "compute_seconds": elapsed_s,
+        },
+        "consistency_gate": {
+            "offer": {
+                "ok": offer_consistency.ok,
+                "errors": offer_consistency.errors,
+            },
+            "invoice": {
+                "ok": invoice_consistency.ok,
+                "errors": invoice_consistency.errors,
+            },
         },
     }
     return _norm(payload)
