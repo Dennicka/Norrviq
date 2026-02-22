@@ -2,6 +2,8 @@ import logging
 import random
 import time
 from datetime import date
+from decimal import Decimal
+import json
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -16,6 +18,7 @@ from app.models.pricing_policy import get_or_create_pricing_policy
 from app.models.project import Project
 from app.services.pricing import compute_pricing_scenarios, evaluate_floor
 from app.services.offer_commercial import assert_offer_matches_selected_scenario, compute_offer_commercial, serialize_offer_commercial
+from app.services.invoice_commercial import compute_invoice_commercial
 from app.services.completeness import compute_completeness
 from app.services.terms_templates import DOC_TYPE_INVOICE, DOC_TYPE_OFFER, resolve_terms_template
 from app.services.invoice_lines import recalculate_invoice_totals
@@ -251,6 +254,13 @@ def finalize_invoice(db: Session, invoice_id: int, user_id: str | None, profile:
             _check_floor_policy_for_project(db, project_id=invoice.project_id, user_id=user_id, doc_type="invoice", doc_id=invoice.id)
 
             recalculate_invoice_totals(db, invoice.id, user_id=user_id)
+            commercial = compute_invoice_commercial(db, invoice.project_id, invoice.id)
+            if abs(Decimal(str(invoice.subtotal_ex_vat or 0)) - commercial.price_ex_vat) > Decimal("0.01"):
+                raise ValueError("Invoice totals mismatch pricing scenario")
+            expected_vat = Decimal(str(invoice.subtotal_ex_vat or 0)) * Decimal(str(commercial.vat_rot_breakdown.get("vat_rate_pct") or 25)) / Decimal("100")
+            expected_vat = expected_vat.quantize(Decimal("0.01"))
+            if abs(Decimal(str(invoice.vat_total or 0)) - expected_vat) > Decimal("0.01"):
+                raise ValueError("Invoice totals mismatch pricing scenario")
             rot_case = db.query(RotCase).filter(RotCase.invoice_id == invoice.id).first()
 
             year = date.today().year
@@ -281,6 +291,12 @@ def finalize_invoice(db: Session, invoice_id: int, user_id: str | None, profile:
                     details={"template_id": template.id, "version": template.version},
                 )
             invoice.status = STATUS_ISSUED
+            invoice.commercial_mode_snapshot = commercial.mode
+            invoice.units_snapshot = json.dumps(commercial.units, ensure_ascii=False, sort_keys=True, default=str)
+            invoice.rates_snapshot = json.dumps(commercial.rate, ensure_ascii=False, sort_keys=True, default=str)
+            invoice.subtotal_ex_vat_snapshot = invoice.subtotal_ex_vat
+            invoice.vat_total_snapshot = invoice.vat_total
+            invoice.total_inc_vat_snapshot = invoice.total_inc_vat
             invoice.rot_snapshot_enabled = bool(rot_case and rot_case.is_enabled)
             invoice.rot_snapshot_pct = rot_case.rot_pct if rot_case else 0
             invoice.rot_snapshot_eligible_labor_ex_vat = invoice.labour_ex_vat

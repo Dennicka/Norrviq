@@ -8,6 +8,7 @@ from app.models.invoice_line import InvoiceLine
 from app.models.rot_case import RotCase
 from app.models.cost import ProjectCostItem
 from app.models.project import Project, ProjectWorkItem
+from app.services.invoice_commercial import compute_invoice_commercial
 
 DEFAULT_VAT_RATE = Decimal("25.00")
 
@@ -116,18 +117,8 @@ def _generate_labor_lines(project: Project) -> list[dict]:
     mode = (project.pricing.mode if project.pricing else "HOURLY").upper()
     items = sorted(project.work_items, key=lambda wi: wi.id)
 
-    if mode in {"FIXED_TOTAL", "PER_M2", "PER_ROOM"}:
-        total = Decimal(str(project.pricing.fixed_total_price or 0)) if project.pricing else Decimal("0")
-        return [{
-            "kind": "LABOR",
-            "description": "Fixed price (labour)",
-            "unit": "st",
-            "quantity": Decimal("1.00"),
-            "unit_price_ex_vat": _q(total),
-            "vat_rate_pct": DEFAULT_VAT_RATE,
-            "source_type": "MANUAL",
-            "source_id": None,
-        }]
+    if mode in {"FIXED_TOTAL", "PER_M2", "PER_ROOM", "PIECEWORK"}:
+        return []
 
     hourly_rate = Decimal(str(project.pricing.hourly_rate_override if project.pricing and project.pricing.hourly_rate_override is not None else 0))
     lines = []
@@ -148,6 +139,25 @@ def _generate_labor_lines(project: Project) -> list[dict]:
             }
         )
     return lines
+
+
+def _generate_mode_lines(db: Session, project_id: int, invoice_id: int) -> list[dict]:
+    commercial = compute_invoice_commercial(db, project_id, invoice_id)
+    rows = []
+    for item in commercial.line_items:
+        rows.append(
+            {
+                "kind": item.get("kind", "LABOR"),
+                "description": item["description"],
+                "unit": item["unit"],
+                "quantity": _q(Decimal(str(item["qty"]))),
+                "unit_price_ex_vat": _q(Decimal(str(item["unit_price"]))),
+                "vat_rate_pct": DEFAULT_VAT_RATE,
+                "source_type": "COMMERCIAL",
+                "source_id": None,
+            }
+        )
+    return rows
 
 
 def _generate_material_lines(project: Project) -> list[dict]:
@@ -198,8 +208,12 @@ def generate_invoice_lines_from_project(
         raise ValueError("Project not found")
 
     generated: list[dict] = []
+    mode = (project.pricing.mode if project.pricing else "HOURLY").upper()
     if include_labor:
-        generated.extend(_generate_labor_lines(project))
+        if mode == "HOURLY":
+            generated.extend(_generate_labor_lines(project))
+        else:
+            generated.extend(_generate_mode_lines(db, project.id, invoice.id))
     if include_materials:
         generated.extend(_generate_material_lines(project))
 

@@ -64,9 +64,12 @@
 
 {% if invoice %}
 <hr>
+<div><strong>Pricing model:</strong> {{ commercial.mode }} | <strong>Units:</strong> m²={{ commercial.units.total_m2 }}, rum={{ commercial.units.rooms_count }}, st={{ commercial.units.items_count }}</div>
+{% if commercial.mode == "PER_M2" %}<div>Qty: {{ commercial.units.total_m2 }} m² × Rate: {{ commercial.rate.rate_per_m2 }}</div>{% endif %}
+{% if commercial.mode == "PER_ROOM" %}<div>Qty: {{ commercial.units.rooms_count }} rum × Rate: {{ commercial.rate.rate_per_room }}</div>{% endif %}
 <h2>Invoice lines {{ help_icon('invoice.lines') }}</h2>
 {% if can_edit %}
-<form method="post" action="/projects/{{ project.id }}/invoices/{{ invoice.id }}/generate-lines" onsubmit="return confirm('Regenerate lines? Existing lines may be replaced.');">
+<form method="post" action="/projects/{{ project.id }}/invoices/{{ invoice.id }}/generate-lines" onsubmit="return confirm('Replace all lines?');">
     {{ csrf_input(request) }}
     <input type="hidden" name="include_labor" value="true">
     <label>Merge strategy {{ help_icon('invoice.merge_strategy') }}</label>
