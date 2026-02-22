@@ -1,0 +1,17 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1>Shopping List</h1>
+<form method="post" action="/projects/{{ project.id }}/shopping-list/settings">{{ csrf_input(request) }}
+<select name="preferred_supplier_id"><option value="">Auto</option>{% for s in suppliers %}<option value="{{ s.id }}" {% if procurement_settings.preferred_supplier_id == s.id %}selected{% endif %}>{{ s.name }}</option>{% endfor %}</select>
+<label><input type="checkbox" name="auto_select_cheapest" {% if procurement_settings.auto_select_cheapest %}checked{% endif %}> Cheapest</label>
+<select name="rounding_mode">{% for mode in rounding_modes %}<option value="{{ mode }}" {% if procurement_settings.rounding_mode.value == mode %}selected{% endif %}>{{ mode }}</option>{% endfor %}</select>
+<button type="submit">Save</button></form>
+<p><a href="/projects/{{ project.id }}/shopping-list/export.csv">Export CSV</a> | <a href="/projects/{{ project.id }}/shopping-list/export.pdf">Export PDF</a></p>
+<table><tr><th>Material</th><th>Qty</th><th>Packs</th><th>Pack size</th><th>Supplier</th><th>Pack price</th><th>Total</th></tr>
+{% for i in shopping_list.items %}<tr><td>{{ i.material_name }}</td><td>{{ i.qty_final_unit }} {{ i.unit }}</td><td>{{ i.packs_count }}</td><td>{{ i.pack_size or '-' }}</td><td>{{ i.supplier_name or '-' }}</td><td>{{ i.pack_price_ex_vat }}</td><td>{{ i.total_ex_vat }}</td></tr>{% endfor %}
+</table>
+<p>Total ex VAT: {{ shopping_list.total_ex_vat }} | inc VAT: {{ shopping_list.total_inc_vat }}</p>
+{% if shopping_list.warnings %}<ul>{% for w in shopping_list.warnings %}<li>{{ w }}</li>{% endfor %}</ul>{% endif %}
+<form method="post" action="/projects/{{ project.id }}/shopping-list/apply-costs">{{ csrf_input(request) }}<button type="submit">Apply to Project Costs</button></form>
+<form method="post" action="/projects/{{ project.id }}/shopping-list/apply-invoice">{{ csrf_input(request) }}<button type="submit" {% if not draft_invoice %}disabled{% endif %}>Apply as Invoice Material Lines</button></form>
+{% endblock %}

@@ -1,5 +1,6 @@
 import csv
 import io
+from pathlib import Path
 import logging
 from decimal import Decimal, InvalidOperation
 
@@ -64,6 +65,16 @@ from app.services.materials_bom import (
     get_or_create_project_material_settings,
     get_or_create_project_paint_settings,
 )
+from app.services.pdf_export import render_pdf_from_html
+from app.services.shopping_list import (
+    apply_shopping_list_to_invoice_material_lines,
+    apply_shopping_list_to_project_cost_items,
+    compute_project_shopping_list,
+    get_or_create_procurement_settings,
+)
+from app.models.project_procurement_settings import RoundingMode
+from app.models.supplier import Supplier
+from app.observability import REQUEST_ID_HEADER
 from app.security import OPERATOR_ROLE, ADMIN_ROLE, get_current_user_email, get_current_user_role, require_auth, require_role
 from app.i18n import make_t
 
@@ -73,6 +84,8 @@ MAX_IMPORT_FILE_BYTES = 5 * 1024 * 1024
 IMPORT_SESSION_KEY = "csv_import_previews"
 ROOMS_EXPORT_COLUMNS = ["room_id", "name", "floor_area_m2", "perimeter_m", "ceiling_height_m", "notes"]
 WORK_ITEMS_EXPORT_COLUMNS = ["item_id", "room_id", "room_name", "work_type_code", "work_type_name", "quantity", "unit", "notes"]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PDF_STYLESHEET = PROJECT_ROOT / "app" / "static" / "css" / "pdf_document.css"
 
 CRITICAL_WARNING_CODES = {
     WARNING_MISSING_UNITS_M2,
@@ -1535,6 +1548,92 @@ async def project_materials_plan_update_settings(project_id: int, request: Reque
     db.add(pricing)
     db.commit()
     return RedirectResponse(url=f"/projects/{project_id}/materials-plan", status_code=status.HTTP_303_SEE_OTHER)
+
+
+
+
+@router.get("/{project_id}/shopping-list")
+async def project_shopping_list_page(project_id: int, request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang)):
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    report = compute_project_shopping_list(db, project_id)
+    procurement = get_or_create_procurement_settings(db, project_id)
+    suppliers = db.query(Supplier).filter(Supplier.is_active.is_(True)).order_by(Supplier.name.asc()).all()
+    draft_invoice = db.query(Invoice).filter(Invoice.project_id == project_id, Invoice.status == "draft").order_by(Invoice.id.desc()).first()
+    log_event(db, request, "shopping_list_viewed", entity_type="PROJECT", entity_id=project_id, severity="INFO", metadata={"project_id": project_id, "count": len(report.items), "request_id": getattr(request.state, "request_id", None)})
+    context = build_project_context(db, request, project, lang, shopping_list=report, procurement_settings=procurement, suppliers=suppliers, draft_invoice=draft_invoice, rounding_modes=[m.value for m in RoundingMode], is_readonly=get_current_user_role(request) not in {ADMIN_ROLE, OPERATOR_ROLE})
+    return templates.TemplateResponse(request, "projects/shopping_list.html", context)
+
+
+@router.post("/{project_id}/shopping-list/settings")
+async def project_shopping_list_settings(project_id: int, request: Request, db: Session = Depends(get_db)):
+    if get_current_user_role(request) not in {ADMIN_ROLE, OPERATOR_ROLE}:
+        raise HTTPException(status_code=403, detail="Insufficient role")
+    form = await request.form()
+    settings = get_or_create_procurement_settings(db, project_id)
+    supplier_id = form.get("preferred_supplier_id")
+    settings.preferred_supplier_id = int(supplier_id) if supplier_id else None
+    settings.auto_select_cheapest = form.get("auto_select_cheapest") in ("on", "true", "1", True, 1)
+    settings.allow_substitutions = form.get("allow_substitutions") in ("on", "true", "1", True, 1)
+    settings.rounding_mode = RoundingMode(form.get("rounding_mode") or RoundingMode.CEIL_TO_PACKS.value)
+    db.add(settings)
+    db.commit()
+    return RedirectResponse(url=f"/projects/{project_id}/shopping-list", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.get("/{project_id}/shopping-list/export.csv")
+async def project_shopping_list_export_csv(project_id: int, request: Request, db: Session = Depends(get_db)):
+    if not db.get(Project, project_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    report = compute_project_shopping_list(db, project_id)
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=["material_name", "sku", "packs_count", "pack_size", "supplier", "pack_price_ex_vat", "total_ex_vat", "notes"])
+    writer.writeheader()
+    for item in report.items:
+        writer.writerow({"material_name": item.material_name, "sku": item.sku or "", "packs_count": item.packs_count, "pack_size": item.pack_size or "", "supplier": item.supplier_name or "", "pack_price_ex_vat": item.pack_price_ex_vat, "total_ex_vat": item.total_ex_vat, "notes": item.notes or ""})
+    log_event(db, request, "shopping_list_exported_csv", entity_type="PROJECT", entity_id=project_id, severity="INFO", metadata={"project_id": project_id, "count": len(report.items), "request_id": getattr(request.state, "request_id", None)})
+    return Response(content=output.getvalue(), media_type="text/csv; charset=utf-8", headers={"Content-Disposition": 'attachment; filename="shopping_list.csv"'})
+
+
+@router.get("/{project_id}/shopping-list/export.pdf")
+async def project_shopping_list_export_pdf(project_id: int, request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang)):
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    report = compute_project_shopping_list(db, project_id)
+    context = template_context(request, lang)
+    context.update({"project": project, "shopping_list": report})
+    html = templates.get_template("pdf/shopping_list_pdf.html").render(context)
+    try:
+        pdf_bytes = render_pdf_from_html(html=html, base_url=PROJECT_ROOT, stylesheet_path=PDF_STYLESHEET)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    log_event(db, request, "shopping_list_exported_pdf", entity_type="PROJECT", entity_id=project_id, severity="INFO", metadata={"project_id": project_id, "count": len(report.items), "request_id": getattr(request.state, "request_id", None)})
+    return Response(content=pdf_bytes, media_type="application/pdf", headers={"Content-Disposition": 'attachment; filename="shopping_list.pdf"', REQUEST_ID_HEADER: getattr(request.state, "request_id", "")})
+
+
+@router.post("/{project_id}/shopping-list/apply-costs")
+async def project_shopping_list_apply_costs(project_id: int, request: Request, db: Session = Depends(get_db)):
+    if get_current_user_role(request) not in {ADMIN_ROLE, OPERATOR_ROLE}:
+        raise HTTPException(status_code=403, detail="Insufficient role")
+    report = compute_project_shopping_list(db, project_id)
+    try:
+        count = apply_shopping_list_to_project_cost_items(db, project_id, report)
+    except ValueError:
+        raise HTTPException(status_code=409, detail="already applied")
+    log_event(db, request, "shopping_list_applied_to_costs", entity_type="PROJECT", entity_id=project_id, severity="INFO", metadata={"project_id": project_id, "count": count, "request_id": getattr(request.state, "request_id", None)})
+    return RedirectResponse(url=f"/projects/{project_id}/shopping-list", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{project_id}/shopping-list/apply-invoice")
+async def project_shopping_list_apply_invoice(project_id: int, request: Request, db: Session = Depends(get_db)):
+    if get_current_user_role(request) not in {ADMIN_ROLE, OPERATOR_ROLE}:
+        raise HTTPException(status_code=403, detail="Insufficient role")
+    report = compute_project_shopping_list(db, project_id)
+    count = apply_shopping_list_to_invoice_material_lines(db, project_id, report)
+    log_event(db, request, "shopping_list_applied_to_invoice", entity_type="PROJECT", entity_id=project_id, severity="INFO", metadata={"project_id": project_id, "count": count, "request_id": getattr(request.state, "request_id", None)})
+    return RedirectResponse(url=f"/projects/{project_id}/shopping-list", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/{project_id}/pricing")

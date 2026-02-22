@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1>Suppliers</h1>
+<form method="post" action="/settings/suppliers">{{ csrf_input(request) }}
+  <input name="name" placeholder="Name" required>
+  <input name="website" placeholder="Website">
+  <input name="phone" placeholder="Phone">
+  <input name="notes" placeholder="Notes">
+  <label><input type="checkbox" name="is_active" checked> Active</label>
+  <button type="submit">Add supplier</button>
+</form>
+{% for s in suppliers %}
+  <h3>{{ s.name }}</h3>
+  <table>
+    <tr><th>Material</th><th>Pack size</th><th>Price ex VAT</th><th>Currency</th></tr>
+    {% for p in s.material_prices %}
+      <tr><td>{{ p.material.name_sv }}</td><td>{{ p.pack_size }} {{ p.pack_unit }}</td><td>{{ p.pack_price_ex_vat }}</td><td>{{ p.currency }}</td></tr>
+    {% endfor %}
+  </table>
+  <form method="post" action="/settings/suppliers/{{ s.id }}/prices">{{ csrf_input(request) }}
+    <select name="material_id">{% for m in materials %}<option value="{{ m.id }}">{{ m.name_sv }}</option>{% endfor %}</select>
+    <input name="pack_size" placeholder="Pack size" required>
+    <input name="pack_price_ex_vat" placeholder="Pack price" required>
+    <input name="currency" value="SEK">
+    <button type="submit">Save price</button>
+  </form>
+{% endfor %}
+{% endblock %}
