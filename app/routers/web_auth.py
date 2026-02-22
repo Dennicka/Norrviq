@@ -1,4 +1,3 @@
-from urllib.parse import parse_qs
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Request
@@ -28,11 +27,10 @@ async def login_page(request: Request, lang: str = Depends(get_current_lang), ne
 
 @router.post("/login")
 async def login(request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang)):
-    form = await request.body()
-    data = dict((key, values[0]) for key, values in parse_qs(form.decode()).items())
-    email = data.get("email") or data.get("username", "")
-    password = data.get("password", "")
-    next_path = data.get("next", "/")
+    form = await request.form()
+    email = str(form.get("email") or form.get("username") or "")
+    password = str(form.get("password") or "")
+    next_path = str(form.get("next") or "/")
 
     user = authenticate_user(db, email=email, password=password)
     if user:
