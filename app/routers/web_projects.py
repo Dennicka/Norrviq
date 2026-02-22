@@ -1,10 +1,13 @@
+import csv
+import io
 import json
+import logging
 from decimal import Decimal, InvalidOperation
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session, selectinload
 
 from app.dependencies import add_flash_message, get_current_lang, get_db, template_context, templates
@@ -48,10 +51,15 @@ from app.services.pricing import (
     update_project_pricing,
     evaluate_floor,
 )
-from app.security import OPERATOR_ROLE, ADMIN_ROLE, get_current_user_email, get_current_user_role, require_auth
+from app.security import OPERATOR_ROLE, ADMIN_ROLE, get_current_user_email, get_current_user_role, require_auth, require_role
 from app.i18n import make_t
 
 router = APIRouter(prefix="/projects", tags=["projects"])
+logger = logging.getLogger("uvicorn.error")
+MAX_IMPORT_FILE_BYTES = 5 * 1024 * 1024
+IMPORT_SESSION_KEY = "csv_import_previews"
+ROOMS_EXPORT_COLUMNS = ["room_id", "name", "floor_area_m2", "perimeter_m", "ceiling_height_m", "notes"]
+WORK_ITEMS_EXPORT_COLUMNS = ["item_id", "room_id", "room_name", "work_type_code", "work_type_name", "quantity", "unit", "notes"]
 
 CRITICAL_WARNING_CODES = {
     WARNING_MISSING_UNITS_M2,
@@ -170,6 +178,48 @@ def _parse_date(value: str | None):
         return date.fromisoformat(value)
     except ValueError:
         return None
+
+
+def _parse_csv_decimal(value: str | None) -> Decimal | None:
+    if value is None:
+        return None
+    cleaned = value.strip()
+    if cleaned == "":
+        return None
+    if "," in cleaned:
+        return None
+    try:
+        return Decimal(cleaned)
+    except (InvalidOperation, ValueError):
+        return None
+
+
+def _read_csv_rows(file_bytes: bytes) -> tuple[list[str], list[dict[str, str]]]:
+    text = file_bytes.decode("utf-8-sig")
+    reader = csv.DictReader(io.StringIO(text), delimiter=",")
+    if not reader.fieldnames:
+        return [], []
+    return [h.strip() for h in reader.fieldnames], [{(k or "").strip(): (v or "").strip() for k, v in row.items()} for row in reader]
+
+
+def _audit_event(db: Session, *, event_type: str, user_id: str | None, project_id: int, details: dict) -> None:
+    db.add(
+        AuditEvent(
+            event_type=event_type,
+            user_id=user_id,
+            entity_type="project",
+            entity_id=project_id,
+            details=json.dumps(details, ensure_ascii=False),
+        )
+    )
+
+
+def _get_import_previews(request: Request) -> dict:
+    previews = request.session.get(IMPORT_SESSION_KEY)
+    if not isinstance(previews, dict):
+        previews = {}
+        request.session[IMPORT_SESSION_KEY] = previews
+    return previews
 
 
 def build_project_context(db: Session, request: Request, project: Project, lang: str, **extra):
@@ -429,6 +479,293 @@ def project_offer(
     )
 
     return templates.TemplateResponse(request, "projects/offer.html", context)
+
+
+def _preview_rooms_import(db: Session, project_id: int, headers: list[str], rows: list[dict[str, str]]) -> dict:
+    issues: list[dict] = []
+    actions: list[dict] = []
+    existing_rooms = {room.id: room for room in db.query(Room).filter(Room.project_id == project_id).all()}
+    room_by_name = {room.name.strip().lower(): room for room in existing_rooms.values() if room.name}
+    seen_ids: set[int] = set()
+    new_names: set[str] = set()
+    unknown_columns = [column for column in headers if column not in ROOMS_EXPORT_COLUMNS]
+    for column in unknown_columns:
+        issues.append({"row": 0, "severity": "WARNING", "message": f"Unknown column ignored: {column}"})
+    for index, row in enumerate(rows, start=2):
+        row_issues: list[dict] = []
+        room_id_value = row.get("room_id", "")
+        room_id = int(room_id_value) if room_id_value.isdigit() else None
+        if room_id is not None:
+            if room_id in seen_ids:
+                row_issues.append({"row": index, "severity": "BLOCK", "message": f"Duplicate room_id in file: {room_id}"})
+            seen_ids.add(room_id)
+        name = (row.get("name") or "").strip()
+        if not name:
+            row_issues.append({"row": index, "severity": "BLOCK", "message": "name is required"})
+        floor_area = _parse_csv_decimal(row.get("floor_area_m2"))
+        if floor_area is None or floor_area <= 0:
+            row_issues.append({"row": index, "severity": "BLOCK", "message": "floor_area_m2 must be greater than 0"})
+        perimeter = _parse_csv_decimal(row.get("perimeter_m"))
+        if perimeter is not None and perimeter <= 0:
+            row_issues.append({"row": index, "severity": "BLOCK", "message": "perimeter_m must be greater than 0"})
+        if perimeter is None:
+            row_issues.append({"row": index, "severity": "WARNING", "message": "perimeter_m is empty"})
+        height = _parse_csv_decimal(row.get("ceiling_height_m"))
+        if height is None or height <= 0:
+            row_issues.append({"row": index, "severity": "BLOCK", "message": "ceiling_height_m must be greater than 0"})
+
+        if room_id is not None:
+            existing = existing_rooms.get(room_id)
+            if not existing:
+                row_issues.append({"row": index, "severity": "BLOCK", "message": f"room_id {room_id} not found in this project"})
+            action = "update"
+        else:
+            action = "create"
+            lowered_name = name.lower()
+            if lowered_name in room_by_name or lowered_name in new_names:
+                row_issues.append({"row": index, "severity": "BLOCK", "message": f"Duplicate room name for create: {name}"})
+            new_names.add(lowered_name)
+
+        issues.extend(row_issues)
+        actions.append(
+            {
+                "row": index,
+                "action": action,
+                "room_id": room_id,
+                "name": name,
+                "floor_area_m2": row.get("floor_area_m2", ""),
+                "perimeter_m": row.get("perimeter_m", ""),
+                "ceiling_height_m": row.get("ceiling_height_m", ""),
+                "notes": row.get("notes", ""),
+                "issues": row_issues,
+            }
+        )
+    block_count = sum(1 for issue in issues if issue["severity"] == "BLOCK")
+    return {
+        "type": "rooms",
+        "headers": headers,
+        "rows": actions,
+        "issues": issues,
+        "created": sum(1 for action in actions if action["action"] == "create"),
+        "updated": sum(1 for action in actions if action["action"] == "update"),
+        "block_count": block_count,
+        "warning_count": sum(1 for issue in issues if issue["severity"] == "WARNING"),
+    }
+
+
+def _preview_work_items_import(db: Session, project_id: int, headers: list[str], rows: list[dict[str, str]]) -> dict:
+    issues: list[dict] = []
+    actions: list[dict] = []
+    existing_items = {item.id: item for item in db.query(ProjectWorkItem).filter(ProjectWorkItem.project_id == project_id).all()}
+    rooms = db.query(Room).filter(Room.project_id == project_id).all()
+    room_by_id = {room.id: room for room in rooms}
+    room_by_name = {room.name.strip().lower(): room for room in rooms if room.name}
+    work_types = db.query(WorkType).all()
+    wt_by_code = {wt.code.strip().lower(): wt for wt in work_types if wt.code}
+    wt_by_name = {wt.name_ru.strip().lower(): wt for wt in work_types if wt.name_ru}
+    wt_by_name.update({wt.name_sv.strip().lower(): wt for wt in work_types if wt.name_sv})
+
+    unknown_columns = [column for column in headers if column not in WORK_ITEMS_EXPORT_COLUMNS]
+    for column in unknown_columns:
+        issues.append({"row": 0, "severity": "WARNING", "message": f"Unknown column ignored: {column}"})
+
+    for index, row in enumerate(rows, start=2):
+        row_issues: list[dict] = []
+        item_id_value = row.get("item_id", "")
+        item_id = int(item_id_value) if item_id_value.isdigit() else None
+        quantity = _parse_csv_decimal(row.get("quantity"))
+        if quantity is None or quantity <= 0:
+            row_issues.append({"row": index, "severity": "BLOCK", "message": "quantity must be greater than 0"})
+
+        room = None
+        room_id_value = row.get("room_id", "")
+        room_id = int(room_id_value) if room_id_value.isdigit() else None
+        if room_id is not None:
+            room = room_by_id.get(room_id)
+        if room is None:
+            room_name = (row.get("room_name") or "").strip().lower()
+            room = room_by_name.get(room_name) if room_name else None
+        if room is None:
+            row_issues.append({"row": index, "severity": "BLOCK", "message": "Room not found by room_id/room_name"})
+
+        work_type = None
+        wt_code = (row.get("work_type_code") or "").strip().lower()
+        if wt_code:
+            work_type = wt_by_code.get(wt_code)
+        if work_type is None:
+            wt_name = (row.get("work_type_name") or "").strip().lower()
+            work_type = wt_by_name.get(wt_name) if wt_name else None
+        if work_type is None:
+            row_issues.append({"row": index, "severity": "BLOCK", "message": "Work type not found by code/name"})
+
+        if item_id is not None and item_id not in existing_items:
+            row_issues.append({"row": index, "severity": "BLOCK", "message": f"item_id {item_id} not found in this project"})
+
+        issues.extend(row_issues)
+        actions.append(
+            {
+                "row": index,
+                "action": "update" if item_id is not None else "create",
+                "item_id": item_id,
+                "room_id": room.id if room else None,
+                "room_name": room.name if room else row.get("room_name", ""),
+                "work_type_id": work_type.id if work_type else None,
+                "work_type_code": work_type.code if work_type else row.get("work_type_code", ""),
+                "quantity": row.get("quantity", ""),
+                "unit": row.get("unit", ""),
+                "notes": row.get("notes", ""),
+                "issues": row_issues,
+            }
+        )
+    block_count = sum(1 for issue in issues if issue["severity"] == "BLOCK")
+    return {
+        "type": "workitems",
+        "headers": headers,
+        "rows": actions,
+        "issues": issues,
+        "created": sum(1 for action in actions if action["action"] == "create"),
+        "updated": sum(1 for action in actions if action["action"] == "update"),
+        "block_count": block_count,
+        "warning_count": sum(1 for issue in issues if issue["severity"] == "WARNING"),
+    }
+
+
+@router.get("/{project_id}/rooms/export.csv")
+async def export_rooms_csv(project_id: int, request: Request, db: Session = Depends(get_db)):
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    output = io.StringIO()
+    writer = csv.writer(output, delimiter=",")
+    writer.writerow(ROOMS_EXPORT_COLUMNS)
+    rooms = db.query(Room).filter(Room.project_id == project_id).order_by(Room.id.asc()).all()
+    for room in rooms:
+        writer.writerow([room.id, room.name or "", room.floor_area_m2 or "", room.wall_perimeter_m or "", room.wall_height_m or "", room.description or ""])
+    _audit_event(db, event_type="csv_export_downloaded", user_id=get_current_user_email(request), project_id=project_id, details={"type": "rooms", "rows": len(rooms)})
+    db.commit()
+    logger.info("csv_export_downloaded type=rooms project_id=%s rows=%s request_id=%s", project_id, len(rooms), getattr(request.state, "request_id", None))
+    return Response(content=output.getvalue(), media_type="text/csv; charset=utf-8", headers={"Content-Disposition": 'attachment; filename="rooms_export.csv"'})
+
+
+@router.get("/{project_id}/work-items/export.csv")
+async def export_work_items_csv(project_id: int, request: Request, db: Session = Depends(get_db)):
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    output = io.StringIO()
+    writer = csv.writer(output, delimiter=",")
+    writer.writerow(WORK_ITEMS_EXPORT_COLUMNS)
+    items = (
+        db.query(ProjectWorkItem)
+        .options(selectinload(ProjectWorkItem.room), selectinload(ProjectWorkItem.work_type))
+        .filter(ProjectWorkItem.project_id == project_id)
+        .order_by(ProjectWorkItem.id.asc())
+        .all()
+    )
+    for item in items:
+        writer.writerow([item.id, item.room_id or "", item.room.name if item.room else "", item.work_type.code if item.work_type else "", item.work_type.name_ru if item.work_type else "", item.quantity or "", item.work_type.unit if item.work_type else "", item.comment or ""])
+    _audit_event(db, event_type="csv_export_downloaded", user_id=get_current_user_email(request), project_id=project_id, details={"type": "workitems", "rows": len(items)})
+    db.commit()
+    logger.info("csv_export_downloaded type=workitems project_id=%s rows=%s request_id=%s", project_id, len(items), getattr(request.state, "request_id", None))
+    return Response(content=output.getvalue(), media_type="text/csv; charset=utf-8", headers={"Content-Disposition": 'attachment; filename="work_items_export.csv"'})
+
+
+@router.get("/{project_id}/import")
+async def import_page(project_id: int, request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang)):
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    context = build_project_context(db, request, project, lang)
+    return templates.TemplateResponse(request, "projects/import.html", context)
+
+
+@router.post("/{project_id}/import/rooms/preview")
+async def preview_rooms_import(project_id: int, request: Request, file: UploadFile = File(...), db: Session = Depends(get_db), _: str = Depends(require_role(ADMIN_ROLE, OPERATOR_ROLE))):
+    payload = await file.read()
+    if len(payload) > MAX_IMPORT_FILE_BYTES:
+        raise HTTPException(status_code=400, detail="File too large (max 5 MB)")
+    headers, rows = _read_csv_rows(payload)
+    if not headers:
+        raise HTTPException(status_code=400, detail="CSV headers are required")
+    if not rows:
+        raise HTTPException(status_code=400, detail="CSV file is empty")
+    preview = _preview_rooms_import(db, project_id, headers, rows)
+    token = f"rooms-{project_id}-{len(rows)}"
+    previews = _get_import_previews(request)
+    previews[token] = preview
+    _audit_event(db, event_type="csv_import_previewed", user_id=get_current_user_email(request), project_id=project_id, details={"type": "rooms", "created": preview["created"], "updated": preview["updated"], "blocks": preview["block_count"]})
+    db.commit()
+    return JSONResponse({"preview_token": token, **preview})
+
+
+@router.post("/{project_id}/import/work-items/preview")
+async def preview_work_items_import(project_id: int, request: Request, file: UploadFile = File(...), db: Session = Depends(get_db), _: str = Depends(require_role(ADMIN_ROLE, OPERATOR_ROLE))):
+    payload = await file.read()
+    if len(payload) > MAX_IMPORT_FILE_BYTES:
+        raise HTTPException(status_code=400, detail="File too large (max 5 MB)")
+    headers, rows = _read_csv_rows(payload)
+    if not headers:
+        raise HTTPException(status_code=400, detail="CSV headers are required")
+    if not rows:
+        raise HTTPException(status_code=400, detail="CSV file is empty")
+    preview = _preview_work_items_import(db, project_id, headers, rows)
+    token = f"workitems-{project_id}-{len(rows)}"
+    previews = _get_import_previews(request)
+    previews[token] = preview
+    _audit_event(db, event_type="csv_import_previewed", user_id=get_current_user_email(request), project_id=project_id, details={"type": "workitems", "created": preview["created"], "updated": preview["updated"], "blocks": preview["block_count"]})
+    db.commit()
+    return JSONResponse({"preview_token": token, **preview})
+
+
+@router.post("/{project_id}/import/apply")
+async def apply_import(project_id: int, request: Request, preview_token: str = Form(...), db: Session = Depends(get_db), _: str = Depends(require_role(ADMIN_ROLE, OPERATOR_ROLE))):
+    previews = _get_import_previews(request)
+    preview = previews.get(preview_token)
+    if not preview:
+        raise HTTPException(status_code=400, detail="Preview token missing or expired")
+    if preview.get("block_count", 0) > 0:
+        raise HTTPException(status_code=400, detail="Import has blocking errors")
+    created = 0
+    updated = 0
+    try:
+        if preview["type"] == "rooms":
+            for row in preview["rows"]:
+                room = db.get(Room, row["room_id"]) if row["room_id"] else Room(project_id=project_id)
+                if row["room_id"] and (not room or room.project_id != project_id):
+                    raise HTTPException(status_code=400, detail=f"Cross-project room_id: {row['room_id']}")
+                room.name = row["name"]
+                room.floor_area_m2 = _parse_csv_decimal(row["floor_area_m2"])
+                room.wall_perimeter_m = _parse_csv_decimal(row["perimeter_m"])
+                room.wall_height_m = _parse_csv_decimal(row["ceiling_height_m"])
+                room.description = row.get("notes")
+                db.add(room)
+                updated += 1 if row["action"] == "update" else 0
+                created += 1 if row["action"] == "create" else 0
+        else:
+            for row in preview["rows"]:
+                item = db.get(ProjectWorkItem, row["item_id"]) if row["item_id"] else ProjectWorkItem(project_id=project_id)
+                if row["item_id"] and (not item or item.project_id != project_id):
+                    raise HTTPException(status_code=400, detail=f"Cross-project item_id: {row['item_id']}")
+                item.project_id = project_id
+                item.room_id = row["room_id"]
+                item.work_type_id = row["work_type_id"]
+                item.quantity = _parse_csv_decimal(row["quantity"])
+                item.comment = row.get("notes")
+                db.add(item)
+                updated += 1 if row["action"] == "update" else 0
+                created += 1 if row["action"] == "create" else 0
+        project = db.get(Project, project_id)
+        if project:
+            recalculate_project_work_items(db, project)
+            calculate_project_totals(db, project)
+        _audit_event(db, event_type="csv_import_applied", user_id=get_current_user_email(request), project_id=project_id, details={"type": preview["type"], "created": created, "updated": updated})
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    previews.pop(preview_token, None)
+    logger.info("csv_import_applied type=%s project_id=%s created=%s updated=%s request_id=%s", preview["type"], project_id, created, updated, getattr(request.state, "request_id", None))
+    return JSONResponse({"status": "ok", "type": preview["type"], "created": created, "updated": updated})
 
 
 @router.post("/{project_id}/add-work-item")

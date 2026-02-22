@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>CSV Import for {{ project.name }}</h1>
+<p><a href="/projects/{{ project.id }}">Back to project</a></p>
+
+<section>
+    <h2>Import Rooms CSV</h2>
+    <form method="post" action="/projects/{{ project.id }}/import/rooms/preview" enctype="multipart/form-data">
+        {{ csrf_input(request) }}
+        <input type="file" name="file" accept=".csv" required>
+        <button type="submit">Upload → Preview</button>
+    </form>
+</section>
+
+<section>
+    <h2>Import Work Items CSV</h2>
+    <form method="post" action="/projects/{{ project.id }}/import/work-items/preview" enctype="multipart/form-data">
+        {{ csrf_input(request) }}
+        <input type="file" name="file" accept=".csv" required>
+        <button type="submit">Upload → Preview</button>
+    </form>
+</section>
+
+<p>Preview responses are returned as JSON and include preview_token for apply.</p>
+{% endblock %}
