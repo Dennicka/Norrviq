@@ -1,4 +1,5 @@
 import logging
+from contextlib import asynccontextmanager
 
 import itsdangerous
 import multipart
@@ -62,7 +63,27 @@ settings = get_settings()
 configure_logging(settings)
 logger = logging.getLogger("uvicorn.error")
 
-app = FastAPI(title=settings.app_name)
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    logger.info("Using python-multipart from: %s", multipart.__file__)
+    logger.info("Using itsdangerous from: %s", itsdangerous.__file__)
+    ensure_schema_up_to_date()
+    db = SessionLocal()
+    try:
+        get_or_create_settings(db)
+        get_or_create_company_profile(db)
+        ensure_default_cost_categories(db)
+        ensure_default_legal_notes(db)
+        ensure_default_worktypes(db)
+        ensure_admin_user(db)
+    finally:
+        db.close()
+    yield
+
+
+app = FastAPI(title=settings.app_name, lifespan=lifespan)
 
 validate_security_settings()
 
@@ -78,23 +99,6 @@ app.add_middleware(
 )
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
-
-
-@app.on_event("startup")
-def startup_event():
-    logger.info("Using python-multipart from: %s", multipart.__file__)
-    logger.info("Using itsdangerous from: %s", itsdangerous.__file__)
-    ensure_schema_up_to_date()
-    db = SessionLocal()
-    try:
-        get_or_create_settings(db)
-        get_or_create_company_profile(db)
-        ensure_default_cost_categories(db)
-        ensure_default_legal_notes(db)
-        ensure_default_worktypes(db)
-        ensure_admin_user(db)
-    finally:
-        db.close()
 
 
 @app.middleware("http")

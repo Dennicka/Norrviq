@@ -142,7 +142,7 @@ def period_report(
             "to_date": to_date,
         }
     )
-    return templates.TemplateResponse("reports/period.html", context)
+    return templates.TemplateResponse(request, "reports/period.html", context)
 
 
 @router.get("/period/export.csv")

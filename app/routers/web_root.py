@@ -11,7 +11,7 @@ settings = get_settings()
 @router.get("/")
 async def root(request: Request, lang: str = Depends(get_current_lang)):
     context = template_context(request, lang)
-    return templates.TemplateResponse("index.html", context)
+    return templates.TemplateResponse(request, "index.html", context)
 
 
 @router.get("/lang/{lang_code}")

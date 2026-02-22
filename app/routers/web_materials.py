@@ -17,7 +17,7 @@ async def list_materials(
     materials = db.query(Material).all()
     context = template_context(request, lang)
     context["materials"] = materials
-    return templates.TemplateResponse("materials/list.html", context)
+    return templates.TemplateResponse(request, "materials/list.html", context)
 
 
 @router.get("/create")
@@ -26,7 +26,7 @@ async def new_material_form(
 ):
     context = template_context(request, lang)
     context["material"] = None
-    return templates.TemplateResponse("materials/form.html", context)
+    return templates.TemplateResponse(request, "materials/form.html", context)
 
 
 @router.post("/create")
@@ -63,7 +63,7 @@ async def edit_material_form(
 
     context = template_context(request, lang)
     context["material"] = material
-    return templates.TemplateResponse("materials/form.html", context)
+    return templates.TemplateResponse(request, "materials/form.html", context)
 
 
 @router.post("/{material_id}/edit")

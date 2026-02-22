@@ -15,7 +15,7 @@ async def list_cost_categories(
     categories = db.query(CostCategory).all()
     context = template_context(request, lang)
     context["categories"] = categories
-    return templates.TemplateResponse("cost_categories/list.html", context)
+    return templates.TemplateResponse(request, "cost_categories/list.html", context)
 
 
 @router.get("/new")
@@ -25,7 +25,7 @@ async def new_cost_category_form(
     context = template_context(request, lang)
     context["category"] = None
     context["code_readonly"] = False
-    return templates.TemplateResponse("cost_categories/form.html", context)
+    return templates.TemplateResponse(request, "cost_categories/form.html", context)
 
 
 @router.post("/new")
@@ -51,7 +51,7 @@ async def edit_cost_category_form(
     context = template_context(request, lang)
     context["category"] = category
     context["code_readonly"] = True
-    return templates.TemplateResponse("cost_categories/form.html", context)
+    return templates.TemplateResponse(request, "cost_categories/form.html", context)
 
 
 @router.post("/{category_id}/edit")

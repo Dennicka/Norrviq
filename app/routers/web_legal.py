@@ -15,7 +15,7 @@ async def list_legal_notes(
     notes = db.query(LegalNote).all()
     context = template_context(request, lang)
     context["notes"] = notes
-    return templates.TemplateResponse("legal_notes/list.html", context)
+    return templates.TemplateResponse(request, "legal_notes/list.html", context)
 
 
 @router.get("/new")
@@ -24,7 +24,7 @@ async def new_legal_note_form(
 ):
     context = template_context(request, lang)
     context["note"] = None
-    return templates.TemplateResponse("legal_notes/form.html", context)
+    return templates.TemplateResponse(request, "legal_notes/form.html", context)
 
 
 @router.post("/new")
@@ -53,7 +53,7 @@ async def edit_legal_note_form(
         raise HTTPException(status_code=404, detail="LegalNote not found")
     context = template_context(request, lang)
     context["note"] = note
-    return templates.TemplateResponse("legal_notes/form.html", context)
+    return templates.TemplateResponse(request, "legal_notes/form.html", context)
 
 
 @router.post("/{note_id}/edit")

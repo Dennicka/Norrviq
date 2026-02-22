@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 from decimal import Decimal
 
@@ -43,7 +43,7 @@ def test_resolve_effective_buffer_scoping_priority_and_tie_break():
         global_rule = BufferRule(kind="RISK", basis="INTERNAL_COST", unit="PERCENT", value=Decimal("10.00"), scope_type="GLOBAL", scope_id=None, priority=10, is_active=True)
         project_rule_old = BufferRule(kind="RISK", basis="INTERNAL_COST", unit="PERCENT", value=Decimal("20.00"), scope_type="PROJECT", scope_id=project.id, priority=50, is_active=True)
         project_rule_new = BufferRule(kind="RISK", basis="INTERNAL_COST", unit="PERCENT", value=Decimal("30.00"), scope_type="PROJECT", scope_id=project.id, priority=50, is_active=True)
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         project_rule_old.created_at = now
         project_rule_new.created_at = now + timedelta(seconds=1)
         db.add_all([global_rule, project_rule_old, project_rule_new])

@@ -78,4 +78,4 @@ def analytics_overview(
             "statuses": statuses,
         }
     )
-    return templates.TemplateResponse("analytics/overview.html", context)
+    return templates.TemplateResponse(request, "analytics/overview.html", context)

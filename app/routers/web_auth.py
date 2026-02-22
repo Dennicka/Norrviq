@@ -22,7 +22,7 @@ async def login_page(request: Request, lang: str = Depends(get_current_lang), ne
     context = template_context(request, lang)
     context["next_path"] = next
     context["invalid_credentials"] = False
-    return templates.TemplateResponse("auth/login.html", context)
+    return templates.TemplateResponse(request, "auth/login.html", context)
 
 
 @router.post("/login")
@@ -46,7 +46,7 @@ async def login(request: Request, db: Session = Depends(get_db), lang: str = Dep
     context = template_context(request, lang)
     context["next_path"] = next_path
     context["invalid_credentials"] = True
-    return templates.TemplateResponse("auth/login.html", context)
+    return templates.TemplateResponse(request, "auth/login.html", context)
 
 
 @router.get("/logout")

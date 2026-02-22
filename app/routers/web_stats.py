@@ -27,7 +27,7 @@ async def stats_overview(
     context.update(
         {"profit_by_month": by_month, "profit_by_client": by_client, "profit_by_worktype": by_worktype}
     )
-    return templates.TemplateResponse("stats/overview.html", context)
+    return templates.TemplateResponse(request, "stats/overview.html", context)
 
 
 @router.get("/export/monthly.csv")
