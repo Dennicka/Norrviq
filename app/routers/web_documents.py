@@ -16,6 +16,7 @@ from app.models.project import ProjectWorkItem
 from app.observability import REQUEST_ID_HEADER
 from app.security import require_role
 from app.services.estimates import calculate_project_totals, recalculate_project_work_items
+from app.services.offer_commercial import compute_offer_commercial, deserialize_offer_commercial
 from app.services.document_numbering import (
     CompletenessViolationError,
     FloorPolicyViolationError,
@@ -147,6 +148,23 @@ async def offer_pdf(
     recalculate_project_work_items(db, project)
     calculate_project_totals(db, project)
 
+    if project.offer_status == "issued":
+        commercial = deserialize_offer_commercial(project.offer_commercial_snapshot)
+    else:
+        commercial = None
+    if commercial is None:
+        computed = compute_offer_commercial(db, project.id, lang=lang)
+        commercial = {
+            "mode": computed.mode,
+            "units": computed.units,
+            "line_items": computed.line_items,
+            "price_ex_vat": computed.price_ex_vat,
+            "vat_amount": computed.vat_amount,
+            "price_inc_vat": computed.price_inc_vat,
+            "warnings": computed.warnings,
+            "math_breakdown": computed.math_breakdown,
+        }
+
     profile = get_or_create_company_profile(db)
     if project.offer_status == "issued":
         terms_title = project.offer_terms_snapshot_title or ""
@@ -161,7 +179,8 @@ async def offer_pdf(
         {
             "project": project,
             "client": project.client,
-            "work_items": project.work_items,
+            "work_items": commercial["line_items"],
+            "commercial": commercial,
             "company_profile": profile,
             "offer_number": project.offer_number,
             "offer_status": project.offer_status,
@@ -292,6 +311,13 @@ async def finalize_offer_action(
         add_flash_message(request, f"{exc}. Перейдите в Pricing.", "error")
         return RedirectResponse(url=f"/projects/{project_id}/pricing", status_code=status.HTTP_303_SEE_OTHER)
     except ValueError as exc:
+        if "Offer totals mismatch pricing scenario" in str(exc):
+            req_id = getattr(request.state, "request_id", "")
+            payload = {"detail": "Offer totals mismatch pricing scenario", "request_id": req_id}
+            if "application/json" in request.headers.get("accept", ""):
+                return JSONResponse(status_code=409, content=payload)
+            add_flash_message(request, f"{payload['detail']} (request_id={req_id})", "error")
+            return RedirectResponse(url=f"/projects/{project_id}/offer", status_code=status.HTTP_303_SEE_OTHER)
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     return RedirectResponse(url=f"/projects/{project_id}/offer", status_code=status.HTTP_303_SEE_OTHER)

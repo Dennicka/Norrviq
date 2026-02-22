@@ -49,21 +49,21 @@
                 {% for item in work_items %}
                 <tr>
                     <td>{{ loop.index }}</td>
-                    <td>{{ item.work_type.name_ru if lang == 'ru' else item.work_type.name_sv }}</td>
-                    <td>{{ item.work_type.unit }}</td>
-                    <td>{{ item.quantity }}</td>
-                    <td>{{ item.work_type.price_per_unit if item.work_type.price_per_unit else '' }}</td>
-                    <td>{{ item.calculated_cost_without_moms if item.calculated_cost_without_moms else '' }}</td>
+                    <td>{{ item.description }}</td>
+                    <td>{{ item.unit }}</td>
+                    <td>{{ item.qty }}</td>
+                    <td>{{ item.unit_price }}</td>
+                    <td>{{ item.total }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
 
         <div class="summary">
-            <div><span>{{ t("offer.summary.work_sum") }}</span><span>{{ project.work_sum_without_moms or 0 }}</span></div>
-            <div><span>{{ t("offer.summary.moms") }}</span><span>{{ project.moms_amount or 0 }}</span></div>
+            <div><span>{{ t("offer.summary.work_sum") }}</span><span>{{ commercial.price_ex_vat or 0 }}</span></div>
+            <div><span>{{ t("offer.summary.moms") }}</span><span>{{ commercial.vat_amount or 0 }}</span></div>
             <div><span>{{ t("offer.summary.rot") }}</span><span>{{ project.rot_amount or 0 }}</span></div>
-            <div><strong>{{ t("offer.summary.total") }}</strong><strong>{{ project.client_pays_total or 0 }}</strong></div>
+            <div><strong>{{ t("offer.summary.total") }}</strong><strong>{{ commercial.price_inc_vat or 0 }}</strong></div>
         </div>
     </section>
 

@@ -25,6 +25,7 @@ from app.models.worker import Worker
 from app.models.worktype import WorkType
 from app.models.settings import get_or_create_settings
 from app.services.estimates import calculate_project_totals, recalculate_project_work_items
+from app.services.offer_commercial import compute_offer_commercial, deserialize_offer_commercial
 from app.services.finance import calculate_project_financials, compute_project_finance
 from app.services.terms_templates import DOC_TYPE_OFFER, resolve_terms_template
 from app.services.buffer_audit import log_buffer_audit
@@ -453,6 +454,23 @@ def project_offer(
     recalculate_project_work_items(db, project)
     calculate_project_totals(db, project)
 
+    if project.offer_status == "issued":
+        commercial = deserialize_offer_commercial(project.offer_commercial_snapshot)
+    else:
+        commercial = None
+    if commercial is None:
+        offer_commercial = compute_offer_commercial(db, project.id, lang=lang)
+        commercial = {
+            "mode": offer_commercial.mode,
+            "units": offer_commercial.units,
+            "line_items": offer_commercial.line_items,
+            "price_ex_vat": offer_commercial.price_ex_vat,
+            "vat_amount": offer_commercial.vat_amount,
+            "price_inc_vat": offer_commercial.price_inc_vat,
+            "warnings": offer_commercial.warnings,
+            "math_breakdown": offer_commercial.math_breakdown,
+        }
+
     legal_notes = {
         note.code: note
         for note in db.query(LegalNote)
@@ -480,7 +498,8 @@ def project_offer(
         project,
         lang,
         client=project.client,
-        work_items=project.work_items,
+        work_items=commercial["line_items"],
+        commercial=commercial,
         offer_date=project.created_at.date() if project.created_at else date.today(),
         legal_notes=legal_notes,
         company_profile=company_profile,

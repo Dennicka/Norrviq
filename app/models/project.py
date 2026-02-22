@@ -24,6 +24,7 @@ class Project(Base):
     offer_number = Column(String(64), unique=True, index=True, nullable=True)
     offer_terms_snapshot_title = Column(Text, nullable=True)
     offer_terms_snapshot_body = Column(Text, nullable=True)
+    offer_commercial_snapshot = Column(Text, nullable=True)
     work_sum_without_moms = Column(Numeric(12, 2), nullable=True)
     moms_amount = Column(Numeric(12, 2), nullable=True)
     rot_amount = Column(Numeric(12, 2), nullable=True)

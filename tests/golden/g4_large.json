@@ -123,8 +123,29 @@
       "recommended_rate_per_room": "7973.25"
     }
   },
+  "offer_commercial": {
+    "line_items": [
+      {
+        "description": "Arbete (löpande räkning)",
+        "qty": "318.93",
+        "total": "209715.20",
+        "unit": "h",
+        "unit_price": "640.00"
+      }
+    ],
+    "mode": "HOURLY",
+    "price_ex_vat": "209715.20",
+    "price_inc_vat": "262144.00",
+    "units": {
+      "items_count": 54,
+      "m2_basis": "FLOOR_AREA",
+      "rooms_count": 20,
+      "total_m2": "340.00"
+    },
+    "vat_amount": "52428.80"
+  },
   "performance": {
-    "compute_seconds": "0.0570"
+    "compute_seconds": "0.0637"
   },
   "scenarios": {
     "FIXED_TOTAL": {

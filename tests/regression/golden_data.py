@@ -17,6 +17,7 @@ from app.models.project_takeoff_settings import ProjectTakeoffSettings
 from app.models.worker import Worker
 from app.models.worktype import WorkType
 from app.services.estimates import calculate_work_item
+from app.services.offer_commercial import compute_offer_commercial
 from app.services.pricing import DesiredInput, compute_conversions, compute_pricing_scenarios, evaluate_floor, get_or_create_project_pricing
 
 GOLDEN_DIR = Path("tests/golden")
@@ -265,6 +266,7 @@ def render_case_snapshot(db: Session, case_name: str) -> dict:
     floor_by_mode = {scenario.mode: evaluate_floor(baseline, scenario, policy) for scenario in scenarios}
     elapsed_s = Decimal(str(time.perf_counter() - started)).quantize(Decimal("0.0001"))
 
+    offer = compute_offer_commercial(db, project_id, lang="sv")
     payload = {
         "case": case_name,
         "baseline": {
@@ -288,6 +290,14 @@ def render_case_snapshot(db: Session, case_name: str) -> dict:
                 "invalid": s.invalid,
             }
             for s in scenarios
+        },
+        "offer_commercial": {
+            "mode": offer.mode,
+            "price_ex_vat": offer.price_ex_vat,
+            "vat_amount": offer.vat_amount,
+            "price_inc_vat": offer.price_inc_vat,
+            "line_items": offer.line_items,
+            "units": offer.units,
         },
         "converter": {
             "input": {
