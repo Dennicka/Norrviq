@@ -20,6 +20,8 @@ jobs:
           sudo apt-get install -y libcairo2 libpango-1.0-0 libpangoft2-1.0-0 libgdk-pixbuf-2.0-0 libffi8 shared-mime-info fonts-dejavu
       - name: Install dependencies
         run: pip install -r requirements.txt
+      - name: Dependency sanity check
+        run: python -c "import weasyprint, pydyf; print('weasyprint', weasyprint.__version__, 'pydyf', pydyf.__version__)"
       - name: Ruff lint
         run: ruff check .
 
@@ -37,6 +39,8 @@ jobs:
           sudo apt-get install -y libcairo2 libpango-1.0-0 libpangoft2-1.0-0 libgdk-pixbuf-2.0-0 libffi8 shared-mime-info fonts-dejavu
       - name: Install dependencies
         run: pip install -r requirements.txt
+      - name: Dependency sanity check
+        run: python -c "import weasyprint, pydyf; print('weasyprint', weasyprint.__version__, 'pydyf', pydyf.__version__)"
       - name: Run migrations on clean DB
         run: |
           export PYTHONPATH=$PYTHONPATH:.
