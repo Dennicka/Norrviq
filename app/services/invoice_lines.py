@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.models.audit_event import AuditEvent
 from app.models.invoice import Invoice
 from app.models.invoice_line import InvoiceLine
+from app.models.rot_case import RotCase
 from app.models.cost import ProjectCostItem
 from app.models.project import Project, ProjectWorkItem
 
@@ -26,6 +27,9 @@ def recalculate_invoice_totals(db: Session, invoice_id: int, user_id: str | None
         raise ValueError("Invoice not found")
 
     subtotal = Decimal("0.00")
+    labour_ex_vat = Decimal("0.00")
+    material_ex_vat = Decimal("0.00")
+    other_ex_vat = Decimal("0.00")
     vat_total = Decimal("0.00")
 
     for line in sorted(invoice.lines, key=lambda ln: ln.position):
@@ -42,16 +46,45 @@ def recalculate_invoice_totals(db: Session, invoice_id: int, user_id: str | None
         line.line_total_inc_vat = _q(line.line_total_ex_vat + line.vat_amount)
 
         subtotal += line.line_total_ex_vat
+        if line.kind == "LABOR":
+            labour_ex_vat += line.line_total_ex_vat
+        elif line.kind == "MATERIAL":
+            material_ex_vat += line.line_total_ex_vat
+        else:
+            other_ex_vat += line.line_total_ex_vat
         vat_total += line.vat_amount
 
     invoice.subtotal_ex_vat = _q(subtotal)
+    invoice.labour_ex_vat = _q(labour_ex_vat)
+    invoice.material_ex_vat = _q(material_ex_vat)
+    invoice.other_ex_vat = _q(other_ex_vat)
     invoice.vat_total = _q(vat_total)
     invoice.total_inc_vat = _q(invoice.subtotal_ex_vat + invoice.vat_total)
 
-    invoice.work_sum_without_moms = invoice.subtotal_ex_vat
+    rot_case = db.query(RotCase).filter(RotCase.invoice_id == invoice.id).first()
+    if invoice.status == "issued":
+        rot_enabled = bool(invoice.rot_snapshot_enabled)
+        rot_eligible = _q(Decimal(str(invoice.rot_snapshot_eligible_labor_ex_vat or 0)))
+        rot_pct = _q(Decimal(str(invoice.rot_snapshot_pct or 0)))
+        rot_amount = _q(Decimal(str(invoice.rot_snapshot_amount or 0)))
+    else:
+        rot_enabled = bool(rot_case and rot_case.is_enabled)
+        rot_eligible = invoice.labour_ex_vat
+        rot_pct = _q(Decimal(str(rot_case.rot_pct if rot_case else Decimal("30.00"))))
+        rot_amount = _q(rot_eligible * rot_pct / Decimal("100")) if rot_enabled else Decimal("0.00")
+        if rot_case:
+            rot_case.eligible_labor_ex_vat = rot_eligible
+            rot_case.rot_amount = rot_amount
+            db.add(rot_case)
+
+    total_to_pay = _q(invoice.total_inc_vat - rot_amount)
+    if total_to_pay < Decimal("0.00"):
+        total_to_pay = Decimal("0.00")
+
+    invoice.work_sum_without_moms = invoice.labour_ex_vat
     invoice.moms_amount = invoice.vat_total
-    invoice.rot_amount = Decimal("0.00")
-    invoice.client_pays_total = invoice.total_inc_vat
+    invoice.rot_amount = rot_amount
+    invoice.client_pays_total = total_to_pay
 
     db.add(
         AuditEvent(
@@ -59,7 +92,10 @@ def recalculate_invoice_totals(db: Session, invoice_id: int, user_id: str | None
             user_id=user_id,
             entity_type="invoice",
             entity_id=invoice.id,
-            details=f"lines={len(invoice.lines)} subtotal={invoice.subtotal_ex_vat}",
+            details=(
+                f"lines={len(invoice.lines)} subtotal={invoice.subtotal_ex_vat} "
+                f"labour={invoice.labour_ex_vat} material={invoice.material_ex_vat} rot={invoice.rot_amount}"
+            ),
         )
     )
     db.flush()

@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from app.config import get_settings
 from app.db import SessionLocal
 from app.main import app
-from app.models import Invoice, Project, ProjectPricing, ProjectWorkItem, Room, User, WorkType
+from app.models import Invoice, InvoiceLine, Project, ProjectPricing, ProjectWorkItem, Room, RotCase, User, WorkType
 from app.security import hash_password
 from app.services.invoice_lines import (
     MERGE_APPEND,
@@ -167,3 +167,90 @@ def test_rbac_and_csrf_for_invoice_lines():
     _login()
     no_csrf = client.post(f"/projects/{pid}/invoices/{iid}/lines/add", data={}, headers={"X-No-Auto-CSRF": "1"})
     assert no_csrf.status_code == 403
+
+
+def test_labor_material_split_totals():
+    _login()
+    pid = _create_project_with_work()
+    iid = _create_invoice(pid)
+    db = SessionLocal()
+    try:
+        invoice = db.get(Invoice, iid)
+        first = invoice.lines[0]
+        first.kind = "LABOR"
+        first.quantity = Decimal("2")
+        first.unit_price_ex_vat = Decimal("100")
+        db.add(
+            InvoiceLine(
+                invoice_id=iid,
+                position=2,
+                kind="MATERIAL",
+                description="Paint",
+                quantity=Decimal("1"),
+                unit_price_ex_vat=Decimal("40"),
+                vat_rate_pct=Decimal("25"),
+                source_type="MANUAL",
+            )
+        )
+        db.commit()
+        recalculate_invoice_totals(db, iid)
+        invoice = db.get(Invoice, iid)
+        assert invoice.labour_ex_vat == Decimal("200.00")
+        assert invoice.material_ex_vat == Decimal("40.00")
+        assert invoice.other_ex_vat == Decimal("0.00")
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_rot_applies_only_to_labor_ex_vat():
+    _login()
+    pid = _create_project_with_work()
+    iid = _create_invoice(pid)
+    db = SessionLocal()
+    try:
+        invoice = db.get(Invoice, iid)
+        line = invoice.lines[0]
+        line.kind = "LABOR"
+        line.quantity = Decimal("1")
+        line.unit_price_ex_vat = Decimal("100")
+        db.add(
+            InvoiceLine(
+                invoice_id=iid,
+                position=2,
+                kind="MATERIAL",
+                description="Material",
+                quantity=Decimal("1"),
+                unit_price_ex_vat=Decimal("200"),
+                vat_rate_pct=Decimal("25"),
+                source_type="MANUAL",
+            )
+        )
+        db.add(RotCase(invoice_id=iid, is_enabled=True, rot_pct=Decimal("30")))
+        db.flush()
+        recalculate_invoice_totals(db, iid)
+        assert invoice.rot_amount == Decimal("30.00")
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_rot_clamped_not_below_zero():
+    _login()
+    pid = _create_project_with_work()
+    iid = _create_invoice(pid)
+    db = SessionLocal()
+    try:
+        invoice = db.get(Invoice, iid)
+        line = invoice.lines[0]
+        line.kind = "LABOR"
+        line.quantity = Decimal("1")
+        line.unit_price_ex_vat = Decimal("1")
+        line.vat_rate_pct = Decimal("0")
+        db.add(RotCase(invoice_id=iid, is_enabled=True, rot_pct=Decimal("200")))
+        db.flush()
+        recalculate_invoice_totals(db, iid)
+        assert invoice.client_pays_total == Decimal("0.00")
+    finally:
+        db.rollback()
+        db.close()

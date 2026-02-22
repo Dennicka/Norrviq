@@ -39,9 +39,13 @@
             {% endfor %}
             </tbody>
         </table>
-        <p><strong>Subtotal ex VAT:</strong> {{ invoice.subtotal_ex_vat }}</p>
-        <p><strong>VAT total:</strong> {{ invoice.vat_total }}</p>
-        <p><strong>Total inc VAT:</strong> {{ invoice.total_inc_vat }}</p>
+        <p><strong>Arbete exkl. moms:</strong> {{ invoice.labour_ex_vat }}</p>
+        <p><strong>Material exkl. moms:</strong> {{ invoice.material_ex_vat }}</p>
+        <p><strong>Moms:</strong> {{ invoice.vat_total }}</p>
+        {% if (invoice.rot_case and invoice.rot_case.is_enabled) or invoice.rot_snapshot_enabled %}
+        <p><strong>ROT-avdrag:</strong> -{{ invoice.rot_amount }}</p>
+        {% endif %}
+        <p><strong>Att betala:</strong> {{ invoice.client_pays_total }}</p>
     </section>
 
     <section>

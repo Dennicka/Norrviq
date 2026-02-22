@@ -14,6 +14,7 @@ from app.models.audit_event import AuditEvent
 from app.models.invoice_line import InvoiceLine
 from app.models.invoice import Invoice
 from app.models.project import Project
+from app.models.rot_case import RotCase
 from app.models.settings import get_or_create_settings
 from app.security import ADMIN_ROLE, OPERATOR_ROLE, require_role
 from app.services.finance import compute_project_finance
@@ -56,7 +57,7 @@ def _get_project(db: Session, project_id: int) -> Project:
 def _get_invoice(db: Session, project_id: int, invoice_id: int) -> Invoice:
     invoice = (
         db.query(Invoice)
-        .options(selectinload(Invoice.project).selectinload(Project.client))
+        .options(selectinload(Invoice.project).selectinload(Project.client), selectinload(Invoice.rot_case), selectinload(Invoice.lines))
         .filter(Invoice.id == invoice_id, Invoice.project_id == project_id)
         .first()
     )
@@ -267,6 +268,31 @@ async def update_invoice(
     if requested_status in INVOICE_STATUSES and requested_status != "issued":
         invoice.status = requested_status
     invoice.comment = form.get("comment")
+
+    apply_rot = str(form.get("apply_rot") or "").lower() in {"1", "true", "on", "yes"}
+    rot_pct_raw = form.get("rot_pct") or "30"
+    try:
+        rot_pct = Decimal(str(rot_pct_raw)).quantize(Decimal("0.01"))
+    except Exception:
+        rot_pct = Decimal("30.00")
+
+    rot_case = invoice.rot_case
+    if rot_case is None:
+        rot_case = RotCase(invoice_id=invoice.id)
+    rot_case.is_enabled = apply_rot
+    rot_case.rot_pct = rot_pct
+    db.add(rot_case)
+    db.add(
+        AuditEvent(
+            event_type="rot_enabled_updated",
+            user_id=request.session.get("user_email"),
+            entity_type="invoice",
+            entity_id=invoice.id,
+            details=f"enabled={apply_rot};rot_pct={rot_pct}",
+        )
+    )
+
+    recalculate_invoice_totals(db, invoice.id, user_id=request.session.get("user_email"))
 
     db.add(invoice)
     db.commit()
@@ -501,4 +527,4 @@ async def update_invoice_line(
     db.add(AuditEvent(event_type="invoice_line_updated", user_id=request.session.get("user_email"), entity_type="invoice", entity_id=invoice.id, details=f"line_id={line.id}"))
     recalculate_invoice_totals(db, invoice.id, user_id=request.session.get("user_email"))
     db.commit()
-    return JSONResponse({"ok": True, "invoice_total": str(invoice.total_inc_vat)})
+    return JSONResponse({"ok": True, "invoice_total": str(invoice.client_pays_total)})
