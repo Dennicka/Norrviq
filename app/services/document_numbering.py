@@ -275,6 +275,10 @@ def finalize_invoice(db: Session, invoice_id: int, user_id: str | None, profile:
             _check_floor_policy_for_project(db, project_id=invoice.project_id, user_id=user_id, doc_type="invoice", doc_id=invoice.id)
 
             recalculate_invoice_totals(db, invoice.id, user_id=user_id)
+            has_material_lines = any((line.kind == "MATERIAL") for line in invoice.lines)
+            pricing_includes_materials = bool(invoice.project and invoice.project.pricing and invoice.project.pricing.include_materials)
+            if has_material_lines and not pricing_includes_materials:
+                raise ValueError("Enable include_materials in pricing or remove material lines")
             commercial = compute_invoice_commercial(db, invoice.project_id, invoice.id)
             consistency = validate_pricing_consistency(db, invoice.project_id, "INVOICE", invoice.id)
             if not consistency.ok:

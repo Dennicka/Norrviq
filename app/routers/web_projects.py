@@ -18,6 +18,7 @@ from app.models.legal_note import LegalNote
 from app.models.material import Material
 from app.models.paint_system import PaintSystem
 from app.models.invoice import Invoice
+from app.models.audit_event import AuditEvent
 from app.audit import log_event
 from app.models.project import Project, ProjectWorkItem, ProjectWorkerAssignment
 from app.models.project_takeoff_settings import M2_BASIS_CHOICES
@@ -1577,7 +1578,12 @@ async def project_shopping_list_settings(project_id: int, request: Request, db: 
     settings.auto_select_cheapest = form.get("auto_select_cheapest") in ("on", "true", "1", True, 1)
     settings.allow_substitutions = form.get("allow_substitutions") in ("on", "true", "1", True, 1)
     settings.rounding_mode = RoundingMode(form.get("rounding_mode") or RoundingMode.CEIL_TO_PACKS.value)
+    settings.material_pricing_mode = (form.get("material_pricing_mode") or settings.material_pricing_mode or "COST_PLUS_MARKUP").upper()
+    settings.material_markup_pct = Decimal(str(form.get("material_markup_pct") or settings.material_markup_pct or "20"))
+    settings.round_invoice_materials_to_packs = form.get("round_invoice_materials_to_packs") in ("on", "true", "1", True, 1)
+    settings.invoice_material_unit = (form.get("invoice_material_unit") or settings.invoice_material_unit or "PACKS").upper()
     db.add(settings)
+    db.add(AuditEvent(event_type="invoice_material_pricing_settings_updated", user_id=request.session.get("user_email"), entity_type="project", entity_id=project_id, details=f"mode={settings.material_pricing_mode};markup={settings.material_markup_pct};unit={settings.invoice_material_unit}"))
     db.commit()
     return RedirectResponse(url=f"/projects/{project_id}/shopping-list", status_code=status.HTTP_303_SEE_OTHER)
 
