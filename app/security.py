@@ -115,7 +115,7 @@ def log_auth_event(event: str, **kwargs) -> None:
 def ensure_csrf_token(request: Request) -> str:
     token = request.session.get(CSRF_SESSION_KEY)
     if not token:
-        token = secrets.token_urlsafe(32)
+        token = secrets.token_hex(32)
         request.session[CSRF_SESSION_KEY] = token
     return token
 

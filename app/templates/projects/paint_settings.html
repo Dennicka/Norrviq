@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Paint settings</h1>
+<p><a href="/projects/{{ project.id }}">← {{ project.name }}</a></p>
+<form method="post" action="/projects/{{ project.id }}/paint-settings">
+  {{ csrf_input(request) }}
+  <label>Default wall system
+    <select name="default_wall_paint_system_id" {% if is_readonly %}disabled{% endif %}>
+      <option value="">—</option>
+      {% for s in systems %}<option value="{{ s.id }}" {% if paint_settings.default_wall_paint_system_id==s.id %}selected{% endif %}>{{ s.name }} v{{ s.version }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Default ceiling system
+    <select name="default_ceiling_paint_system_id" {% if is_readonly %}disabled{% endif %}>
+      <option value="">—</option>
+      {% for s in systems %}<option value="{{ s.id }}" {% if paint_settings.default_ceiling_paint_system_id==s.id %}selected{% endif %}>{{ s.name }} v{{ s.version }}</option>{% endfor %}
+    </select>
+  </label>
+  {% if not is_readonly %}<button type="submit">Save</button>{% endif %}
+</form>
+<p>Preview BOM total cost: {{ bom.total_cost_ex_vat }}</p>
+{% endblock %}

@@ -90,6 +90,12 @@ class Project(Base):
         uselist=False,
         cascade="all, delete-orphan",
     )
+    paint_settings = relationship(
+        "ProjectPaintSettings",
+        back_populates="project",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
 
 
 class ProjectWorkItem(Base):

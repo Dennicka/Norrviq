@@ -30,6 +30,9 @@
       <td>{{ item.cost_ex_vat }}</td>
       <td>{{ item.sell_ex_vat }}</td>
     </tr>
+    {% if item.details %}
+    <tr><td colspan="6"><details><summary>Details</summary><ul>{% for d in item.details %}<li>{{ d.source }} · room={{ d.room_name or '—' }} · area={{ d.area_m2_used }} · system={{ d.system_name or '—' }} · step={{ d.step_order or '—' }} · recipe={{ d.recipe_id }}</li>{% endfor %}</ul></details></td></tr>
+    {% endif %}
     {% else %}
     <tr><td colspan="6">No BOM items</td></tr>
     {% endfor %}
