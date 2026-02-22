@@ -27,6 +27,7 @@ def reset_db():
                 "project_work_items",
                 "project_pricing",
                 "project_buffer_settings",
+                "project_execution_profiles",
                 "rooms",
                 "invoices",
                 "projects",
