@@ -13,6 +13,7 @@ from app.models.project_buffer_settings import ProjectBufferSettings
 from app.models.project_execution_profile import ProjectExecutionProfile
 from app.models.speed_profile import SpeedProfile
 from app.models.project_pricing import ProjectPricing
+from app.models.material_actuals import ProjectMaterialActuals
 from app.models.pricing_policy import PricingPolicy
 from app.models.settings import get_or_create_settings
 from app.services.buffer_rules import resolve_effective_buffer
@@ -299,9 +300,13 @@ def compute_project_baseline(
 
     material_settings = get_or_create_project_material_settings(db, project_id)
     if include_materials and material_settings.include_materials_in_pricing:
-        bom = compute_project_bom(db, project_id)
-        if bom.items:
-            materials_cost_internal = bom.total_cost_ex_vat
+        if material_settings.use_actual_material_costs:
+            actuals = db.query(ProjectMaterialActuals).filter(ProjectMaterialActuals.project_id == project_id).first()
+            materials_cost_internal = Decimal(str(actuals.actual_cost_ex_vat if actuals else 0))
+        else:
+            bom = compute_project_bom(db, project_id)
+            if bom.items:
+                materials_cost_internal = bom.total_cost_ex_vat
 
     if not include_materials:
         materials_cost_internal = Decimal("0")

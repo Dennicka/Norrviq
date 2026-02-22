@@ -4,7 +4,7 @@ from pathlib import Path
 import logging
 from decimal import Decimal, InvalidOperation
 
-from datetime import date
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
@@ -74,7 +74,16 @@ from app.services.shopping_list import (
     get_or_create_procurement_settings,
 )
 from app.models.project_procurement_settings import RoundingMode
+from app.services.material_actuals import (
+    build_quick_add_idempotency_key,
+    compute_materials_plan_vs_actual,
+    create_material_purchase,
+    export_plan_vs_actual_csv,
+    export_plan_vs_actual_pdf,
+    export_purchases_csv,
+)
 from app.models.supplier import Supplier
+from app.models.user import User
 from app.observability import REQUEST_ID_HEADER
 from app.security import OPERATOR_ROLE, ADMIN_ROLE, get_current_user_email, get_current_user_role, require_auth, require_role
 from app.i18n import make_t
@@ -93,6 +102,15 @@ CRITICAL_WARNING_CODES = {
     WARNING_MISSING_UNITS_ROOMS,
     WARNING_MISSING_ITEMS,
 }
+
+
+def _parse_purchase_datetime(value: str | None) -> datetime:
+    if not value:
+        return datetime.now(timezone.utc)
+    parsed = datetime.fromisoformat(value)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _normalize_for_display(value: Decimal | None) -> Decimal | None:
@@ -1543,6 +1561,7 @@ async def project_materials_plan_update_settings(project_id: int, request: Reque
     settings.default_markup_pct = Decimal(str(form.get("default_markup_pct") or "20"))
     settings.use_material_sell_price = form.get("use_material_sell_price") in ("on", "true", "1", True, 1)
     settings.include_materials_in_pricing = form.get("include_materials_in_pricing") in ("on", "true", "1", True, 1)
+    settings.use_actual_material_costs = form.get("use_actual_material_costs") in ("on", "true", "1", True, 1)
     db.add(settings)
     pricing = get_or_create_project_pricing(db, project_id)
     pricing.include_materials = settings.include_materials_in_pricing
@@ -1640,6 +1659,97 @@ async def project_shopping_list_apply_invoice(project_id: int, request: Request,
     count = apply_shopping_list_to_invoice_material_lines(db, project_id, report)
     log_event(db, request, "shopping_list_applied_to_invoice", entity_type="PROJECT", entity_id=project_id, severity="INFO", metadata={"project_id": project_id, "count": count, "request_id": getattr(request.state, "request_id", None)})
     return RedirectResponse(url=f"/projects/{project_id}/shopping-list", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.get("/{project_id}/materials-actuals")
+async def project_materials_actuals_page(project_id: int, request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang)):
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    report = compute_materials_plan_vs_actual(db, project_id)
+    purchases = db.query(Supplier).filter(Supplier.is_active.is_(True)).order_by(Supplier.name.asc()).all()
+    materials = db.query(Material).filter(Material.is_active.is_(True)).order_by(Material.name_sv.asc()).all()
+    shopping_list = compute_project_shopping_list(db, project_id)
+    log_event(db, request, "plan_vs_actual_viewed", entity_type="PROJECT", entity_id=project_id, metadata={"project_id": project_id, "request_id": getattr(request.state, "request_id", None)})
+    context = build_project_context(db, request, project, lang, suppliers=purchases, materials=materials, shopping_list=shopping_list, plan_actual=report, is_readonly=get_current_user_role(request) not in {ADMIN_ROLE, OPERATOR_ROLE})
+    return templates.TemplateResponse(request, "projects/materials_actuals.html", context)
+
+
+@router.post("/{project_id}/materials-actuals/purchases")
+async def create_materials_purchase(project_id: int, request: Request, db: Session = Depends(get_db)):
+    if get_current_user_role(request) not in {ADMIN_ROLE, OPERATOR_ROLE}:
+        raise HTTPException(status_code=403, detail="Insufficient role")
+    form = await request.form()
+    supplier_id = int(form.get("supplier_id")) if form.get("supplier_id") else None
+    user = db.query(User).filter(User.email == get_current_user_email(request)).first()
+    lines = []
+    material_ids = form.getlist("material_id")
+    packs_counts = form.getlist("packs_count")
+    pack_sizes = form.getlist("pack_size")
+    pack_prices = form.getlist("pack_price_ex_vat")
+    units = form.getlist("unit")
+    for i, material_id in enumerate(material_ids):
+        if not material_id:
+            continue
+        lines.append({"material_id": int(material_id), "packs_count": packs_counts[i], "pack_size": pack_sizes[i], "pack_price_ex_vat": pack_prices[i], "unit": units[i] or "PCS", "source": "MANUAL"})
+    if not lines:
+        raise HTTPException(status_code=422, detail="No purchase lines")
+    create_material_purchase(db, project_id=project_id, supplier_id=supplier_id, purchased_at=_parse_purchase_datetime(form.get("purchased_at")), invoice_ref=form.get("invoice_ref"), notes=form.get("notes"), currency=form.get("currency") or "SEK", user_id=user.id if user else None, lines=lines)
+    return RedirectResponse(url=f"/projects/{project_id}/materials-actuals", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{project_id}/materials-actuals/purchases/from-shopping-list")
+async def quick_create_materials_purchase(project_id: int, request: Request, db: Session = Depends(get_db)):
+    if get_current_user_role(request) not in {ADMIN_ROLE, OPERATOR_ROLE}:
+        raise HTTPException(status_code=403, detail="Insufficient role")
+    form = await request.form()
+    selected = form.getlist("selected_material_id")
+    if not selected:
+        raise HTTPException(status_code=422, detail="No shopping list items selected")
+    report = compute_project_shopping_list(db, project_id)
+    by_material = {str(i.material_id): i for i in report.items}
+    lines = []
+    payload_for_hash = []
+    for mid in selected:
+        item = by_material.get(str(mid))
+        if not item:
+            continue
+        packs = Decimal(str(form.get(f"packs_bought_{mid}") or item.packs_count or 0))
+        price = Decimal(str(form.get(f"pack_price_ex_vat_{mid}") or item.pack_price_ex_vat or 0))
+        lines.append({"material_id": int(mid), "packs_count": packs, "pack_size": item.pack_size or Decimal("1"), "pack_price_ex_vat": price, "unit": item.unit, "vat_rate_pct": item.vat_rate_pct, "source": "SHOPPING_LIST"})
+        payload_for_hash.append({"material_id": int(mid), "packs": str(packs), "price": str(price)})
+    idem = request.headers.get("Idempotency-Key") or build_quick_add_idempotency_key(project_id, {"selected": sorted(payload_for_hash)})
+    user = db.query(User).filter(User.email == get_current_user_email(request)).first()
+    create_material_purchase(db, project_id=project_id, supplier_id=None, purchased_at=datetime.now(timezone.utc), invoice_ref=form.get("invoice_ref"), notes="quick_add_from_shopping_list", currency="SEK", user_id=user.id if user else None, lines=lines, idempotency_key=idem)
+    return RedirectResponse(url=f"/projects/{project_id}/materials-actuals", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.get("/{project_id}/materials-actuals/export-plan-vs-actual.csv")
+async def materials_actuals_export_plan_vs_actual_csv(project_id: int, request: Request, db: Session = Depends(get_db)):
+    report = compute_materials_plan_vs_actual(db, project_id)
+    log_event(db, request, "materials_actuals_exported", entity_type="PROJECT", entity_id=project_id, metadata={"kind": "plan_vs_actual_csv"})
+    return Response(content=export_plan_vs_actual_csv(report), media_type="text/csv; charset=utf-8", headers={"Content-Disposition": 'attachment; filename="materials_plan_vs_actual.csv"'})
+
+
+@router.get("/{project_id}/materials-actuals/export-purchases.csv")
+async def materials_actuals_export_purchases_csv(project_id: int, request: Request, db: Session = Depends(get_db)):
+    content = export_purchases_csv(db, project_id)
+    log_event(db, request, "materials_actuals_exported", entity_type="PROJECT", entity_id=project_id, metadata={"kind": "purchases_csv"})
+    return Response(content=content, media_type="text/csv; charset=utf-8", headers={"Content-Disposition": 'attachment; filename="materials_purchases.csv"'})
+
+
+@router.get("/{project_id}/materials-actuals/export-report.pdf")
+async def materials_actuals_export_pdf(project_id: int, request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang)):
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    report = compute_materials_plan_vs_actual(db, project_id)
+    context = template_context(request, lang)
+    context.update({"project": project, "plan_actual": report})
+    html = templates.get_template("pdf/materials_actuals_pdf.html").render(context)
+    pdf_bytes = export_plan_vs_actual_pdf(html=html, base_url=PROJECT_ROOT, stylesheet_path=PDF_STYLESHEET)
+    log_event(db, request, "materials_actuals_exported", entity_type="PROJECT", entity_id=project_id, metadata={"kind": "pdf"})
+    return Response(content=pdf_bytes, media_type="application/pdf", headers={"Content-Disposition": 'attachment; filename="materials_actuals.pdf"'})
 
 
 @router.post("/{project_id}/pricing")
