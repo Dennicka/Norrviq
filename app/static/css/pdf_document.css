@@ -1,0 +1,83 @@
+@page {
+    size: A4;
+    margin: 14mm;
+}
+
+body {
+    font-family: "DejaVu Sans", Arial, sans-serif;
+    color: #111827;
+    font-size: 12px;
+}
+
+.pdf-page {
+    position: relative;
+}
+
+.watermark {
+    position: fixed;
+    top: 45%;
+    left: 10%;
+    right: 10%;
+    text-align: center;
+    font-size: 72px;
+    color: rgba(220, 38, 38, 0.18);
+    transform: rotate(-25deg);
+    z-index: 0;
+    font-weight: 700;
+}
+
+.doc-header {
+    display: flex;
+    justify-content: space-between;
+    border-bottom: 1px solid #d1d5db;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+}
+
+.meta {
+    text-align: right;
+}
+
+section {
+    margin-bottom: 12px;
+    position: relative;
+    z-index: 1;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+th,
+td {
+    border: 1px solid #d1d5db;
+    padding: 4px 6px;
+    vertical-align: top;
+    word-break: break-word;
+}
+
+thead {
+    display: table-header-group;
+}
+
+tr {
+    page-break-inside: avoid;
+}
+
+.summary {
+    width: 45%;
+    margin-left: auto;
+}
+
+.summary div {
+    display: flex;
+    justify-content: space-between;
+}
+
+pre {
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: "DejaVu Sans", Arial, sans-serif;
+}

@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="{{ lang }}">
+<head>
+    <meta charset="utf-8">
+    <link rel="stylesheet" href="{{ url_for('static', path='css/pdf_document.css') }}">
+</head>
+<body>
+<div class="pdf-page {% if is_draft %}is-draft{% endif %}">
+    {% if is_draft %}
+    <div class="watermark">DRAFT / UTKAST</div>
+    {% endif %}
+
+    <header class="doc-header">
+        <div>
+            <h1>{{ t("menu.invoices") }}</h1>
+            <p>{{ company_profile.legal_name }}</p>
+        </div>
+        <div class="meta">
+            <div>{{ t("invoice.field.number") }}: {{ invoice.invoice_number if invoice.invoice_number else "DRAFT" }}</div>
+            <div>{{ t("label.status") }}: {{ invoice.status|upper }}</div>
+            <div>{{ t("invoice.field.issue_date") }}: {{ invoice.issue_date }}</div>
+        </div>
+    </header>
+
+    <section>
+        <h2>Lines</h2>
+        <table>
+            <thead><tr><th>#</th><th>Description</th><th>Qty</th><th>Unit</th><th>Price ex VAT</th><th>Total ex VAT</th></tr></thead>
+            <tbody>
+            {% for line in invoice.lines %}
+            <tr>
+                <td>{{ line.position }}</td>
+                <td>{{ line.description }}</td>
+                <td>{{ line.quantity }}</td>
+                <td>{{ line.unit or '' }}</td>
+                <td>{{ line.unit_price_ex_vat }}</td>
+                <td>{{ line.line_total_ex_vat }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        <p><strong>Subtotal ex VAT:</strong> {{ invoice.subtotal_ex_vat }}</p>
+        <p><strong>VAT total:</strong> {{ invoice.vat_total }}</p>
+        <p><strong>Total inc VAT:</strong> {{ invoice.total_inc_vat }}</p>
+    </section>
+
+    <section>
+        <h2>{{ terms_title or "Terms / Villkor" }}</h2>
+        <pre>{{ terms_body }}</pre>
+    </section>
+</div>
+</body>
+</html>
