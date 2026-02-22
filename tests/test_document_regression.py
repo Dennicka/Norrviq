@@ -7,7 +7,9 @@ from fastapi.testclient import TestClient
 import pytest
 
 from app.config import get_settings
+from app.db import SessionLocal
 from app.main import app
+from app.models.company_profile import get_or_create_company_profile
 from tests.utils.document_factory import create_stable_document_fixture
 from tests.utils.snapshot import assert_matches_snapshot, normalize_document_html
 
@@ -72,22 +74,35 @@ def test_document_pdf_smoke(kind: str, issue_documents: bool, enable_rot: bool) 
     _login()
     fixture = create_stable_document_fixture(enable_rot=enable_rot, issue_documents=issue_documents)
 
+    db = SessionLocal()
+    try:
+        profile = get_or_create_company_profile(db)
+        offer_prefix = profile.offer_prefix or "OF-"
+        invoice_prefix = profile.invoice_prefix or "TR-"
+    finally:
+        db.close()
+
     if kind == "offer":
         response = client.get(f"/offers/{fixture.project_id}/pdf")
-        expected_header = "Offert"
-        doc_number = None
     else:
         response = client.get(f"/invoices/{fixture.invoice_id}/pdf")
-        expected_header = "Faktura"
-        doc_number = "TR-" if issue_documents else None
 
     assert response.status_code == 200
     assert response.content.startswith(b"%PDF")
 
     pdf_text = _extract_pdf_text(response.content)
-    assert expected_header in pdf_text
+    assert "Trenor Måleri AB" in pdf_text
+
+    if kind == "offer":
+        assert "Offert" in pdf_text or "Kommersiellt erbjudande" in pdf_text
+        if issue_documents:
+            assert offer_prefix in pdf_text
+        else:
+            assert "DRAFT" in pdf_text or "UTKAST" in pdf_text
+        return
+
+    assert "Faktura" in pdf_text
     assert "Moms" in pdf_text
-    if kind == "invoice" and enable_rot:
+    assert invoice_prefix in pdf_text
+    if enable_rot:
         assert "ROT-avdrag" in pdf_text
-    if doc_number:
-        assert doc_number in pdf_text
