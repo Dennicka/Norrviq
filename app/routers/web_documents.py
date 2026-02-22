@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -30,6 +31,8 @@ from app.dependencies import template_context, templates
 
 router = APIRouter(tags=["document-finalize"])
 logger = logging.getLogger("app.pdf")
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PDF_STYLESHEET = PROJECT_ROOT / "app" / "static" / "css" / "pdf_document.css"
 
 
 def _quality_gate_response(request: Request, *, project_id: int, issues: list[dict]):
@@ -172,7 +175,7 @@ async def offer_pdf(
     )
     html = templates.get_template("pdf/offer_pdf.html").render(context)
     try:
-        pdf_bytes = render_pdf_from_html(html=html, base_url=request.base_url)
+        pdf_bytes = render_pdf_from_html(html=html, base_url=PROJECT_ROOT, stylesheet_path=PDF_STYLESHEET)
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     _audit_pdf_download(
@@ -231,7 +234,7 @@ async def invoice_pdf(
     )
     html = templates.get_template("pdf/invoice_pdf.html").render(context)
     try:
-        pdf_bytes = render_pdf_from_html(html=html, base_url=request.base_url)
+        pdf_bytes = render_pdf_from_html(html=html, base_url=PROJECT_ROOT, stylesheet_path=PDF_STYLESHEET)
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     _audit_pdf_download(

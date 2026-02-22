@@ -103,6 +103,9 @@ def test_document_pdf_smoke(kind: str, issue_documents: bool, enable_rot: bool) 
 
     assert "Faktura" in pdf_text
     assert "Moms" in pdf_text
-    assert invoice_prefix in pdf_text
+    if issue_documents:
+        assert invoice_prefix in pdf_text
+    else:
+        assert "DRAFT" in pdf_text or "UTKAST" in pdf_text
     if enable_rot:
         assert "ROT-avdrag" in pdf_text
