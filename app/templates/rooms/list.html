@@ -33,6 +33,8 @@
         {{ csrf_input(request) }}
         <label>Height m <input type="number" name="wall_height_m" step="0.01" min="0"></label>
         <label>Description/tag <input type="text" name="description"></label>
+        <label>Wall system <select name="wall_paint_system_id"><option value="">—</option>{% for sys in paint_systems %}<option value="{{ sys.id }}">{{ sys.name }} v{{ sys.version }}</option>{% endfor %}</select></label>
+        <label>Ceiling system <select name="ceiling_paint_system_id"><option value="">—</option>{% for sys in paint_systems %}<option value="{{ sys.id }}">{{ sys.name }} v{{ sys.version }}</option>{% endfor %}</select></label>
         <label><input type="checkbox" name="apply_if_empty"> Apply only if empty</label>
         <button type="submit" onclick="return confirmBulkUpdate();">Apply to selected</button>
     </form>

@@ -10,9 +10,11 @@ from app.dependencies import add_flash_message, get_current_lang, get_db, templa
 from app.i18n import make_t
 from app.models.audit_event import AuditEvent
 from app.models.project import Project, ProjectWorkItem
+from app.models.paint_system import PaintSystem
 from app.models.room import Room
 from app.security import require_role
 from app.services.quality import evaluate_project_quality
+from app.services.materials_bom import get_or_create_room_paint_settings
 from app.services.rooms import recalc_room_dimensions
 
 router = APIRouter(prefix="/projects/{project_id}/rooms", tags=["rooms"])
@@ -106,7 +108,8 @@ async def list_rooms(
 
     rooms = sorted(project.rooms, key=lambda r: r.name.lower() if r.name else "")
     context = template_context(request, lang)
-    context.update({"project": project, "rooms": rooms})
+    systems = db.query(PaintSystem).filter(PaintSystem.is_active.is_(True)).order_by(PaintSystem.name.asc(), PaintSystem.version.desc()).all()
+    context.update({"project": project, "rooms": rooms, "paint_systems": systems})
     return templates.TemplateResponse(request, "rooms/list.html", context)
 
 
@@ -421,7 +424,9 @@ async def bulk_update_rooms(
     apply_if_empty = form.get("apply_if_empty") in ("on", "true", "1")
     height = _parse_decimal(form.get("wall_height_m"))
     description = form.get("description")
-    if height is None and (description is None or description == ""):
+    wall_system_id = int(form.get("wall_paint_system_id")) if form.get("wall_paint_system_id") else None
+    ceiling_system_id = int(form.get("ceiling_paint_system_id")) if form.get("ceiling_paint_system_id") else None
+    if height is None and (description is None or description == "") and wall_system_id is None and ceiling_system_id is None:
         raise HTTPException(status_code=400, detail="No fields provided for update")
     _validate_positive_decimal("wall_height_m", height)
 
@@ -440,6 +445,18 @@ async def bulk_update_rooms(
         if description is not None and description != "" and (not apply_if_empty or not room.description):
             room.description = description
             changed_fields.add("description")
+            room_changed = True
+        if wall_system_id is not None:
+            rps = get_or_create_room_paint_settings(db, room.id)
+            rps.wall_paint_system_id = wall_system_id
+            db.add(rps)
+            changed_fields.add("wall_paint_system_id")
+            room_changed = True
+        if ceiling_system_id is not None:
+            rps = get_or_create_room_paint_settings(db, room.id)
+            rps.ceiling_paint_system_id = ceiling_system_id
+            db.add(rps)
+            changed_fields.add("ceiling_paint_system_id")
             room_changed = True
         if room_changed:
             recalc_room_dimensions(room)

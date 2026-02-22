@@ -26,3 +26,9 @@ class Room(Base):
 
     project = relationship("Project", back_populates="rooms")
     work_items = relationship("ProjectWorkItem", back_populates="room")
+    paint_settings = relationship(
+        "RoomPaintSettings",
+        back_populates="room",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )

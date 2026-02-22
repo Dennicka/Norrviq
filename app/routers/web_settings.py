@@ -1,17 +1,19 @@
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_current_lang, get_db, template_context, templates
 from app.audit import log_event
 from app.models.buffer_rule import BufferRule
+from app.models.material_recipe import MaterialRecipe
 from app.models.company_profile import get_or_create_company_profile
 from app.models.pricing_policy import get_or_create_pricing_policy
 from app.models.settings import get_or_create_settings
 from app.models.terms_template import TermsTemplate
 from app.models.speed_profile import SpeedProfile
+from app.models.paint_system import PaintSystem, PaintSystemStep, PaintSystemSurface
 from app.models.sanity_rule import SanityRule
 from app.services.terms_templates import create_versioned_template
 
@@ -170,6 +172,77 @@ async def update_pricing_policy(request: Request, db: Session = Depends(get_db),
     db.add(policy)
     db.commit()
     return RedirectResponse(url="/settings/pricing-policy", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.get("/paint-systems")
+async def paint_systems_page(request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang)):
+    systems = db.query(PaintSystem).order_by(PaintSystem.name.asc(), PaintSystem.version.desc()).all()
+    recipes = db.query(MaterialRecipe).filter(MaterialRecipe.is_active.is_(True)).order_by(MaterialRecipe.name.asc()).all()
+    context = template_context(request, lang)
+    context.update({"systems": systems, "recipes": recipes, "surfaces": list(PaintSystemSurface)})
+    return templates.TemplateResponse(request, "settings/paint_systems.html", context)
+
+
+@router.post("/paint-systems/create")
+async def paint_systems_create(request: Request, db: Session = Depends(get_db)):
+    form = await request.form()
+    system = PaintSystem(
+        name=(form.get("name") or "").strip(),
+        description=(form.get("description") or "").strip() or None,
+        version=1,
+        is_active=form.get("is_active") in ("on", "true", "1", True, 1),
+    )
+    db.add(system)
+    db.commit()
+    return RedirectResponse(url="/settings/paint-systems", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/paint-systems/{system_id}/steps")
+async def paint_systems_add_step(system_id: int, request: Request, db: Session = Depends(get_db)):
+    system = db.get(PaintSystem, system_id)
+    if not system:
+        raise HTTPException(status_code=404, detail="Paint system not found")
+    form = await request.form()
+    recipe_id = int(form.get("recipe_id"))
+    target_surface = form.get("target_surface")
+    next_order = (max([s.step_order for s in system.steps], default=0) + 1)
+    step = PaintSystemStep(
+        paint_system_id=system.id,
+        step_order=next_order,
+        target_surface=PaintSystemSurface(target_surface),
+        recipe_id=recipe_id,
+        override_coats_count=int(form.get("override_coats_count")) if form.get("override_coats_count") else None,
+        override_waste_pct=Decimal(str(form.get("override_waste_pct"))) if form.get("override_waste_pct") else None,
+        is_optional=form.get("is_optional") in ("on", "true", "1", True, 1),
+    )
+    db.add(step)
+    db.commit()
+    return RedirectResponse(url="/settings/paint-systems", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/paint-systems/{system_id}/version")
+async def paint_systems_version(system_id: int, db: Session = Depends(get_db)):
+    system = db.get(PaintSystem, system_id)
+    if not system:
+        raise HTTPException(status_code=404, detail="Paint system not found")
+    next_version = db.query(PaintSystem).filter(PaintSystem.name == system.name).order_by(PaintSystem.version.desc()).first()
+    new_system = PaintSystem(name=system.name, description=system.description, is_active=True, version=(next_version.version + 1 if next_version else system.version + 1))
+    db.add(new_system)
+    db.flush()
+    for step in sorted(system.steps, key=lambda x: x.step_order):
+        db.add(PaintSystemStep(
+            paint_system_id=new_system.id,
+            step_order=step.step_order,
+            target_surface=step.target_surface,
+            recipe_id=step.recipe_id,
+            override_coats_count=step.override_coats_count,
+            override_waste_pct=step.override_waste_pct,
+            is_optional=step.is_optional,
+        ))
+    system.is_active = False
+    db.add(system)
+    db.commit()
+    return RedirectResponse(url="/settings/paint-systems", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.get("/company")

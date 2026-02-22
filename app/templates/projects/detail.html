@@ -10,6 +10,7 @@
     |
     <a href="/projects/{{ project.id }}/pricing">Pricing</a>
     <a href="/projects/{{ project.id }}/materials-plan">Materials plan</a>
+    <a href="/projects/{{ project.id }}/paint-settings">Paint settings</a>
     <a href="/projects/{{ project.id }}/buffers">Buffers</a>
     <form method="post" action="/projects/{{ project.id }}/delete" style="display:inline;">
         {{ csrf_input(request) }}

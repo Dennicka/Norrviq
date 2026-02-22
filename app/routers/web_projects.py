@@ -15,6 +15,7 @@ from app.models.company_profile import get_or_create_company_profile
 from app.models.cost import CostCategory, ProjectCostItem
 from app.models.legal_note import LegalNote
 from app.models.material import Material
+from app.models.paint_system import PaintSystem
 from app.models.invoice import Invoice
 from app.audit import log_event
 from app.models.project import Project, ProjectWorkItem, ProjectWorkerAssignment
@@ -61,6 +62,7 @@ from app.services.materials_bom import (
     apply_bom_to_project_cost_items,
     compute_project_bom,
     get_or_create_project_material_settings,
+    get_or_create_project_paint_settings,
 )
 from app.security import OPERATOR_ROLE, ADMIN_ROLE, get_current_user_email, get_current_user_role, require_auth, require_role
 from app.i18n import make_t
@@ -1420,6 +1422,49 @@ async def project_takeoff_update(
     db.add(takeoff)
     db.commit()
     return RedirectResponse(url=f"/projects/{project_id}/takeoff", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.get("/{project_id}/paint-settings")
+async def project_paint_settings_page(
+    project_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    lang: str = Depends(get_current_lang),
+):
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    settings = get_or_create_project_paint_settings(db, project_id)
+    systems = db.query(PaintSystem).filter(PaintSystem.is_active.is_(True)).order_by(PaintSystem.name.asc(), PaintSystem.version.desc()).all()
+    report = compute_project_bom(db, project_id)
+    context = build_project_context(
+        db,
+        request,
+        project,
+        lang,
+        paint_settings=settings,
+        systems=systems,
+        bom=report,
+        is_readonly=get_current_user_role(request) not in {ADMIN_ROLE, OPERATOR_ROLE},
+    )
+    return templates.TemplateResponse(request, "projects/paint_settings.html", context)
+
+
+@router.post("/{project_id}/paint-settings")
+async def project_paint_settings_update(project_id: int, request: Request, db: Session = Depends(get_db)):
+    if get_current_user_role(request) not in {ADMIN_ROLE, OPERATOR_ROLE}:
+        raise HTTPException(status_code=403, detail="Insufficient role")
+    if not db.get(Project, project_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    form = await request.form()
+    settings = get_or_create_project_paint_settings(db, project_id)
+    wall_id = form.get("default_wall_paint_system_id")
+    ceil_id = form.get("default_ceiling_paint_system_id")
+    settings.default_wall_paint_system_id = int(wall_id) if wall_id else None
+    settings.default_ceiling_paint_system_id = int(ceil_id) if ceil_id else None
+    db.add(settings)
+    db.commit()
+    return RedirectResponse(url=f"/projects/{project_id}/paint-settings", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.get("/{project_id}/materials-plan")

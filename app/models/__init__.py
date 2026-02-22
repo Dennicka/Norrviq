@@ -29,6 +29,7 @@ from .project_takeoff_settings import ProjectTakeoffSettings
 from .project_material_settings import ProjectMaterialSettings
 from .db_backup import DBBackup
 from .commercial_snapshot import CommercialSnapshot
+from .paint_system import PaintSystem, PaintSystemStep, PaintSystemSurface, ProjectPaintSettings, RoomPaintSettings
 
 __all__ = [
     "Client",
@@ -65,4 +66,9 @@ __all__ = [
     "ProjectMaterialSettings",
     "DBBackup",
     "CommercialSnapshot",
+    "PaintSystem",
+    "PaintSystemStep",
+    "PaintSystemSurface",
+    "ProjectPaintSettings",
+    "RoomPaintSettings",
 ]

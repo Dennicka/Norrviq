@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Paint systems</h1>
+<form method="post" action="/settings/paint-systems/create">
+  {{ csrf_input(request) }}
+  <label>Name <input type="text" name="name" required></label>
+  <label>Description <input type="text" name="description"></label>
+  <label><input type="checkbox" name="is_active" checked> Active</label>
+  <button type="submit">Create system</button>
+</form>
+
+{% for system in systems %}
+<section style="margin-top:16px;border-top:1px solid #ccc;">
+  <h3>{{ system.name }} v{{ system.version }} {% if not system.is_active %}(inactive){% endif %}</h3>
+  <p>{{ system.description or '' }}</p>
+  <table>
+    <thead><tr><th>Order</th><th>Surface</th><th>Recipe</th><th>Override coats</th><th>Override waste %</th></tr></thead>
+    <tbody>
+      {% for step in system.steps %}
+      <tr>
+        <td>{{ step.step_order }}</td>
+        <td>{{ step.target_surface.value }}</td>
+        <td>{{ step.recipe.name }}</td>
+        <td>{{ step.override_coats_count or '—' }}</td>
+        <td>{{ step.override_waste_pct or '—' }}</td>
+      </tr>
+      {% else %}<tr><td colspan="5">No steps</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  {% if system.is_active %}
+  <form method="post" action="/settings/paint-systems/{{ system.id }}/steps">
+    {{ csrf_input(request) }}
+    <select name="target_surface">{% for s in surfaces %}<option value="{{ s.value }}">{{ s.value }}</option>{% endfor %}</select>
+    <select name="recipe_id">{% for recipe in recipes %}<option value="{{ recipe.id }}">{{ recipe.name }}</option>{% endfor %}</select>
+    <input type="number" name="override_coats_count" placeholder="coats" min="1">
+    <input type="number" name="override_waste_pct" placeholder="waste %" step="0.01">
+    <label><input type="checkbox" name="is_optional"> Optional</label>
+    <button type="submit">Add step</button>
+  </form>
+  {% endif %}
+  <form method="post" action="/settings/paint-systems/{{ system.id }}/version">
+    {{ csrf_input(request) }}
+    <button type="submit">Create new version</button>
+  </form>
+</section>
+{% endfor %}
+{% endblock %}
