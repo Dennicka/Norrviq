@@ -4,9 +4,9 @@
 <p><a href="/projects/{{ project.id }}">← Back</a></p>
 <form method="post" action="/projects/{{ project.id }}/buffers" data-autosave="true" data-autosave-entity="project-settings" data-autosave-id="{{ project.id }}" data-autosave-fieldhash="buffers" data-server-updated-at="{{ buffer_settings.updated_at.isoformat() if buffer_settings.updated_at else '' }}" data-autosave-endpoint="/api/projects/{{ project.id }}/settings">
   {{ csrf_input(request) }}
-  <label><input type="checkbox" name="include_setup_cleanup_travel" {% if buffer_settings.include_setup_cleanup_travel %}checked{% endif %}> Include setup/cleanup/travel</label><br>
-  <label><input type="checkbox" name="include_risk" {% if buffer_settings.include_risk %}checked{% endif %}> Include risk</label><br>
-  <label>Speed profile
+  <label><input type="checkbox" name="include_setup_cleanup_travel" {% if buffer_settings.include_setup_cleanup_travel %}checked{% endif %}> Include setup/cleanup/travel {{ help_icon('buffers.include_setup_cleanup_travel') }}</label><br>
+  <label><input type="checkbox" name="include_risk" {% if buffer_settings.include_risk %}checked{% endif %}> Include risk {{ help_icon('buffers.include_risk') }}</label><br>
+  <label>Speed profile {{ help_icon('speed.multiplier') }}
     <select name="speed_profile_id">
       <option value="">MEDIUM (default)</option>
       {% for profile in speed_profiles %}

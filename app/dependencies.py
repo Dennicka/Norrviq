@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from .config import get_settings
 from .db import SessionLocal
 from .i18n import make_t
+from .help.render import help_icon
 from .security import ensure_csrf_token, validate_csrf_token
 from .maintenance import is_enabled
 
@@ -22,6 +23,7 @@ def csrf_input(request: Request) -> Markup:
 
 
 templates.env.globals["csrf_input"] = csrf_input
+templates.env.globals["help_icon"] = help_icon
 
 
 

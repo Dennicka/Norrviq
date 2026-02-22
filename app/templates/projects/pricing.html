@@ -34,7 +34,7 @@
         {% set comp = completeness_by_mode.get(mode_value) if completeness_by_mode else None %}
         <label style="display:block; margin-bottom:4px;">
             <input type="radio" name="mode" value="{{ mode_value }}" {% if current_mode == mode_value %}checked{% endif %} {% if is_readonly %}disabled{% endif %}>
-            {{ mode_label }}
+            {{ mode_label }} {{ help_icon('pricing.mode') }}
             {% if comp %}<small>— score {{ comp.score }}/100 ({{ comp.level }}){% if not comp.can_issue_mode %} · заблокировано для issue{% endif %}</small>{% endif %}
         </label>
         {% endfor %}
@@ -42,42 +42,42 @@
 
     {% if selected_completeness %}
     <section style="padding:8px; border:1px solid #ddd;">
-        <h3>Completeness / Confidence</h3>
+        <h3>Completeness / Confidence {{ help_icon('completeness.score') }}</h3>
         <p><strong>{{ selected_completeness.score }}/100</strong> ({{ selected_completeness.level }})</p>
-        {% if not selected_completeness.can_issue_mode %}<p style="color:#b00020;">Issue будет заблокирован для этого режима.</p>{% endif %}
+        {% if not selected_completeness.can_issue_mode %}<p style="color:#b00020;">Issue будет заблокирован для этого режима {{ help_icon('completeness.fixed_block') }}.</p>{% endif %}
     </section>
     {% endif %}
 
     <section data-mode-panel="HOURLY">
         <h3>Hourly</h3>
-        <label>Hourly rate override (optional)</label>
+        <label>Hourly rate override (optional) {{ help_icon('pricing.hourly_rate_override') }}</label>
         <input type="number" step="0.01" min="0" name="hourly_rate_override" value="{{ form_data.get('hourly_rate_override') or '' }}" {% if is_readonly %}disabled{% endif %}>
     </section>
 
     <section data-mode-panel="FIXED_TOTAL">
-        <h3>Fixed total <span class="help" title="Фиксированная цена проекта целиком. Пример: 120000 SEK за весь проект.">?</span></h3>
+        <h3>Fixed total {{ help_icon('pricing.fixed_total_price') }}</h3>
         <input type="number" step="0.01" min="0" name="fixed_total_price" value="{{ form_data.get('fixed_total_price') or '' }}" {% if is_readonly %}disabled{% endif %}>
-        <div><small>Effective hourly: {{ effective_by_mode.get('FIXED_TOTAL') or '—' }}</small></div>
+        <div><small>Effective hourly {{ help_icon('pricing.effective_hourly') }}: {{ effective_by_mode.get('FIXED_TOTAL') or '—' }}</small></div>
     </section>
 
     <section data-mode-panel="PER_M2">
-        <h3>Rate per m² <span class="help" title="Ставка за каждый квадратный метр. Пример: 350 SEK/м².">?</span></h3>
+        <h3>Rate per m² {{ help_icon('pricing.rate_per_m2') }}</h3>
         <input type="number" step="0.01" min="0" name="rate_per_m2" value="{{ form_data.get('rate_per_m2') or '' }}" {% if is_readonly %}disabled{% endif %}>
         <div><small>Effective hourly: {{ effective_by_mode.get('PER_M2') or '—' }}</small></div>
     </section>
 
     <section data-mode-panel="PER_ROOM">
-        <h3>Rate per room</h3>
+        <h3>Rate per room {{ help_icon('pricing.rate_per_room') }}</h3>
         <input type="number" step="0.01" min="0" name="rate_per_room" value="{{ form_data.get('rate_per_room') or '' }}" {% if is_readonly %}disabled{% endif %}>
         <div><small>Effective hourly: {{ effective_by_mode.get('PER_ROOM') or '—' }}</small></div>
     </section>
 
     <section data-mode-panel="PIECEWORK">
         <h3>Piecework</h3>
-        <label>Rate per piece</label>
+        <label>Rate per piece {{ help_icon('pricing.rate_per_piece') }}</label>
         <input type="number" step="0.01" min="0" name="rate_per_piece" value="{{ form_data.get('rate_per_piece') or '' }}" {% if is_readonly %}disabled{% endif %}>
         <div><small>Effective hourly: {{ effective_by_mode.get('PIECEWORK') or '—' }}</small></div>
-        <label>Target margin % <span class="help" title="Желаемая маржа в процентах. Пример: 25 означает целиться в 25% маржи.">?</span></label>
+        <label>Target margin % {{ help_icon('pricing.target_margin_pct') }}</label>
         <input type="number" step="0.01" min="0" max="80" name="target_margin_pct" value="{{ form_data.get('target_margin_pct') or '' }}" {% if is_readonly %}disabled{% endif %}>
     </section>
 
@@ -160,8 +160,8 @@
             <th>Effective hourly (ex VAT)</th>
             <th>Profit</th>
             <th>Margin %</th>
-            <th>Warnings</th>
-            <th>Floor policy</th>
+            <th>Warnings {{ help_icon('quality.warning_vs_block') }} {{ help_icon('quality.anomalies') }}</th>
+            <th>Floor policy {{ help_icon('pricing.floor_policy') }}</th>
             <th>Action</th>
         </tr>
     </thead>

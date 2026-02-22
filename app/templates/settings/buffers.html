@@ -1,16 +1,16 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>Buffer rules</h1>
-<p>Setup/Cleanup/Travel — подготовка, уборка, логистика. Risk — непредвиденные работы.</p>
-<p>Fixed добавляет фикс, Percent считает от raw базы (часы или себестоимость).</p>
+<p>Setup {{ help_icon('buffers.setup') }}/Cleanup {{ help_icon('buffers.cleanup') }}/Travel {{ help_icon('buffers.travel') }} — подготовка, уборка, логистика. Risk {{ help_icon('buffers.risk') }} — непредвиденные работы.</p>
+<p>Fixed/Percent {{ help_icon('buffers.percent_vs_fixed') }} считаются от базы {{ help_icon('buffers.basis') }}.</p>
 
 <form method="post" action="/settings/buffers" class="form-grid">
   {{ csrf_input(request) }}
   <label>Kind</label>
   <select name="kind"><option>SETUP</option><option>CLEANUP</option><option>TRAVEL</option><option>RISK</option></select>
-  <label>Basis</label>
+  <label>Basis {{ help_icon('buffers.basis') }}</label>
   <select name="basis"><option>LABOR_HOURS</option><option>INTERNAL_COST</option></select>
-  <label>Unit</label>
+  <label>Unit {{ help_icon('buffers.percent_vs_fixed') }}</label>
   <select name="unit"><option>PERCENT</option><option>FIXED_HOURS</option><option>FIXED_SEK</option></select>
   <label>Value</label><input type="number" step="0.01" name="value" required>
   <label>Scope</label>

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>Terms templates</h1>
+<h1>Terms templates {{ help_icon('terms.versioning') }}</h1>
 
 <h2>Create / New version</h2>
 <form method="post" action="/settings/terms" class="form-grid">
@@ -35,12 +35,12 @@
     <textarea name="body_text" rows="8" required></textarea>
 
     <label><input type="checkbox" name="is_active" checked> Active</label>
-    <button type="submit">Save as new version</button>
+    <button type="submit">Save as new version {{ help_icon('terms.snapshot_on_issue') }}</button>
 </form>
 
 <h2>Existing templates</h2>
 <table>
-    <thead><tr><th>ID</th><th>Segment</th><th>Type</th><th>Lang</th><th>Version</th><th>Active</th><th>Title</th></tr></thead>
+    <thead><tr><th>ID</th><th>Segment</th><th>Type</th><th>Lang</th><th>Version {{ help_icon('terms.versioning') }}</th><th>Active</th><th>Title</th></tr></thead>
     <tbody>
         {% for item in terms_templates %}
         <tr>

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>Speed profiles</h1>
-<p>Multiplier: 1.20 = slower (more hours), 0.85 = faster (fewer hours).</p>
+<p>Multiplier {{ help_icon('speed.multiplier') }}: 1.20 = slower {{ help_icon('speed.slow') }} (more hours), 0.85 = faster {{ help_icon('speed.fast') }} (fewer hours), 1.00 = medium {{ help_icon('speed.medium') }}.</p>
 <form method="post" action="/settings/speed-profiles">
   {{ csrf_input(request) }}
   <input type="text" name="code" placeholder="CODE" required>
@@ -12,7 +12,7 @@
   <button type="submit">Create</button>
 </form>
 <table>
-  <tr><th>Code</th><th>RU</th><th>SV</th><th>Multiplier</th><th>Active</th><th>Save</th></tr>
+  <tr><th>Code</th><th>RU</th><th>SV</th><th>Multiplier {{ help_icon('speed.multiplier') }}</th><th>Active</th><th>Save</th></tr>
   {% for p in profiles %}
   <tr>
     <form method="post" action="/settings/speed-profiles">
