@@ -6,6 +6,7 @@ from app.db import SessionLocal
 from app.models.user import User
 from app.security import hash_password, validate_security_settings, verify_password
 from app.services.auth import create_admin_user
+from tests.e2e.csrf_helper import extract_csrf_token
 
 
 client = TestClient(app)
@@ -62,6 +63,26 @@ def test_default_admin_admin_login_fails():
     )
     assert response.status_code == 200
     assert "class=\"error\"" in response.text
+
+
+def test_login_post_never_returns_500_with_csrf_token():
+    form_response = client.get("/login")
+    assert form_response.status_code == 200
+    csrf_token = extract_csrf_token(form_response.text)
+
+    response = client.post(
+        "/login",
+        data={
+            "username": "unknown@example.com",
+            "password": "bad-password",
+            "next": "/",
+            "csrf_token": csrf_token,
+        },
+        headers={"X-CSRF-Token": csrf_token},
+        follow_redirects=False,
+    )
+
+    assert response.status_code != 500
 
 
 def test_login_logout_session_rotation():
