@@ -56,3 +56,24 @@ jobs:
           export PYTHONPATH=$PYTHONPATH:.
           export DATABASE_URL=sqlite:///./ci.sqlite3
           pytest
+
+  perf:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install PDF system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcairo2 libpango-1.0-0 libpangoft2-1.0-0 libgdk-pixbuf-2.0-0 libffi8 shared-mime-info fonts-dejavu
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run perf tests
+        run: |
+          export PYTHONPATH=$PYTHONPATH:.
+          export DATABASE_URL=sqlite:///./ci-perf.sqlite3
+          export RUN_PERF_TESTS=1
+          pytest -m perf -q
