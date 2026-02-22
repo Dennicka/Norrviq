@@ -84,6 +84,12 @@ class Project(Base):
         uselist=False,
         cascade="all, delete-orphan",
     )
+    material_settings = relationship(
+        "ProjectMaterialSettings",
+        back_populates="project",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
 
 
 class ProjectWorkItem(Base):

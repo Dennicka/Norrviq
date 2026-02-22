@@ -5,6 +5,7 @@ from .worktype import WorkType
 from .worker import Worker
 from .cost import CostCategory, ProjectCostItem
 from .material import Material
+from .material_recipe import MaterialRecipe
 from .settings import Settings
 from .legal_note import LegalNote
 from .invoice import Invoice
@@ -25,6 +26,7 @@ from .project_execution_profile import ProjectExecutionProfile
 from .sanity_rule import SanityRule
 from .completeness_rule import CompletenessRule
 from .project_takeoff_settings import ProjectTakeoffSettings
+from .project_material_settings import ProjectMaterialSettings
 from .db_backup import DBBackup
 from .commercial_snapshot import CommercialSnapshot
 
@@ -39,6 +41,7 @@ __all__ = [
     "CostCategory",
     "ProjectCostItem",
     "Material",
+    "MaterialRecipe",
     "Settings",
     "LegalNote",
     "Invoice",
@@ -59,6 +62,7 @@ __all__ = [
     "SanityRule",
     "CompletenessRule",
     "ProjectTakeoffSettings",
+    "ProjectMaterialSettings",
     "DBBackup",
     "CommercialSnapshot",
 ]

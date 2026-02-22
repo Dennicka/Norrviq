@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Materials plan</h1>
+<p><a href="/projects/{{ project.id }}">← {{ t('projects.detail') }}</a></p>
+
+<form method="post" action="/projects/{{ project.id }}/materials-plan/settings">
+  {{ csrf_input(request) }}
+  <label>Default markup % <input type="number" name="default_markup_pct" step="0.01" value="{{ material_settings.default_markup_pct }}" {% if is_readonly %}disabled{% endif %}></label>
+  <label><input type="checkbox" name="use_material_sell_price" {% if material_settings.use_material_sell_price %}checked{% endif %} {% if is_readonly %}disabled{% endif %}> Use material sell price</label>
+  <label><input type="checkbox" name="include_materials_in_pricing" {% if material_settings.include_materials_in_pricing %}checked{% endif %} {% if is_readonly %}disabled{% endif %}> Include BOM in pricing baseline</label>
+  {% if not is_readonly %}<button type="submit">Save settings</button>{% endif %}
+</form>
+
+<ul>
+  <li>Floor: {{ bom.total_floor_m2 }}</li>
+  <li>Wall: {{ bom.total_wall_m2 }}</li>
+  <li>Ceiling: {{ bom.total_ceiling_m2 }}</li>
+  <li>Paintable: {{ bom.total_paintable_m2 }}</li>
+</ul>
+
+<table>
+  <thead><tr><th>Material</th><th>Qty required</th><th>Packs</th><th>Qty final</th><th>Cost ex VAT</th><th>Sell ex VAT</th></tr></thead>
+  <tbody>
+    {% for item in bom.items %}
+    <tr>
+      <td>{{ item.name }}</td>
+      <td>{{ item.qty_required_unit }} {{ item.unit }}</td>
+      <td>{{ item.packs_count if item.packs_count is not none else '—' }}</td>
+      <td>{{ item.qty_final_unit }} {{ item.unit }}</td>
+      <td>{{ item.cost_ex_vat }}</td>
+      <td>{{ item.sell_ex_vat }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6">No BOM items</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+<p><strong>Total cost:</strong> {{ bom.total_cost_ex_vat }} · <strong>Total sell:</strong> {{ bom.total_sell_ex_vat }}</p>
+
+{% if bom.warnings %}
+<h3>Warnings</h3>
+<ul>{% for w in bom.warnings %}<li>{{ w }}</li>{% endfor %}</ul>
+{% endif %}
+
+{% if not is_readonly %}
+<form method="post" action="/projects/{{ project.id }}/materials-plan/apply-costs">{{ csrf_input(request) }}<button type="submit">Add BOM to Project Costs</button></form>
+<form method="post" action="/projects/{{ project.id }}/materials-plan/apply-invoice">{{ csrf_input(request) }}<button type="submit" {% if not draft_invoice %}disabled{% endif %}>Add BOM as Invoice Material Lines</button></form>
+{% endif %}
+{% endblock %}

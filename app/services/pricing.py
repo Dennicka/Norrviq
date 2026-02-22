@@ -16,6 +16,7 @@ from app.models.project_pricing import ProjectPricing
 from app.models.pricing_policy import PricingPolicy
 from app.models.settings import get_or_create_settings
 from app.services.buffer_rules import resolve_effective_buffer
+from app.services.materials_bom import compute_project_bom, get_or_create_project_material_settings
 from app.services.takeoff import compute_project_areas, get_or_create_project_takeoff_settings
 
 logger = logging.getLogger("uvicorn.error")
@@ -295,6 +296,12 @@ def compute_project_baseline(
             travel_setup_cost_internal += amount
         else:
             other_cost_internal += amount
+
+    material_settings = get_or_create_project_material_settings(db, project_id)
+    if include_materials and material_settings.include_materials_in_pricing:
+        bom = compute_project_bom(db, project_id)
+        if bom.items:
+            materials_cost_internal = bom.total_cost_ex_vat
 
     if not include_materials:
         materials_cost_internal = Decimal("0")
