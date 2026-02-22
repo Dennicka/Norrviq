@@ -1,7 +1,13 @@
-from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint, func
+from datetime import datetime, timezone
+
+from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.db import Base
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 class MaterialPurchase(Base):
@@ -13,14 +19,14 @@ class MaterialPurchase(Base):
     id = Column(Integer, primary_key=True, index=True)
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
     supplier_id = Column(Integer, ForeignKey("suppliers.id", ondelete="SET NULL"), nullable=True, index=True)
-    purchased_at = Column(DateTime, nullable=False, server_default=func.now())
+    purchased_at = Column(DateTime(timezone=True), nullable=False, default=_utc_now)
     invoice_ref = Column(Text, nullable=True)
     notes = Column(Text, nullable=True)
     currency = Column(String(10), nullable=False, default="SEK")
     created_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     idempotency_key = Column(String(128), nullable=True)
-    created_at = Column(DateTime, server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_utc_now)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=_utc_now, onupdate=_utc_now)
 
     lines = relationship("MaterialPurchaseLine", back_populates="purchase", cascade="all, delete-orphan")
 
@@ -44,8 +50,8 @@ class MaterialPurchaseLine(Base):
     line_cost_ex_vat = Column(Numeric(12, 2), nullable=False)
     line_cost_inc_vat = Column(Numeric(12, 2), nullable=False)
     source = Column(String(20), nullable=False, default="MANUAL")
-    created_at = Column(DateTime, server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_utc_now)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=_utc_now, onupdate=_utc_now)
 
     purchase = relationship("MaterialPurchase", back_populates="lines")
     material = relationship("Material")
@@ -57,7 +63,7 @@ class ProjectMaterialActuals(Base):
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True)
     actual_cost_ex_vat = Column(Numeric(12, 2), nullable=False, default=0)
     actual_cost_inc_vat = Column(Numeric(12, 2), nullable=False, default=0)
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=_utc_now, onupdate=_utc_now)
 
 
 class ProjectMaterialStock(Base):
@@ -67,6 +73,6 @@ class ProjectMaterialStock(Base):
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
     material_id = Column(Integer, ForeignKey("materials.id", ondelete="CASCADE"), nullable=False, index=True)
     qty_in_base_unit = Column(Numeric(12, 2), nullable=False, default=0)
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=_utc_now, onupdate=_utc_now)
 
     __table_args__ = (UniqueConstraint("project_id", "material_id", name="uq_project_material_stock_project_material"),)

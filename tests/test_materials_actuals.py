@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 import importlib.util
 from uuid import uuid4
@@ -59,7 +59,7 @@ def test_purchase_lines_recalculate_totals():
     project_id, material_id = _seed_project()
     db = SessionLocal()
     try:
-        p = create_material_purchase(db, project_id=project_id, supplier_id=None, purchased_at=datetime.utcnow(), invoice_ref="R-1", notes=None, currency="SEK", user_id=None, lines=[{"material_id": material_id, "packs_count": Decimal("2.0"), "pack_size": Decimal("1.0"), "pack_price_ex_vat": Decimal("30.00"), "unit": "L"}])
+        p = create_material_purchase(db, project_id=project_id, supplier_id=None, purchased_at=datetime.now(timezone.utc), invoice_ref="R-1", notes=None, currency="SEK", user_id=None, lines=[{"material_id": material_id, "packs_count": Decimal("2.0"), "pack_size": Decimal("1.0"), "pack_price_ex_vat": Decimal("30.00"), "unit": "L"}])
         line = p.lines[0]
         assert line.line_cost_ex_vat == Decimal("60.00")
         assert line.line_cost_inc_vat == Decimal("75.00")
@@ -71,7 +71,7 @@ def test_stock_increases_on_purchase():
     project_id, material_id = _seed_project()
     db = SessionLocal()
     try:
-        create_material_purchase(db, project_id=project_id, supplier_id=None, purchased_at=datetime.utcnow(), invoice_ref=None, notes=None, currency="SEK", user_id=None, lines=[{"material_id": material_id, "packs_count": Decimal("1.5"), "pack_size": Decimal("2.0"), "pack_price_ex_vat": Decimal("10.00"), "unit": "L"}])
+        create_material_purchase(db, project_id=project_id, supplier_id=None, purchased_at=datetime.now(timezone.utc), invoice_ref=None, notes=None, currency="SEK", user_id=None, lines=[{"material_id": material_id, "packs_count": Decimal("1.5"), "pack_size": Decimal("2.0"), "pack_price_ex_vat": Decimal("10.00"), "unit": "L"}])
         stock = db.query(ProjectMaterialStock).filter_by(project_id=project_id, material_id=material_id).first()
         assert stock.qty_in_base_unit == Decimal("3.00")
     finally:
@@ -82,8 +82,8 @@ def test_actual_cost_aggregation():
     project_id, material_id = _seed_project()
     db = SessionLocal()
     try:
-        create_material_purchase(db, project_id=project_id, supplier_id=None, purchased_at=datetime.utcnow(), invoice_ref=None, notes=None, currency="SEK", user_id=None, lines=[{"material_id": material_id, "packs_count": Decimal("1"), "pack_size": Decimal("1"), "pack_price_ex_vat": Decimal("10.00"), "unit": "L"}])
-        create_material_purchase(db, project_id=project_id, supplier_id=None, purchased_at=datetime.utcnow(), invoice_ref=None, notes=None, currency="SEK", user_id=None, lines=[{"material_id": material_id, "packs_count": Decimal("1"), "pack_size": Decimal("1"), "pack_price_ex_vat": Decimal("20.00"), "unit": "L"}])
+        create_material_purchase(db, project_id=project_id, supplier_id=None, purchased_at=datetime.now(timezone.utc), invoice_ref=None, notes=None, currency="SEK", user_id=None, lines=[{"material_id": material_id, "packs_count": Decimal("1"), "pack_size": Decimal("1"), "pack_price_ex_vat": Decimal("10.00"), "unit": "L"}])
+        create_material_purchase(db, project_id=project_id, supplier_id=None, purchased_at=datetime.now(timezone.utc), invoice_ref=None, notes=None, currency="SEK", user_id=None, lines=[{"material_id": material_id, "packs_count": Decimal("1"), "pack_size": Decimal("1"), "pack_price_ex_vat": Decimal("20.00"), "unit": "L"}])
         db.close()
         db2 = SessionLocal()
         actual = db2.query(ProjectMaterialActuals).filter_by(project_id=project_id).first()
@@ -98,7 +98,7 @@ def test_plan_vs_actual_detects_over_and_under():
     project_id, material_id = _seed_project()
     db = SessionLocal()
     try:
-        create_material_purchase(db, project_id=project_id, supplier_id=None, purchased_at=datetime.utcnow(), invoice_ref=None, notes=None, currency="SEK", user_id=None, lines=[{"material_id": material_id, "packs_count": Decimal("0.10"), "pack_size": Decimal("1.00"), "pack_price_ex_vat": Decimal("10.00"), "unit": "L"}])
+        create_material_purchase(db, project_id=project_id, supplier_id=None, purchased_at=datetime.now(timezone.utc), invoice_ref=None, notes=None, currency="SEK", user_id=None, lines=[{"material_id": material_id, "packs_count": Decimal("0.10"), "pack_size": Decimal("1.00"), "pack_price_ex_vat": Decimal("10.00"), "unit": "L"}])
         report = compute_materials_plan_vs_actual(db, project_id)
         assert any(r.status in {"UNDER", "OVER", "OK"} for r in report.rows)
     finally:
@@ -157,7 +157,7 @@ def test_materials_actuals_golden_snapshot_delta():
     project_id, material_id = _seed_project()
     db = SessionLocal()
     try:
-        create_material_purchase(db, project_id=project_id, supplier_id=None, purchased_at=datetime.utcnow(), invoice_ref=None, notes=None, currency="SEK", user_id=None, lines=[{"material_id": material_id, "packs_count": Decimal("1"), "pack_size": Decimal("1"), "pack_price_ex_vat": Decimal("50.00"), "unit": "L"}])
+        create_material_purchase(db, project_id=project_id, supplier_id=None, purchased_at=datetime.now(timezone.utc), invoice_ref=None, notes=None, currency="SEK", user_id=None, lines=[{"material_id": material_id, "packs_count": Decimal("1"), "pack_size": Decimal("1"), "pack_price_ex_vat": Decimal("50.00"), "unit": "L"}])
         report = compute_materials_plan_vs_actual(db, project_id)
         assert str(report.planned_cost_ex_vat)
         assert str(report.actual_cost_ex_vat)

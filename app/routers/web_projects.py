@@ -4,7 +4,7 @@ from pathlib import Path
 import logging
 from decimal import Decimal, InvalidOperation
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
@@ -102,6 +102,15 @@ CRITICAL_WARNING_CODES = {
     WARNING_MISSING_UNITS_ROOMS,
     WARNING_MISSING_ITEMS,
 }
+
+
+def _parse_purchase_datetime(value: str | None) -> datetime:
+    if not value:
+        return datetime.now(timezone.utc)
+    parsed = datetime.fromisoformat(value)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _normalize_for_display(value: Decimal | None) -> Decimal | None:
@@ -1685,7 +1694,7 @@ async def create_materials_purchase(project_id: int, request: Request, db: Sessi
         lines.append({"material_id": int(material_id), "packs_count": packs_counts[i], "pack_size": pack_sizes[i], "pack_price_ex_vat": pack_prices[i], "unit": units[i] or "PCS", "source": "MANUAL"})
     if not lines:
         raise HTTPException(status_code=422, detail="No purchase lines")
-    create_material_purchase(db, project_id=project_id, supplier_id=supplier_id, purchased_at=datetime.fromisoformat(form.get("purchased_at")) if form.get("purchased_at") else datetime.utcnow(), invoice_ref=form.get("invoice_ref"), notes=form.get("notes"), currency=form.get("currency") or "SEK", user_id=user.id if user else None, lines=lines)
+    create_material_purchase(db, project_id=project_id, supplier_id=supplier_id, purchased_at=_parse_purchase_datetime(form.get("purchased_at")), invoice_ref=form.get("invoice_ref"), notes=form.get("notes"), currency=form.get("currency") or "SEK", user_id=user.id if user else None, lines=lines)
     return RedirectResponse(url=f"/projects/{project_id}/materials-actuals", status_code=status.HTTP_303_SEE_OTHER)
 
 
@@ -1711,7 +1720,7 @@ async def quick_create_materials_purchase(project_id: int, request: Request, db:
         payload_for_hash.append({"material_id": int(mid), "packs": str(packs), "price": str(price)})
     idem = request.headers.get("Idempotency-Key") or build_quick_add_idempotency_key(project_id, {"selected": sorted(payload_for_hash)})
     user = db.query(User).filter(User.email == get_current_user_email(request)).first()
-    create_material_purchase(db, project_id=project_id, supplier_id=None, purchased_at=datetime.utcnow(), invoice_ref=form.get("invoice_ref"), notes="quick_add_from_shopping_list", currency="SEK", user_id=user.id if user else None, lines=lines, idempotency_key=idem)
+    create_material_purchase(db, project_id=project_id, supplier_id=None, purchased_at=datetime.now(timezone.utc), invoice_ref=form.get("invoice_ref"), notes="quick_add_from_shopping_list", currency="SEK", user_id=user.id if user else None, lines=lines, idempotency_key=idem)
     return RedirectResponse(url=f"/projects/{project_id}/materials-actuals", status_code=status.HTTP_303_SEE_OTHER)
 
 
