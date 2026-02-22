@@ -26,7 +26,7 @@ from app.config import get_settings  # noqa: E402
 
 get_settings.cache_clear()
 
-from tests.db_utils import upgrade_database  # noqa: E402
+from .db_utils import upgrade_database  # noqa: E402
 from app.db import SessionLocal  # noqa: E402
 from app.models.user import User  # noqa: E402
 from app.services.auth import create_admin_user  # noqa: E402

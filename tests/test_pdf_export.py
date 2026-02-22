@@ -54,7 +54,7 @@ def _create_offer_project(*, issued: bool) -> int:
             name="PDF Offer",
             client_id=c.id,
             offer_status="issued" if issued else "draft",
-            offer_number="OF-2026-0001" if issued else None,
+            offer_number=f"OF-2026-PDF-{uuid.uuid4().hex[:8]}" if issued else None,
             offer_terms_snapshot_title="Offer Terms",
             offer_terms_snapshot_body="Snapshot Terms Body",
         )
@@ -86,7 +86,7 @@ def _create_invoice(*, issued: bool) -> int:
         invoice = Invoice(
             project_id=project.id,
             status="issued" if issued else "draft",
-            invoice_number="TR-2026-0001" if issued else None,
+            invoice_number=f"TR-2026-PDF-{uuid.uuid4().hex[:8]}" if issued else None,
             issue_date=date.today(),
             work_sum_without_moms=Decimal("100"),
             moms_amount=Decimal("25"),
@@ -190,5 +190,5 @@ def test_issued_pdf_uses_snapshot_terms():
 
     assert response.status_code == 200
     text = _extract_text(response.content)
-    assert "OF-2026-0001" in text
+    assert "OF-2026-PDF-" in text
     assert norm_pdf_text("Snapshot Terms Body") in norm_pdf_text(text)
