@@ -16,6 +16,7 @@ from app.models.invoice_line import InvoiceLine
 from app.models.rot_case import RotCase
 from app.models.project import Project, ProjectWorkItem
 from app.models.worktype import WorkType
+from tests.utils.pdf_text import norm_pdf_text
 
 client = TestClient(app)
 settings = get_settings()
@@ -190,4 +191,4 @@ def test_issued_pdf_uses_snapshot_terms():
     assert response.status_code == 200
     text = _extract_text(response.content)
     assert "OF-2026-0001" in text
-    assert "Snapshot Terms Body" in text
+    assert norm_pdf_text("Snapshot Terms Body") in norm_pdf_text(text)

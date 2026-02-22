@@ -11,6 +11,7 @@ from app.db import SessionLocal
 from app.main import app
 from app.models.company_profile import get_or_create_company_profile
 from tests.utils.document_factory import create_stable_document_fixture
+from tests.utils.pdf_text import norm_pdf_text
 from tests.utils.snapshot import assert_matches_snapshot, normalize_document_html
 
 client = TestClient(app)
@@ -91,21 +92,22 @@ def test_document_pdf_smoke(kind: str, issue_documents: bool, enable_rot: bool) 
     assert response.content.startswith(b"%PDF")
 
     pdf_text = _extract_pdf_text(response.content)
-    assert "Trenor Måleri AB" in pdf_text
+    compact_text = norm_pdf_text(pdf_text)
+    assert norm_pdf_text("Trenor Måleri AB") in compact_text
 
     if kind == "offer":
-        assert "Offert" in pdf_text or "Kommersiellt erbjudande" in pdf_text
+        assert norm_pdf_text("Offert") in compact_text or norm_pdf_text("Kommersiellt erbjudande") in compact_text
         if issue_documents:
-            assert offer_prefix in pdf_text
+            assert norm_pdf_text(offer_prefix) in compact_text
         else:
-            assert "DRAFT" in pdf_text or "UTKAST" in pdf_text
+            assert norm_pdf_text("DRAFT") in compact_text or norm_pdf_text("UTKAST") in compact_text
         return
 
-    assert "Faktura" in pdf_text
-    assert "Moms" in pdf_text
+    assert norm_pdf_text("Faktura") in compact_text
+    assert norm_pdf_text("Moms") in compact_text
     if issue_documents:
-        assert invoice_prefix in pdf_text
+        assert norm_pdf_text(invoice_prefix) in compact_text
     else:
-        assert "DRAFT" in pdf_text or "UTKAST" in pdf_text
+        assert norm_pdf_text("DRAFT") in compact_text or norm_pdf_text("UTKAST") in compact_text
     if enable_rot:
-        assert "ROT-avdrag" in pdf_text
+        assert norm_pdf_text("ROT-avdrag") in compact_text
