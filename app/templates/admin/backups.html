@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block content %}
+<section>
+    <h1>Backups</h1>
+    {% if request.session.get("user_role") == "admin" %}
+    <form method="post" action="/admin/backups/create">
+        {{ csrf_input(request) }}
+        <button type="submit">Create backup</button>
+    </form>
+    {% endif %}
+
+    <table>
+        <thead>
+            <tr><th>Date</th><th>Filename</th><th>Size</th><th>sha256</th><th>Status</th><th>Actions</th></tr>
+        </thead>
+        <tbody>
+            {% for b in backups %}
+            <tr>
+                <td>{{ b.created_at }}</td>
+                <td>{{ b.filename }}</td>
+                <td>{{ b.size_bytes }}</td>
+                <td><code>{{ b.sha256 }}</code></td>
+                <td>{{ b.status.value }}</td>
+                <td>
+                    <a href="/admin/backups/{{ b.id }}/download">Download</a>
+                    <form method="post" action="/admin/backups/{{ b.id }}/verify" style="display:inline">
+                        {{ csrf_input(request) }}
+                        <button type="submit">Verify checksum</button>
+                    </form>
+                    {% if request.session.get("user_role") == "admin" %}
+                    <form method="post" action="/admin/backups/{{ b.id }}/delete" style="display:inline">
+                        {{ csrf_input(request) }}
+                        <button type="submit">Delete</button>
+                    </form>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+
+{% if request.session.get("user_role") == "admin" %}
+<section>
+    <h2>Restore database</h2>
+    <p><strong>WARNING:</strong> this is destructive. Type RESTORE to confirm.</p>
+    <form method="post" action="/admin/backups/restore" enctype="multipart/form-data">
+        {{ csrf_input(request) }}
+        <label>SQLite DB file <input type="file" name="upload_db" required></label><br>
+        <label>Optional checksum (.sha256) <input type="file" name="upload_sha256"></label><br>
+        <label>Confirmation word <input type="text" name="confirmation_word" required></label><br>
+        <button type="submit">Restore</button>
+    </form>
+</section>
+{% endif %}
+{% endblock %}

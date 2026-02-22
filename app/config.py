@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     log_format: str = "pretty"
     log_level: str = "INFO"
 
+    backup_dir: str = "./backups"
+    backup_retention_days: int = 30
+    backup_max_files: int = 50
+
     def model_post_init(self, __context) -> None:
         if not self.session_secret and self.app_env == "local":
             self.session_secret = token_urlsafe(32)

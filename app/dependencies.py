@@ -10,6 +10,7 @@ from .config import get_settings
 from .db import SessionLocal
 from .i18n import make_t
 from .security import ensure_csrf_token, validate_csrf_token
+from .maintenance import is_enabled
 
 settings = get_settings()
 templates = Jinja2Templates(directory="app/templates")
@@ -79,6 +80,7 @@ def template_context(request: Request, lang: str) -> dict:
         "current_user": current_user,
         "flash_message": flash_message,
         "csrf_token": ensure_csrf_token(request),
+        "maintenance_mode": is_enabled(),
     }
 
 
