@@ -1,8 +1,11 @@
+import logging
 from datetime import date
 from decimal import Decimal
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.dependencies import get_current_lang, get_db, template_context, templates
@@ -26,6 +29,7 @@ from app.services.terms_templates import DOC_TYPE_INVOICE, resolve_terms_templat
 router = APIRouter(prefix="/projects/{project_id}/invoices", tags=["invoices"])
 
 INVOICE_STATUSES = ["draft", "issued", "paid", "overdue", "cancelled"]
+logger = logging.getLogger("app.invoices")
 
 
 def _parse_date(value: str | None):
@@ -286,6 +290,105 @@ async def delete_invoice(
 
     return RedirectResponse(
         url=f"/projects/{project_id}/invoices/", status_code=status.HTTP_303_SEE_OTHER
+    )
+
+
+@router.post("/create-from-project")
+async def create_invoice_from_project(
+    project_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _lang: str = Depends(get_current_lang),
+    _role: str = Depends(require_role(ADMIN_ROLE, OPERATOR_ROLE)),
+):
+    project = _get_project(db, project_id)
+    form = await request.form()
+
+    include_labor = str(form.get("include_labor") or "true").lower() == "true"
+    include_materials = str(form.get("include_materials") or "false").lower() == "true"
+    merge_strategy = (form.get("merge_strategy") or MERGE_REPLACE_ALL).upper()
+    note = (form.get("note") or "").strip() or None
+
+    idempotency_key = request.headers.get("Idempotency-Key") or str(uuid.uuid4())
+
+    invoice = (
+        db.query(Invoice)
+        .options(selectinload(Invoice.lines))
+        .filter(Invoice.source_project_id == project.id, Invoice.status == "draft")
+        .order_by(Invoice.id.desc())
+        .first()
+    )
+
+    if invoice is None:
+        invoice = Invoice(
+            project_id=project.id,
+            source_project_id=project.id,
+            invoice_number=None,
+            issue_date=date.today(),
+            due_date=None,
+            paid_date=None,
+            status="draft",
+            work_sum_without_moms=Decimal("0.00"),
+            moms_amount=Decimal("0.00"),
+            rot_amount=Decimal("0.00"),
+            client_pays_total=Decimal("0.00"),
+            comment=note,
+        )
+        db.add(invoice)
+        try:
+            db.flush()
+        except IntegrityError:
+            db.rollback()
+            invoice = (
+                db.query(Invoice)
+                .options(selectinload(Invoice.lines))
+                .filter(Invoice.source_project_id == project.id, Invoice.status == "draft")
+                .order_by(Invoice.id.desc())
+                .first()
+            )
+            if invoice is None:
+                raise HTTPException(status_code=409, detail="Unable to create draft invoice. Retry with same request.")
+    elif note and not invoice.comment:
+        invoice.comment = note
+
+    if invoice.status != "draft":
+        raise HTTPException(status_code=409, detail="Only draft invoices can be generated from project")
+
+    generate_invoice_lines_from_project(
+        db,
+        project_id=project.id,
+        invoice_id=invoice.id,
+        include_labor=include_labor,
+        include_materials=include_materials,
+        merge_strategy=merge_strategy,
+        user_id=request.session.get("user_email"),
+    )
+
+    db.add(
+        AuditEvent(
+            event_type="invoice_created_from_project",
+            user_id=request.session.get("user_email"),
+            entity_type="project",
+            entity_id=project.id,
+            details=f"invoice_id={invoice.id};idempotency_key={idempotency_key}",
+        )
+    )
+    db.commit()
+
+    logger.info(
+        "invoice_create_from_project project_id=%s invoice_id=%s include_labor=%s include_materials=%s merge_strategy=%s lines=%s request_id=%s",
+        project.id,
+        invoice.id,
+        include_labor,
+        include_materials,
+        merge_strategy,
+        len(invoice.lines),
+        request.state.request_id,
+    )
+
+    return RedirectResponse(
+        url=f"/projects/{project.id}/invoices/{invoice.id}",
+        status_code=status.HTTP_303_SEE_OTHER,
     )
 
 

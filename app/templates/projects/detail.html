@@ -86,7 +86,42 @@
         <a href="/projects/{{ project.id }}/invoices/">{{ t("invoice.list.title") }}</a>
         |
         <a href="/projects/{{ project.id }}/invoices/create">{{ t("label.create") }}</a>
+        |
+        <button type="button" id="open-create-invoice-dialog">Create invoice</button>
     </p>
+    <dialog id="create-invoice-dialog">
+        <form method="post" action="/projects/{{ project.id }}/invoices/create-from-project">
+            {{ csrf_input(request) }}
+            <h3>Create invoice from project</h3>
+            <label>
+                <input type="checkbox" name="include_labor" value="true" checked>
+                Include labor
+            </label>
+            <br>
+            <label>
+                <input type="checkbox" name="include_materials" value="true">
+                Include materials
+            </label>
+            <br>
+            <label>
+                Merge strategy
+                <select name="merge_strategy">
+                    <option value="REPLACE_ALL" selected>REPLACE_ALL</option>
+                    <option value="APPEND">APPEND</option>
+                    <option value="UPSERT_BY_SOURCE">UPSERT_BY_SOURCE</option>
+                </select>
+            </label>
+            <br>
+            <label>
+                Note
+                <input type="text" name="note" maxlength="255" placeholder="Optional note">
+            </label>
+            <div style="margin-top: 10px;">
+                <button type="submit">Create invoice</button>
+                <button type="button" id="cancel-create-invoice-dialog">Cancel</button>
+            </div>
+        </form>
+    </dialog>
     <table>
         <thead>
             <tr>
@@ -595,4 +630,31 @@ document.addEventListener("DOMContentLoaded", function () {
   updateWorktypeInfo();
 });
 </script>
+<script>
+(function () {
+    const openButton = document.getElementById("open-create-invoice-dialog");
+    const cancelButton = document.getElementById("cancel-create-invoice-dialog");
+    const dialog = document.getElementById("create-invoice-dialog");
+    if (!openButton || !dialog) {
+        return;
+    }
+    openButton.addEventListener("click", () => {
+        if (typeof dialog.showModal === "function") {
+            dialog.showModal();
+            return;
+        }
+        dialog.setAttribute("open", "open");
+    });
+    if (cancelButton) {
+        cancelButton.addEventListener("click", () => {
+            if (typeof dialog.close === "function") {
+                dialog.close();
+                return;
+            }
+            dialog.removeAttribute("open");
+        });
+    }
+})();
+</script>
+
 {% endblock %}

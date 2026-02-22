@@ -9,6 +9,7 @@ class Invoice(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    source_project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
 
     invoice_number = Column(String, unique=True, index=True, nullable=True)
     issue_date = Column(Date, nullable=False)
@@ -34,5 +35,5 @@ class Invoice(Base):
         DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
-    project = relationship("Project", back_populates="invoices")
+    project = relationship("Project", back_populates="invoices", foreign_keys=[project_id])
     lines = relationship("InvoiceLine", back_populates="invoice", cascade="all, delete-orphan", order_by="InvoiceLine.position")

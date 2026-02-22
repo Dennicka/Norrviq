@@ -56,6 +56,7 @@ class Project(Base):
         "Invoice",
         back_populates="project",
         cascade="all, delete-orphan",
+        foreign_keys="Invoice.project_id",
     )
     pricing = relationship(
         "ProjectPricing",

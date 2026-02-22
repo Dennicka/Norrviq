@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.models.audit_event import AuditEvent
 from app.models.invoice import Invoice
 from app.models.invoice_line import InvoiceLine
+from app.models.cost import ProjectCostItem
 from app.models.project import Project, ProjectWorkItem
 
 DEFAULT_VAT_RATE = Decimal("25.00")
@@ -110,6 +111,30 @@ def _generate_labor_lines(project: Project) -> list[dict]:
     return lines
 
 
+def _generate_material_lines(project: Project) -> list[dict]:
+    lines: list[dict] = []
+    for item in sorted(project.cost_items, key=lambda ci: ci.id):
+        if not item.is_material:
+            continue
+        amount = _q(Decimal(str(item.amount or 0)))
+        if amount <= 0:
+            continue
+        category_name = item.category.name_sv if item.category else "Material"
+        lines.append(
+            {
+                "kind": "MATERIAL",
+                "description": item.title or category_name,
+                "unit": "st",
+                "quantity": Decimal("1.00"),
+                "unit_price_ex_vat": amount,
+                "vat_rate_pct": DEFAULT_VAT_RATE,
+                "source_type": "COST_ITEM",
+                "source_id": item.id,
+            }
+        )
+    return lines
+
+
 def generate_invoice_lines_from_project(
     db: Session,
     *,
@@ -127,6 +152,8 @@ def generate_invoice_lines_from_project(
         selectinload(Project.pricing),
         selectinload(Project.work_items).selectinload(ProjectWorkItem.room),
         selectinload(Project.work_items).selectinload(ProjectWorkItem.work_type),
+        selectinload(Project.cost_items).selectinload(ProjectCostItem.category),
+        selectinload(Project.cost_items).selectinload(ProjectCostItem.material),
     ).filter(Project.id == project_id).first()
     if not project:
         raise ValueError("Project not found")
@@ -135,7 +162,7 @@ def generate_invoice_lines_from_project(
     if include_labor:
         generated.extend(_generate_labor_lines(project))
     if include_materials:
-        pass
+        generated.extend(_generate_material_lines(project))
 
     existing = sorted(invoice.lines, key=lambda ln: ln.position)
 
