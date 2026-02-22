@@ -10,7 +10,26 @@
     "total_m2": "65.00",
     "travel_setup_cost_internal": "0.00"
   },
-  "case": "g5_paintable_basis",
+  "case": "g6_per_m2_paintable",
+  "consistency_gate": {
+    "invoice": {
+      "errors": [
+        {
+          "code": "INVOICE_SUBTOTAL_MISMATCH",
+          "message": "Invoice subtotal_ex_vat differs from pricing scenario"
+        },
+        {
+          "code": "INVOICE_COMMERCIAL_MISMATCH",
+          "message": "Invoice subtotal differs from commercial total"
+        }
+      ],
+      "ok": false
+    },
+    "offer": {
+      "errors": [],
+      "ok": true
+    }
+  },
   "converter": {
     "base_price_ex_vat": "7000.00",
     "effective_hourly_ex_vat": "700.00",
@@ -112,29 +131,52 @@
       "recommended_rate_per_room": "5000.00"
     }
   },
+  "invoice_commercial": {
+    "line_items": [
+      {
+        "description": "Målning målningsbar yta",
+        "kind": "LABOR",
+        "qty": "65.00",
+        "total": "18200.00",
+        "unit": "m²",
+        "unit_price": "280.00"
+      }
+    ],
+    "mode": "PER_M2",
+    "price_ex_vat": "18200.00",
+    "price_inc_vat": "22750.00",
+    "units": {
+      "items_count": 1,
+      "m2_basis": "PAINTABLE_TOTAL",
+      "m2_basis_label": "målningsbar yta",
+      "rooms_count": 1,
+      "total_m2": "65.00"
+    },
+    "vat_amount": "4550.00"
+  },
   "offer_commercial": {
     "line_items": [
       {
-        "description": "Arbete (löpande räkning)",
-        "qty": "10.00",
-        "total": "6600.00",
-        "unit": "h",
-        "unit_price": "640.00"
+        "description": "Målning målningsbar yta",
+        "qty": "65.00",
+        "total": "18200.00",
+        "unit": "m²",
+        "unit_price": "280.00"
       }
     ],
-    "mode": "HOURLY",
-    "price_ex_vat": "6600.00",
-    "price_inc_vat": "8250.00",
+    "mode": "PER_M2",
+    "price_ex_vat": "18200.00",
+    "price_inc_vat": "22750.00",
     "units": {
       "items_count": 1,
       "m2_basis": "PAINTABLE_TOTAL",
       "rooms_count": 1,
       "total_m2": "65.00"
     },
-    "vat_amount": "1650.00"
+    "vat_amount": "4550.00"
   },
   "performance": {
-    "compute_seconds": "0.0382"
+    "compute_seconds": "0.0789"
   },
   "scenarios": {
     "FIXED_TOTAL": {

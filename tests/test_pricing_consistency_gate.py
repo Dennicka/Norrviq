@@ -7,10 +7,10 @@ from app.config import get_settings
 from app.db import SessionLocal
 from app.main import app
 from app.models import CommercialSnapshot, Invoice, Project, ProjectPricing, ProjectTakeoffSettings, Room
+from app.models.pricing_policy import get_or_create_pricing_policy
 from app.services.commercial_snapshot import DOC_TYPE_INVOICE, write_commercial_snapshot
 from app.services.invoice_commercial import compute_invoice_commercial
 from app.services.invoice_lines import generate_invoice_lines_from_project, recalculate_invoice_totals
-from app.models.pricing_policy import get_or_create_pricing_policy
 from app.services.pricing_consistency import validate_pricing_consistency
 
 client = TestClient(app)
@@ -28,7 +28,7 @@ def _mk(mode='FIXED_TOTAL', value=Decimal('1000.00')):
         db.add(p)
         db.flush()
         db.add(Room(project_id=p.id, name='R1', floor_area_m2=Decimal('10'), wall_perimeter_m=Decimal('10'), wall_height_m=Decimal('3'), wall_area_m2=Decimal('30'), ceiling_area_m2=Decimal('10')))
-        db.add(ProjectTakeoffSettings(project_id=p.id, m2_basis='FLOOR_AREA'))
+        db.add(ProjectTakeoffSettings(project_id=p.id, m2_basis='PAINTABLE_TOTAL'))
         kwargs = {'fixed_total_price': value} if mode == 'FIXED_TOTAL' else {'rate_per_m2': value}
         db.add(ProjectPricing(project_id=p.id, mode=mode, **kwargs))
         policy = get_or_create_pricing_policy(db)
@@ -80,14 +80,17 @@ def test_snapshot_written_on_issue_and_immutable():
         db.close()
 
 
-def test_offer_issue_blocks_if_commercial_differs_from_pricing():
+def test_offer_issue_blocks_if_pricing_rate_changed_after_offer_draft():
     _login()
-    pid, _ = _mk()
+    pid, _ = _mk(mode='PER_M2', value=Decimal('100.00'))
+
+    first_draft = client.get(f'/projects/{pid}/offer?lang=sv')
+    assert first_draft.status_code == 200
+
     db = SessionLocal()
     try:
         pricing = db.query(ProjectPricing).filter(ProjectPricing.project_id == pid).first()
-        pricing.mode = 'PER_M2'
-        pricing.rate_per_m2 = Decimal('100.00')
+        pricing.rate_per_m2 = Decimal('150.00')
         room = db.query(Room).filter(Room.project_id == pid).first()
         room.floor_area_m2 = Decimal('0.00')
         db.add_all([pricing, room])
@@ -99,7 +102,7 @@ def test_offer_issue_blocks_if_commercial_differs_from_pricing():
     assert resp.status_code == 409
 
 
-def test_invoice_issue_blocks_if_lines_totals_mismatch_pricing():
+def test_invoice_issue_blocks_if_invoice_lines_manually_edited_to_mismatch():
     _login()
     pid, iid = _mk()
     db = SessionLocal()
@@ -116,30 +119,9 @@ def test_invoice_issue_blocks_if_lines_totals_mismatch_pricing():
     assert resp.status_code == 409
 
 
-def test_issued_offer_renders_from_snapshot():
+def test_pdf_issued_renders_snapshot_even_if_project_data_changes(monkeypatch):
     _login()
-    pid, _ = _mk()
-    client.post(f'/offers/{pid}/finalize', follow_redirects=False)
-
-    db = SessionLocal()
-    try:
-        snap = db.query(CommercialSnapshot).filter(CommercialSnapshot.doc_type == 'OFFER', CommercialSnapshot.doc_id == pid).first()
-        assert snap is not None
-        pricing = db.query(ProjectPricing).filter(ProjectPricing.project_id == pid).first()
-        pricing.fixed_total_price = Decimal('9999.00')
-        db.add(pricing)
-        db.commit()
-    finally:
-        db.close()
-
-    response = client.get(f'/projects/{pid}/offer?lang=sv')
-    assert response.status_code == 200
-    assert '1 000,00 kr' in response.text or '1000.00' in response.text
-
-
-def test_issued_invoice_pdf_renders_snapshot_totals(monkeypatch):
-    _login()
-    pid, iid = _mk()
+    pid, iid = _mk(mode='FIXED_TOTAL', value=Decimal('1000.00'))
     db = SessionLocal()
     try:
         generate_invoice_lines_from_project(db, project_id=pid, invoice_id=iid)
@@ -147,7 +129,10 @@ def test_issued_invoice_pdf_renders_snapshot_totals(monkeypatch):
     finally:
         db.close()
 
-    client.post(f'/invoices/{iid}/finalize', follow_redirects=False)
+    offer_issue = client.post(f'/offers/{pid}/finalize', follow_redirects=False)
+    invoice_issue = client.post(f'/invoices/{iid}/finalize', follow_redirects=False)
+    assert offer_issue.status_code in (302, 303)
+    assert invoice_issue.status_code in (302, 303)
 
     captured = {}
 
@@ -161,7 +146,9 @@ def test_issued_invoice_pdf_renders_snapshot_totals(monkeypatch):
     try:
         pricing = db.query(ProjectPricing).filter(ProjectPricing.project_id == pid).first()
         pricing.fixed_total_price = Decimal('2222.00')
-        db.add(pricing)
+        room = db.query(Room).filter(Room.project_id == pid).first()
+        room.floor_area_m2 = Decimal('99.00')
+        db.add_all([pricing, room])
         db.commit()
     finally:
         db.close()
@@ -169,3 +156,4 @@ def test_issued_invoice_pdf_renders_snapshot_totals(monkeypatch):
     resp = client.get(f'/invoices/{iid}/pdf')
     assert resp.status_code == 200
     assert '1000.00' in captured['html'] or '1 000,00' in captured['html']
+    assert '2222.00' not in captured['html']

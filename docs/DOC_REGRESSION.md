@@ -3,27 +3,31 @@
 Этот набор тестов фиксирует регрессии в документных рендерах:
 
 - HTML страницы оферты/инвойса (draft и issued).
-- PDF smoke (валидный `%PDF` + ключевые тексты).
+- PDF smoke (валидный `%PDF` + ключевые тексты и totals).
 
 ## Что именно фиксируем
 
 HTML snapshots в `tests/snapshots/`:
 
 - `offer_draft.html`
-- `offer_issued.html`
+- `offer_issued_fixed_total.html`
+- `offer_issued_per_m2.html`
+- `offer_issued_per_room.html`
+- `offer_issued_piecework.html`
 - `invoice_draft.html`
-- `invoice_issued_rot_off.html`
-- `invoice_issued_rot_on.html`
+- `invoice_issued_fixed_total_rot_off.html`
+- `invoice_issued_per_m2_rot_off.html`
+- `invoice_issued_per_room_rot_off.html`
+- `invoice_issued_piecework_rot_on.html`
 
 Перед сравнением HTML проходит через общий нормализатор `tests/utils/snapshot.py`, который:
 
 - удаляет динамику (`csrf_token`, `request_id`, timestamps, URL/id сегменты);
 - нормализует пробелы и переносы;
 - сохраняет только значимые текстовые блоки:
-  - заголовки документа,
-  - реквизиты,
-  - строки/табличные значения,
-  - суммы (`Arbete`, `Material`, `Moms`, `ROT-avdrag`, `Att betala`),
+  - mode label и units basis,
+  - реквизиты документа,
+  - totals (`ex/vat/inc`, `Moms`, `ROT-avdrag`, `Att betala`),
   - terms block.
 
 ## Обновление snapshots (только вручную)

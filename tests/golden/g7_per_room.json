@@ -1,0 +1,214 @@
+{
+  "baseline": {
+    "internal_total_cost": "2602.12",
+    "items_count": 5,
+    "labor_cost_internal": "2365.56",
+    "labor_hours_total": "10.00",
+    "materials_cost_internal": "0.00",
+    "overhead_cost_internal": "236.56",
+    "rooms_count": 5,
+    "total_m2": "60.00",
+    "travel_setup_cost_internal": "0.00"
+  },
+  "case": "g7_per_room",
+  "consistency_gate": {
+    "invoice": {
+      "errors": [
+        {
+          "code": "INVOICE_SUBTOTAL_MISMATCH",
+          "message": "Invoice subtotal_ex_vat differs from pricing scenario"
+        },
+        {
+          "code": "INVOICE_COMMERCIAL_MISMATCH",
+          "message": "Invoice subtotal differs from commercial total"
+        }
+      ],
+      "ok": false
+    },
+    "offer": {
+      "errors": [],
+      "ok": true
+    }
+  },
+  "converter": {
+    "base_price_ex_vat": "7100.00",
+    "effective_hourly_ex_vat": "710.00",
+    "implied_fixed_total_price": "7100.00",
+    "implied_rate_per_m2": "118.33",
+    "implied_rate_per_piece": "1420.00",
+    "implied_rate_per_room": "1420.00",
+    "input": {
+      "desired_effective_hourly_ex_vat": "710.00",
+      "desired_margin_pct": "22.00"
+    },
+    "margin_pct": "63.4",
+    "mode_results": {
+      "FIXED_TOTAL": {
+        "effective_hourly": "710.00",
+        "margin_pct": "63.4",
+        "price_ex_vat": "7100.00",
+        "profit": "4497.88",
+        "warnings": []
+      },
+      "PER_M2": {
+        "effective_hourly": "710.00",
+        "margin_pct": "63.4",
+        "price_ex_vat": "7100.00",
+        "profit": "4497.88",
+        "warnings": []
+      },
+      "PER_ROOM": {
+        "effective_hourly": "710.00",
+        "margin_pct": "63.4",
+        "price_ex_vat": "7100.00",
+        "profit": "4497.88",
+        "warnings": []
+      },
+      "PIECEWORK": {
+        "effective_hourly": "710.00",
+        "margin_pct": "63.4",
+        "price_ex_vat": "7100.00",
+        "profit": "4497.88",
+        "warnings": []
+      }
+    },
+    "profit": "4497.88",
+    "warnings": []
+  },
+  "floor": {
+    "FIXED_TOTAL": {
+      "is_below_floor": false,
+      "reasons": [],
+      "recommended_fixed_total": "5000.00",
+      "recommended_min_price_ex_vat": "5000.00",
+      "recommended_rate_per_m2": "83.33",
+      "recommended_rate_per_piece": "1000.00",
+      "recommended_rate_per_room": "1000.00"
+    },
+    "HOURLY": {
+      "is_below_floor": false,
+      "reasons": [],
+      "recommended_fixed_total": "5000.00",
+      "recommended_min_price_ex_vat": "5000.00",
+      "recommended_rate_per_m2": "83.33",
+      "recommended_rate_per_piece": "1000.00",
+      "recommended_rate_per_room": "1000.00"
+    },
+    "PER_M2": {
+      "is_below_floor": false,
+      "reasons": [],
+      "recommended_fixed_total": "5000.00",
+      "recommended_min_price_ex_vat": "5000.00",
+      "recommended_rate_per_m2": "83.33",
+      "recommended_rate_per_piece": "1000.00",
+      "recommended_rate_per_room": "1000.00"
+    },
+    "PER_ROOM": {
+      "is_below_floor": false,
+      "reasons": [],
+      "recommended_fixed_total": "5000.00",
+      "recommended_min_price_ex_vat": "5000.00",
+      "recommended_rate_per_m2": "83.33",
+      "recommended_rate_per_piece": "1000.00",
+      "recommended_rate_per_room": "1000.00"
+    },
+    "PIECEWORK": {
+      "is_below_floor": false,
+      "reasons": [],
+      "recommended_fixed_total": "5000.00",
+      "recommended_min_price_ex_vat": "5000.00",
+      "recommended_rate_per_m2": "83.33",
+      "recommended_rate_per_piece": "1000.00",
+      "recommended_rate_per_room": "1000.00"
+    }
+  },
+  "invoice_commercial": {
+    "line_items": [
+      {
+        "description": "Målning per rum",
+        "kind": "LABOR",
+        "qty": "5",
+        "total": "16000.00",
+        "unit": "rum",
+        "unit_price": "3200.00"
+      }
+    ],
+    "mode": "PER_ROOM",
+    "price_ex_vat": "16000.00",
+    "price_inc_vat": "20000.00",
+    "units": {
+      "items_count": 5,
+      "m2_basis": "FLOOR_AREA",
+      "m2_basis_label": "golvyta",
+      "rooms_count": 5,
+      "total_m2": "60.00"
+    },
+    "vat_amount": "4000.00"
+  },
+  "offer_commercial": {
+    "line_items": [
+      {
+        "description": "Målning per rum",
+        "qty": "5",
+        "total": "16000.00",
+        "unit": "rum",
+        "unit_price": "3200.00"
+      }
+    ],
+    "mode": "PER_ROOM",
+    "price_ex_vat": "16000.00",
+    "price_inc_vat": "20000.00",
+    "units": {
+      "items_count": 5,
+      "m2_basis": "FLOOR_AREA",
+      "rooms_count": 5,
+      "total_m2": "60.00"
+    },
+    "vat_amount": "4000.00"
+  },
+  "performance": {
+    "compute_seconds": "0.0718"
+  },
+  "scenarios": {
+    "FIXED_TOTAL": {
+      "effective_hourly": "990.00",
+      "invalid": false,
+      "margin_pct": "73.72",
+      "price_ex_vat": "9900.00",
+      "profit": "7297.88",
+      "warnings": []
+    },
+    "HOURLY": {
+      "effective_hourly": "640.00",
+      "invalid": false,
+      "margin_pct": "59.34",
+      "price_ex_vat": "6400.00",
+      "profit": "3797.88",
+      "warnings": []
+    },
+    "PER_M2": {
+      "effective_hourly": "1680.00",
+      "invalid": false,
+      "margin_pct": "84.51",
+      "price_ex_vat": "16800.00",
+      "profit": "14197.88",
+      "warnings": []
+    },
+    "PER_ROOM": {
+      "effective_hourly": "1600.00",
+      "invalid": false,
+      "margin_pct": "83.74",
+      "price_ex_vat": "16000.00",
+      "profit": "13397.88",
+      "warnings": []
+    },
+    "PIECEWORK": {
+      "effective_hourly": "575.00",
+      "invalid": false,
+      "margin_pct": "54.75",
+      "price_ex_vat": "5750.00",
+      "profit": "3147.88",
+      "warnings": []
+    }
+  }
+}
