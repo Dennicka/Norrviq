@@ -15,6 +15,7 @@ from app.models.rot_case import RotCase
 from app.models.pricing_policy import get_or_create_pricing_policy
 from app.models.project import Project
 from app.services.pricing import compute_pricing_scenarios, evaluate_floor
+from app.services.offer_commercial import assert_offer_matches_selected_scenario, compute_offer_commercial, serialize_offer_commercial
 from app.services.completeness import compute_completeness
 from app.services.terms_templates import DOC_TYPE_INVOICE, DOC_TYPE_OFFER, resolve_terms_template
 from app.services.invoice_lines import recalculate_invoice_totals
@@ -181,6 +182,8 @@ def finalize_offer(db: Session, project_id: int, user_id: str | None, profile: C
         selected_mode = project.pricing.mode if project.pricing else "HOURLY"
         _check_completeness_for_project(db, project_id=project.id, mode=selected_mode, user_id=user_id, doc_type="project", doc_id=project.id)
         _check_floor_policy_for_project(db, project_id=project.id, user_id=user_id, doc_type="project", doc_id=project.id)
+        commercial = compute_offer_commercial(db, project.id, lang=lang or "sv")
+        assert_offer_matches_selected_scenario(db, project.id, offer=commercial)
 
         year = date.today().year
         seq = _next_sequence(db, DOC_TYPE_OFFER_NUMBERING, year)
@@ -203,6 +206,7 @@ def finalize_offer(db: Session, project_id: int, user_id: str | None, profile: C
                 entity_id=project.id,
                 details={"template_id": template.id, "version": template.version},
             )
+        project.offer_commercial_snapshot = serialize_offer_commercial(commercial)
         project.offer_status = STATUS_ISSUED
         db.add(project)
 
@@ -212,7 +216,7 @@ def finalize_offer(db: Session, project_id: int, user_id: str | None, profile: C
             user_id=user_id,
             entity_type="project",
             entity_id=project.id,
-            details={"doc_number": project.offer_number, "year": year, "seq": seq},
+            details={"doc_number": project.offer_number, "year": year, "seq": seq, "mode": commercial.mode, "price_ex_vat": str(commercial.price_ex_vat)},
         )
         logger.info(
             "event=offer_issued doc_id=%s doc_number=%s user_id=%s year=%s seq=%s",

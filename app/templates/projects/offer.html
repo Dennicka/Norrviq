@@ -39,6 +39,13 @@
         </div>
 
         <div class="offer-section">
+            <p><strong>Pris modell:</strong> {{ commercial.mode }}</p>
+            {% if commercial.mode == 'PER_M2' %}
+            <p><strong>Underlag:</strong> {{ commercial.units.m2_basis }} = {{ commercial.units.total_m2 }} m²</p>
+            {% endif %}
+        </div>
+
+        <div class="offer-section">
             <h2>{{ t("offer.table.header.description") }}</h2>
             <table class="offer-table">
                 <thead>
@@ -55,21 +62,21 @@
                     {% for item in work_items %}
                     <tr>
                         <td>{{ loop.index }}</td>
-                        <td>{{ item.work_type.name_ru if lang == 'ru' else item.work_type.name_sv }}</td>
-                        <td>{{ item.work_type.unit }}</td>
-                        <td>{{ item.quantity }}</td>
-                        <td>{{ item.work_type.price_per_unit if item.work_type.price_per_unit else '' }}</td>
-                        <td>{{ item.calculated_cost_without_moms if item.calculated_cost_without_moms else '' }}</td>
+                        <td>{{ item.description }}</td>
+                        <td>{{ item.unit }}</td>
+                        <td>{{ item.qty }}</td>
+                        <td>{{ item.unit_price }}</td>
+                        <td>{{ item.total }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
 
             <div class="offer-summary" style="margin-top: 8px;">
-                <div><span>{{ t("offer.summary.work_sum") }}</span><span>{{ project.work_sum_without_moms or 0 }}</span></div>
-                <div><span>{{ t("offer.summary.moms") }}</span><span>{{ project.moms_amount or 0 }}</span></div>
+                <div><span>{{ t("offer.summary.work_sum") }}</span><span>{{ commercial.price_ex_vat or 0 }}</span></div>
+                <div><span>{{ t("offer.summary.moms") }}</span><span>{{ commercial.vat_amount or 0 }}</span></div>
                 <div><span>{{ t("offer.summary.rot") }}</span><span>{{ project.rot_amount or 0 }}</span></div>
-                <div><strong>{{ t("offer.summary.total") }}</strong><strong>{{ project.client_pays_total or 0 }}</strong></div>
+                <div><strong>{{ t("offer.summary.total") }}</strong><strong>{{ commercial.price_inc_vat or 0 }}</strong></div>
             </div>
                 <div class="offer-section">
             <h2>{{ terms_title or "Terms / Villkor" }}</h2>
