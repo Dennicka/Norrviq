@@ -25,6 +25,7 @@ from app.services.estimates import calculate_project_totals, recalculate_project
 from app.services.finance import calculate_project_financials, compute_project_finance
 from app.services.terms_templates import DOC_TYPE_OFFER, resolve_terms_template
 from app.services.buffer_audit import log_buffer_audit
+from app.services.quality import evaluate_project_quality
 from app.services.pricing import (
     LOW_MARGIN_WARN_PCT,
     WARNING_LOW_MARGIN,
@@ -249,6 +250,7 @@ async def project_detail(
     recent_invoices = sorted(
         project.invoices, key=lambda inv: inv.issue_date or inv.created_at or date.min, reverse=True
     )[:2]
+    quality_report = evaluate_project_quality(db, project.id, lang=lang)
     context = template_context(request, lang)
     context.update(
         {
@@ -261,6 +263,7 @@ async def project_detail(
             "finance_summary": finance_summary,
             "recent_invoices": recent_invoices,
             "baseline": baseline,
+            "quality_report": quality_report,
         }
     )
     return templates.TemplateResponse(request, "projects/detail.html", context)
@@ -451,8 +454,17 @@ async def add_work_item(
         comment=form.get("comment"),
     )
     db.add(item)
-    db.commit()
+    db.flush()
+    quality_report = evaluate_project_quality(db, project.id, lang=lang)
+    item_issues = [issue for issue in quality_report.issues if issue.entity == "WORK_ITEM" and issue.entity_id == item.id]
+    block_issues = [issue for issue in item_issues if issue.severity == "BLOCK"]
+    for issue in item_issues:
+        add_flash_message(request, issue.message, "error" if issue.severity == "BLOCK" else "warning")
+    if block_issues:
+        db.rollback()
+        return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
 
+    db.commit()
     return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
@@ -521,6 +533,16 @@ async def update_work_item(
     item.comment = form.get("comment")
 
     db.add(item)
+    db.flush()
+    quality_report = evaluate_project_quality(db, item.project_id, lang=lang)
+    item_issues = [issue for issue in quality_report.issues if issue.entity == "WORK_ITEM" and issue.entity_id == item.id]
+    block_issues = [issue for issue in item_issues if issue.severity == "BLOCK"]
+    for issue in item_issues:
+        add_flash_message(request, issue.message, "error" if issue.severity == "BLOCK" else "warning")
+    if block_issues:
+        db.rollback()
+        return RedirectResponse(url=f"/projects/{item.project_id}/items/{item.id}/edit", status_code=status.HTTP_303_SEE_OTHER)
+
     recalculate_project_work_items(db, item.project)
     calculate_project_totals(db, item.project)
     add_flash_message(request, translator("projects.work_items.updated"), "success")
@@ -688,6 +710,7 @@ async def edit_cost_item_form(
 
     cost_categories = db.query(CostCategory).all()
     materials = db.query(Material).filter(Material.is_active).all()
+    quality_report = evaluate_project_quality(db, project.id, lang=lang)
     context = template_context(request, lang)
     context.update(
         {
@@ -947,6 +970,7 @@ async def project_pricing_screen(
             "errors": {},
             "is_readonly": is_readonly,
             "baseline": baseline,
+            "quality_report": quality_report,
             "scenarios": scenario_views,
             "effective_by_mode": effective_by_mode,
             "pricing_policy": policy,
@@ -1036,6 +1060,7 @@ async def update_project_pricing_screen(
                 "errors": {},
                 "is_readonly": role not in {ADMIN_ROLE, OPERATOR_ROLE},
                 "baseline": baseline,
+            "quality_report": quality_report,
                 "scenarios": scenario_views,
                 "effective_by_mode": {scenario.mode: _format_hourly(scenario.effective_hourly_sell_rate) for scenario in scenarios},
                 "pricing_policy": policy,
@@ -1124,6 +1149,7 @@ async def update_project_pricing_screen(
                 "errors": exc.errors,
                 "is_readonly": False,
                 "baseline": baseline,
+            "quality_report": quality_report,
                 "scenarios": scenario_views,
                 "effective_by_mode": {scenario.mode: _format_hourly(scenario.effective_hourly_sell_rate) for scenario in scenarios},
                 "pricing_policy": policy,

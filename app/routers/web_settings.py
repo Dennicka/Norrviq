@@ -13,6 +13,7 @@ from app.models.pricing_policy import get_or_create_pricing_policy
 from app.models.settings import get_or_create_settings
 from app.models.terms_template import TermsTemplate
 from app.models.speed_profile import SpeedProfile
+from app.models.sanity_rule import SanityRule
 from app.services.terms_templates import create_versioned_template
 
 router = APIRouter(prefix="/settings", tags=["settings"])
@@ -393,3 +394,45 @@ async def upsert_speed_profile(request: Request, db: Session = Depends(get_db)):
     )
     db.commit()
     return RedirectResponse(url="/settings/speed-profiles", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.get("/sanity-rules")
+async def sanity_rules_page(request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang)):
+    rules = db.query(SanityRule).order_by(SanityRule.entity.asc(), SanityRule.field.asc(), SanityRule.id.asc()).all()
+    context = template_context(request, lang)
+    context.update({"rules": rules})
+    return templates.TemplateResponse(request, "settings/sanity_rules.html", context)
+
+
+@router.post("/sanity-rules/{rule_id}")
+async def update_sanity_rule(rule_id: int, request: Request, db: Session = Depends(get_db)):
+    rule = db.get(SanityRule, rule_id)
+    if not rule:
+        return RedirectResponse(url="/settings/sanity-rules", status_code=status.HTTP_303_SEE_OTHER)
+
+    form = await request.form()
+    rule.is_active = form.get("is_active") in ("on", "1", "true", True, 1)
+    severity = (form.get("severity") or rule.severity).upper()
+    if severity in ("WARNING", "BLOCK"):
+        rule.severity = severity
+    if form.get("min_value") not in (None, ""):
+        rule.min_value = Decimal(form.get("min_value"))
+    if form.get("max_value") not in (None, ""):
+        rule.max_value = Decimal(form.get("max_value"))
+    if form.get("message_ru") is not None:
+        rule.message_ru = (form.get("message_ru") or "").strip() or rule.message_ru
+    if form.get("message_sv") is not None:
+        rule.message_sv = (form.get("message_sv") or "").strip() or rule.message_sv
+
+    user_id = request.session.get("user_email") if hasattr(request, "session") else None
+    _audit(
+        db,
+        event_type="sanity_rule_updated",
+        user_id=user_id,
+        entity_type="sanity_rule",
+        entity_id=rule.id,
+        details={"severity": rule.severity, "is_active": rule.is_active},
+    )
+    db.add(rule)
+    db.commit()
+    return RedirectResponse(url="/settings/sanity-rules", status_code=status.HTTP_303_SEE_OTHER)

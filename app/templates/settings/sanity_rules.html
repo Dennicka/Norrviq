@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Sanity rules</h1>
+<p><a href="/settings/">Back to settings</a></p>
+<table>
+    <thead>
+        <tr>
+            <th>ID</th><th>Entity</th><th>Field</th><th>Type</th><th>Severity</th><th>Active</th><th>Limits</th><th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for rule in rules %}
+        <tr>
+            <form method="post" action="/settings/sanity-rules/{{ rule.id }}">
+                {{ csrf_input(request) }}
+                <td>{{ rule.id }}</td>
+                <td>{{ rule.entity }}</td>
+                <td>{{ rule.field }}</td>
+                <td>{{ rule.rule_type }}</td>
+                <td>
+                    <select name="severity">
+                        <option value="WARNING" {% if rule.severity == 'WARNING' %}selected{% endif %}>WARNING</option>
+                        <option value="BLOCK" {% if rule.severity == 'BLOCK' %}selected{% endif %}>BLOCK</option>
+                    </select>
+                </td>
+                <td><input type="checkbox" name="is_active" {% if rule.is_active %}checked{% endif %}></td>
+                <td>
+                    <input type="number" step="0.01" name="min_value" value="{{ rule.min_value if rule.min_value is not none else '' }}" placeholder="min">
+                    <input type="number" step="0.01" name="max_value" value="{{ rule.max_value if rule.max_value is not none else '' }}" placeholder="max">
+                </td>
+                <td><button type="submit">Save</button></td>
+            </form>
+        </tr>
+        <tr>
+            <td colspan="8">
+                <strong>RU:</strong> {{ rule.message_ru }}<br>
+                <strong>SV:</strong> {{ rule.message_sv }}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

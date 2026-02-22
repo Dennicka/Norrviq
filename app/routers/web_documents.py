@@ -5,11 +5,20 @@ from sqlalchemy.orm import Session
 from app.dependencies import add_flash_message, get_current_lang, get_db
 from app.models.company_profile import get_or_create_company_profile
 from app.models.invoice import Invoice
+from app.models.audit_event import AuditEvent
 from app.observability import REQUEST_ID_HEADER
 from app.security import require_role
 from app.services.document_numbering import FloorPolicyViolationError, NumberingConflictError, finalize_invoice, finalize_offer
+from app.services.quality import evaluate_project_quality
 
 router = APIRouter(tags=["document-finalize"])
+
+
+def _quality_gate_response(request: Request, *, project_id: int, issues: list[dict]):
+    if "application/json" in request.headers.get("accept", ""):
+        return JSONResponse(status_code=409, content={"detail": "Нельзя выпустить документ, исправьте критические проблемы", "issues": issues})
+    add_flash_message(request, "Нельзя выпустить документ, исправь критические проблемы качества данных", "error")
+    return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/offers/{project_id}/finalize")
@@ -24,6 +33,14 @@ async def finalize_offer_action(
     user_id = request.session.get("user_email") if hasattr(request, "session") else None
     form = await request.form()
     terms_lang = form.get("terms_lang")
+    quality_report = evaluate_project_quality(db, project_id, lang=_lang)
+    if quality_report.blocks_count > 0:
+        issues = [{"field": i.field, "message": i.message, "entity": i.entity, "entity_id": i.entity_id} for i in quality_report.issues if i.severity == "BLOCK"]
+        db.add(AuditEvent(event_type="issue_blocked_document_issue", user_id=user_id, entity_type="project", entity_id=project_id, details=str(issues)))
+        db.commit()
+        return _quality_gate_response(request, project_id=project_id, issues=issues)
+    if quality_report.warnings_count > 0:
+        add_flash_message(request, "Есть предупреждения качества данных", "warning")
     try:
         finalize_offer(db, project_id=project_id, user_id=user_id, profile=profile, lang=terms_lang)
         add_flash_message(request, "Offer finalized", "success")
@@ -56,6 +73,15 @@ async def finalize_invoice_action(
     invoice = db.get(Invoice, invoice_id)
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
+
+    quality_report = evaluate_project_quality(db, invoice.project_id, lang=_lang)
+    if quality_report.blocks_count > 0:
+        issues = [{"field": i.field, "message": i.message, "entity": i.entity, "entity_id": i.entity_id} for i in quality_report.issues if i.severity == "BLOCK"]
+        db.add(AuditEvent(event_type="issue_blocked_document_issue", user_id=user_id, entity_type="invoice", entity_id=invoice_id, details=str(issues)))
+        db.commit()
+        return _quality_gate_response(request, project_id=invoice.project_id, issues=issues)
+    if quality_report.warnings_count > 0:
+        add_flash_message(request, "Есть предупреждения качества данных", "warning")
 
     try:
         finalize_invoice(db, invoice_id=invoice_id, user_id=user_id, profile=profile, lang=terms_lang)

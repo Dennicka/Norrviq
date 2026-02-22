@@ -8,6 +8,7 @@ from app.dependencies import add_flash_message, get_current_lang, get_db, templa
 from app.models.project import Project, ProjectWorkItem
 from app.models.room import Room
 from app.services.rooms import recalc_room_dimensions
+from app.services.quality import evaluate_project_quality
 from app.i18n import make_t
 
 router = APIRouter(prefix="/projects/{project_id}/rooms", tags=["rooms"])
@@ -85,8 +86,17 @@ async def create_room(
     )
     recalc_room_dimensions(room)
     db.add(room)
-    db.commit()
+    db.flush()
+    quality_report = evaluate_project_quality(db, project.id, lang=lang)
+    room_issues = [issue for issue in quality_report.issues if issue.entity == "ROOM" and issue.entity_id == room.id]
+    block_issues = [issue for issue in room_issues if issue.severity == "BLOCK"]
+    for issue in room_issues:
+        add_flash_message(request, issue.message, "error" if issue.severity == "BLOCK" else "warning")
+    if block_issues:
+        db.rollback()
+        return RedirectResponse(url=f"/projects/{project.id}/rooms/create", status_code=status.HTTP_303_SEE_OTHER)
 
+    db.commit()
     return RedirectResponse(url=f"/projects/{project.id}/rooms/", status_code=status.HTTP_303_SEE_OTHER)
 
 
@@ -137,8 +147,17 @@ async def update_room(
         room.baseboard_length_m = manual_baseboard
 
     db.add(room)
-    db.commit()
+    db.flush()
+    quality_report = evaluate_project_quality(db, project_id, lang=lang)
+    room_issues = [issue for issue in quality_report.issues if issue.entity == "ROOM" and issue.entity_id == room.id]
+    block_issues = [issue for issue in room_issues if issue.severity == "BLOCK"]
+    for issue in room_issues:
+        add_flash_message(request, issue.message, "error" if issue.severity == "BLOCK" else "warning")
+    if block_issues:
+        db.rollback()
+        return RedirectResponse(url=f"/projects/{project_id}/rooms/{room_id}/edit", status_code=status.HTTP_303_SEE_OTHER)
 
+    db.commit()
     return RedirectResponse(url=f"/projects/{project_id}/rooms/", status_code=status.HTTP_303_SEE_OTHER)
 
 
