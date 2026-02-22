@@ -16,6 +16,7 @@ from app.models.project_pricing import ProjectPricing
 from app.models.pricing_policy import PricingPolicy
 from app.models.settings import get_or_create_settings
 from app.services.buffer_rules import resolve_effective_buffer
+from app.services.takeoff import compute_project_areas, get_or_create_project_takeoff_settings
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -32,6 +33,7 @@ WARNING_MISSING_BASELINE = "MISSING_BASELINE"
 WARNING_NEGATIVE_MARGIN = "NEGATIVE_MARGIN"
 WARNING_LOW_MARGIN = "LOW_MARGIN"
 WARNING_INVALID_TARGET_MARGIN = "INVALID_TARGET_MARGIN"
+WARNING_MISSING_PERIMETER_HEIGHT = "MISSING_PERIMETER_HEIGHT"
 
 FLOOR_REASON_MARGIN_BELOW_MIN = "MARGIN_BELOW_MIN"
 FLOOR_REASON_PROFIT_BELOW_MIN = "PROFIT_BELOW_MIN"
@@ -70,6 +72,11 @@ class ProjectBaseline:
     overhead_cost_internal: Decimal
     internal_total_cost: Decimal
     total_m2: Decimal
+    m2_basis: str
+    total_floor_m2: Decimal
+    total_ceiling_m2: Decimal
+    total_wall_m2: Decimal
+    total_paintable_m2: Decimal
     rooms_count: int
     items_count: int
     buffers_hours_total: Decimal
@@ -396,9 +403,9 @@ def compute_project_baseline(
         buffers_cost_total,
     )
 
-    total_m2 = _quantize_hours(
-        sum((Decimal(str(room.floor_area_m2 or 0)) for room in project.rooms), Decimal("0"))
-    )
+    takeoff_settings = get_or_create_project_takeoff_settings(db, project_id)
+    areas = compute_project_areas(db, project_id)
+    total_m2 = areas.total_by_basis(takeoff_settings.m2_basis)
     rooms_count = len(project.rooms)
     items_count = len(project.work_items)
 
@@ -416,6 +423,11 @@ def compute_project_baseline(
         overhead_cost_internal=overhead_cost_internal,
         internal_total_cost=internal_total_cost,
         total_m2=total_m2,
+        m2_basis=takeoff_settings.m2_basis,
+        total_floor_m2=areas.total_floor_m2,
+        total_ceiling_m2=areas.total_ceiling_m2,
+        total_wall_m2=areas.total_wall_m2,
+        total_paintable_m2=areas.total_paintable_m2,
         rooms_count=rooms_count,
         items_count=items_count,
         buffers_hours_total=buffers_hours_total,
@@ -517,16 +529,18 @@ def compute_pricing_scenarios(db: Session, project_id: int, *, request_id: str |
         )
     )
 
-    per_m2_invalid = baseline.total_m2 <= 0
+    per_m2_needs_walls = baseline.m2_basis in {"WALL_AREA", "PAINTABLE_TOTAL"}
+    per_m2_missing_dims = per_m2_needs_walls and baseline.total_wall_m2 <= 0
+    per_m2_invalid = baseline.total_m2 <= 0 or per_m2_missing_dims
     scenarios.append(
         _build_scenario(
             mode="PER_M2",
             input_params={"rate_per_m2": str(pricing.rate_per_m2) if pricing.rate_per_m2 is not None else None},
             baseline=baseline,
             price_ex_vat=Decimal(str(pricing.rate_per_m2 or 0)) * baseline.total_m2,
-            warnings=[WARNING_MISSING_UNITS_M2] if per_m2_invalid else [],
+            warnings=([WARNING_MISSING_UNITS_M2] + ([WARNING_MISSING_PERIMETER_HEIGHT] if per_m2_missing_dims else [])) if per_m2_invalid else [],
             invalid=per_m2_invalid or pricing.rate_per_m2 is None,
-            details_lines=[f"total_m2({baseline.total_m2}) × rate_per_m2({pricing.rate_per_m2 or Decimal('0.00')})"],
+            details_lines=[f"basis({baseline.m2_basis}) total_m2({baseline.total_m2}) × rate_per_m2({pricing.rate_per_m2 or Decimal('0.00')})"],
             vat_pct=vat_pct,
         )
     )

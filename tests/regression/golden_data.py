@@ -13,13 +13,14 @@ from app.models.pricing_policy import PricingPolicy, get_or_create_pricing_polic
 from app.models.project import Project, ProjectWorkItem, ProjectWorkerAssignment
 from app.models.room import Room
 from app.models.settings import get_or_create_settings
+from app.models.project_takeoff_settings import ProjectTakeoffSettings
 from app.models.worker import Worker
 from app.models.worktype import WorkType
 from app.services.estimates import calculate_work_item
 from app.services.pricing import DesiredInput, compute_conversions, compute_pricing_scenarios, evaluate_floor, get_or_create_project_pricing
 
 GOLDEN_DIR = Path("tests/golden")
-GOLDEN_CASES = ("g1_small_room", "g2_apartment", "g3_missing_units", "g4_large")
+GOLDEN_CASES = ("g1_small_room", "g2_apartment", "g3_missing_units", "g4_large", "g5_paintable_basis")
 
 
 def _decimal_str(value: Decimal | None) -> str | None:
@@ -216,6 +217,15 @@ def _populate_case(db: Session, case_name: str) -> tuple[int, Decimal, Decimal]:
 
         desired_hourly = Decimal("860.00")
         target_margin = Decimal("32.00")
+    elif case_name == "g5_paintable_basis":
+        wt_wall = _make_work_type(db, "G5-WALL", unit="m2", hours_per_unit=Decimal("1.00"))
+        room = Room(project_id=project.id, name="Paint room", floor_area_m2=Decimal("20.00"), wall_perimeter_m=Decimal("18.00"), wall_height_m=Decimal("2.50"))
+        db.add(room)
+        db.flush()
+        _add_item(db, project=project, room=room, work_type=wt_wall, quantity=Decimal("10.00"), difficulty=Decimal("1.00"), company_rate=company_rate)
+        db.add(ProjectCostItem(project_id=project.id, cost_category_id=mat.id, title="Paint", amount=Decimal("200.00"), is_material=True))
+        desired_hourly = Decimal("700.00")
+        target_margin = Decimal("25.00")
     else:
         raise ValueError(f"Unknown golden case: {case_name}")
 
@@ -229,6 +239,12 @@ def _populate_case(db: Session, case_name: str) -> tuple[int, Decimal, Decimal]:
     pricing.target_margin_pct = Decimal("30.00")
     pricing.include_materials = True
     pricing.include_travel_setup_buffers = True
+    if case_name == "g5_paintable_basis":
+        takeoff = db.query(ProjectTakeoffSettings).filter(ProjectTakeoffSettings.project_id == project.id).first()
+        if takeoff is None:
+            takeoff = ProjectTakeoffSettings(project_id=project.id)
+        takeoff.m2_basis = "PAINTABLE_TOTAL"
+        db.add(takeoff)
     db.commit()
     return project.id, desired_hourly, target_margin
 

@@ -77,6 +77,7 @@ def evaluate_room_quality(room: Room, rules: list[SanityRule], *, lang: str = "r
     issues: list[QualityIssue] = []
     values = {
         "wall_height_m": _to_decimal(room.wall_height_m),
+        "wall_perimeter_m": _to_decimal(room.wall_perimeter_m),
         "floor_area_m2": _to_decimal(room.floor_area_m2),
         "wall_area_m2": _to_decimal(room.wall_area_m2),
         "ceiling_area_m2": _to_decimal(room.ceiling_area_m2),

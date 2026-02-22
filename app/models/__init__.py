@@ -24,6 +24,7 @@ from .speed_profile import SpeedProfile
 from .project_execution_profile import ProjectExecutionProfile
 from .sanity_rule import SanityRule
 from .completeness_rule import CompletenessRule
+from .project_takeoff_settings import ProjectTakeoffSettings
 from .db_backup import DBBackup
 
 __all__ = [
@@ -56,5 +57,6 @@ __all__ = [
     "ProjectExecutionProfile",
     "SanityRule",
     "CompletenessRule",
+    "ProjectTakeoffSettings",
     "DBBackup",
 ]

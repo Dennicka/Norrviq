@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Takeoff m² basis — {{ project.name }}</h1>
+<p><a href="/projects/{{ project.id }}">← {{ t('projects.detail') }}</a> · <a href="/projects/{{ project.id }}/pricing">Pricing</a></p>
+
+<form method="post" action="/projects/{{ project.id }}/takeoff">
+  {{ csrf_input(request) }}
+  <section>
+    <h2>База для расчёта за m²</h2>
+    <p><small>Для малярки обычно подходит <strong>PAINTABLE_TOTAL</strong> (стены + потолок).</small></p>
+    {% for basis in m2_basis_choices %}
+    <label style="display:block; margin-bottom:4px;">
+      <input type="radio" name="m2_basis" value="{{ basis }}" {% if takeoff.m2_basis == basis %}checked{% endif %} {% if is_readonly %}disabled{% endif %}>
+      <strong>{{ basis }}</strong> — {{ m2_basis_labels_ru.get(basis) }}
+    </label>
+    {% endfor %}
+    <label>
+      <input type="checkbox" name="include_openings_subtraction" {% if takeoff.include_openings_subtraction %}checked{% endif %} {% if is_readonly %}disabled{% endif %}>
+      Вычитать проёмы (v1 пока не применяется в формулах)
+    </label>
+    {% if not is_readonly %}<div><button type="submit">Сохранить</button></div>{% endif %}
+  </section>
+</form>
+
+<section>
+  <h2>Превью расчёта</h2>
+  <ul>
+    <li>total_floor_m2 = {{ areas.total_floor_m2 }}</li>
+    <li>total_ceiling_m2 = {{ areas.total_ceiling_m2 }}</li>
+    <li>total_wall_m2 = {{ areas.total_wall_m2 }}</li>
+    <li>total_paintable_m2 = {{ areas.total_paintable_m2 }}</li>
+    <li><strong>Используется для Per m² ({{ takeoff.m2_basis }}): {{ areas.total_by_basis(takeoff.m2_basis) }}</strong></li>
+  </ul>
+  <p><small>Формула стен: <code>wall_area = perimeter × height</code>. Потолок: <code>ceiling_area = floor_area</code>.</small></p>
+</section>
+{% endblock %}
