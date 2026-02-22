@@ -112,6 +112,22 @@ async def update_pricing_policy(request: Request, db: Session = Depends(get_db),
     min_profit_sek = _decimal_field("min_profit_sek")
     min_effective_hourly_ex_vat = _decimal_field("min_effective_hourly_ex_vat")
 
+    def _int_field(field: str, *, min_value: int = 0, max_value: int = 100):
+        raw = (data.get(field) or "").strip()
+        try:
+            value = int(raw)
+        except Exception:
+            errors[field] = "Некорректное целое число"
+            return None
+        if value < min_value or value > max_value:
+            errors[field] = f"Значение должно быть в диапазоне {min_value}–{max_value}"
+            return None
+        return value
+
+    min_completeness_score_for_fixed = _int_field("min_completeness_score_for_fixed")
+    min_completeness_score_for_per_m2 = _int_field("min_completeness_score_for_per_m2")
+    min_completeness_score_for_per_room = _int_field("min_completeness_score_for_per_room")
+
     if min_margin_pct is not None and (min_margin_pct < 0 or min_margin_pct > 80):
         errors["min_margin_pct"] = "Маржа должна быть в диапазоне 0–80%"
     if min_profit_sek is not None and min_profit_sek < 0:
@@ -129,6 +145,10 @@ async def update_pricing_policy(request: Request, db: Session = Depends(get_db),
     policy.min_effective_hourly_ex_vat = min_effective_hourly_ex_vat.quantize(Decimal("0.01"))
     policy.block_issue_below_floor = data.get("block_issue_below_floor") in ("on", "true", "1", True, 1)
     policy.warn_only_mode = data.get("warn_only_mode") in ("on", "true", "1", True, 1)
+    policy.min_completeness_score_for_fixed = min_completeness_score_for_fixed
+    policy.min_completeness_score_for_per_m2 = min_completeness_score_for_per_m2
+    policy.min_completeness_score_for_per_room = min_completeness_score_for_per_room
+    policy.warn_only_below_score = data.get("warn_only_below_score") in ("on", "true", "1", True, 1)
 
     user_id = request.session.get("user_email") if hasattr(request, "session") else None
     _audit(
@@ -143,6 +163,10 @@ async def update_pricing_policy(request: Request, db: Session = Depends(get_db),
             "min_effective_hourly_ex_vat": str(policy.min_effective_hourly_ex_vat),
             "block_issue_below_floor": policy.block_issue_below_floor,
             "warn_only_mode": policy.warn_only_mode,
+            "min_completeness_score_for_fixed": policy.min_completeness_score_for_fixed,
+            "min_completeness_score_for_per_m2": policy.min_completeness_score_for_per_m2,
+            "min_completeness_score_for_per_room": policy.min_completeness_score_for_per_room,
+            "warn_only_below_score": policy.warn_only_below_score,
         },
     )
     db.add(policy)

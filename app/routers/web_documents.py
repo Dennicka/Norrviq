@@ -3,12 +3,18 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.dependencies import add_flash_message, get_current_lang, get_db
+from app.models.audit_event import AuditEvent
 from app.models.company_profile import get_or_create_company_profile
 from app.models.invoice import Invoice
-from app.models.audit_event import AuditEvent
 from app.observability import REQUEST_ID_HEADER
 from app.security import require_role
-from app.services.document_numbering import FloorPolicyViolationError, NumberingConflictError, finalize_invoice, finalize_offer
+from app.services.document_numbering import (
+    CompletenessViolationError,
+    FloorPolicyViolationError,
+    NumberingConflictError,
+    finalize_invoice,
+    finalize_offer,
+)
 from app.services.quality import evaluate_project_quality
 
 router = APIRouter(tags=["document-finalize"])
@@ -19,6 +25,23 @@ def _quality_gate_response(request: Request, *, project_id: int, issues: list[di
         return JSONResponse(status_code=409, content={"detail": "Нельзя выпустить документ, исправьте критические проблемы", "issues": issues})
     add_flash_message(request, "Нельзя выпустить документ, исправь критические проблемы качества данных", "error")
     return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+def _completeness_gate_response(request: Request, *, project_id: int, exc: CompletenessViolationError):
+    if "application/json" in request.headers.get("accept", ""):
+        return JSONResponse(
+            status_code=409,
+            content={
+                "detail": str(exc),
+                "score": exc.score,
+                "missing": exc.missing,
+                "project_url": f"/projects/{project_id}",
+                "rooms_url": f"/projects/{project_id}/rooms/",
+                "pricing_url": f"/projects/{project_id}/pricing",
+            },
+        )
+    add_flash_message(request, f"{exc}. Перейдите в Project/Rooms/Pricing.", "error")
+    return RedirectResponse(url=f"/projects/{project_id}/pricing", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/offers/{project_id}/finalize")
@@ -47,6 +70,8 @@ async def finalize_offer_action(
     except NumberingConflictError:
         req_id = getattr(request.state, "request_id", "-")
         add_flash_message(request, f"Номер уже выдан, обновите страницу (request_id={req_id})", "error")
+    except CompletenessViolationError as exc:
+        return _completeness_gate_response(request, project_id=project_id, exc=exc)
     except FloorPolicyViolationError as exc:
         if "application/json" in request.headers.get("accept", ""):
             return JSONResponse(status_code=409, content={"detail": str(exc), "reasons": exc.reasons, "pricing_url": f"/projects/{project_id}/pricing"})
@@ -89,14 +114,14 @@ async def finalize_invoice_action(
     except NumberingConflictError:
         req_id = getattr(request.state, "request_id", "-")
         add_flash_message(request, f"Номер уже выдан, обновите страницу (request_id={req_id})", "error")
+    except CompletenessViolationError as exc:
+        return _completeness_gate_response(request, project_id=invoice.project_id, exc=exc)
     except FloorPolicyViolationError as exc:
         if "application/json" in request.headers.get("accept", ""):
             return JSONResponse(status_code=409, content={"detail": str(exc), "reasons": exc.reasons, "pricing_url": f"/projects/{invoice.project_id}/pricing"})
         add_flash_message(request, f"{exc}. Перейдите в Pricing.", "error")
         return RedirectResponse(url=f"/projects/{invoice.project_id}/pricing", status_code=status.HTTP_303_SEE_OTHER)
 
-    response = RedirectResponse(
-        url=f"/projects/{invoice.project_id}/invoices/{invoice_id}", status_code=status.HTTP_303_SEE_OTHER
-    )
+    response = RedirectResponse(url=f"/projects/{invoice.project_id}/invoices/{invoice_id}", status_code=status.HTTP_303_SEE_OTHER)
     response.headers[REQUEST_ID_HEADER] = getattr(request.state, "request_id", "")
     return response

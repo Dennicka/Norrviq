@@ -27,12 +27,22 @@
             ('PER_ROOM', 'Per room'),
             ('PIECEWORK', 'Piecework')
         ] %}
+        {% set comp = completeness_by_mode.get(mode_value) if completeness_by_mode else None %}
         <label style="display:block; margin-bottom:4px;">
             <input type="radio" name="mode" value="{{ mode_value }}" {% if current_mode == mode_value %}checked{% endif %} {% if is_readonly %}disabled{% endif %}>
             {{ mode_label }}
+            {% if comp %}<small>— score {{ comp.score }}/100 ({{ comp.level }}){% if not comp.can_issue_mode %} · заблокировано для issue{% endif %}</small>{% endif %}
         </label>
         {% endfor %}
     </section>
+
+    {% if selected_completeness %}
+    <section style="padding:8px; border:1px solid #ddd;">
+        <h3>Completeness / Confidence</h3>
+        <p><strong>{{ selected_completeness.score }}/100</strong> ({{ selected_completeness.level }})</p>
+        {% if not selected_completeness.can_issue_mode %}<p style="color:#b00020;">Issue будет заблокирован для этого режима.</p>{% endif %}
+    </section>
+    {% endif %}
 
     <section data-mode-panel="HOURLY">
         <h3>Hourly</h3>
@@ -201,7 +211,8 @@
                     {{ csrf_input(request) }}
                     <input type="hidden" name="intent" value="select_mode">
                     <input type="hidden" name="selected_mode" value="{{ row.mode }}">
-                    <button type="submit" class="js-mode-select-btn">Use this mode</button>
+                    {% set row_comp = completeness_by_mode.get(row.mode) if completeness_by_mode else None %}
+                    <button type="submit" class="js-mode-select-btn" {% if row_comp and not row_comp.can_issue_mode %}title="Issue blocked until missing data is filled"{% endif %}>Use this mode</button>
                 </form>
                 {% else %}
                 —

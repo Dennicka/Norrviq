@@ -26,6 +26,7 @@ from app.services.finance import calculate_project_financials, compute_project_f
 from app.services.terms_templates import DOC_TYPE_OFFER, resolve_terms_template
 from app.services.buffer_audit import log_buffer_audit
 from app.services.quality import evaluate_project_quality
+from app.services.completeness import compute_completeness
 from app.services.pricing import (
     LOW_MARGIN_WARN_PCT,
     WARNING_LOW_MARGIN,
@@ -173,7 +174,10 @@ def _parse_date(value: str | None):
 
 def build_project_context(db: Session, request: Request, project: Project, lang: str, **extra):
     context = template_context(request, lang)
-    context.update({"project": project, "quality_report": evaluate_project_quality(db, project.id, lang=lang)})
+    mode = ((extra.get("pricing") and extra.get("pricing").mode) or (project.pricing.mode if project.pricing else "HOURLY"))
+    segment = (project.client.client_segment if project.client and project.client.client_segment else "ANY")
+    completeness_report = compute_completeness(db, project.id, mode=mode, segment=segment, lang=lang)
+    context.update({"project": project, "quality_report": evaluate_project_quality(db, project.id, lang=lang), "completeness_report": completeness_report})
     context.update(extra)
     return context
 
@@ -892,6 +896,8 @@ async def project_pricing_screen(
     baseline, scenarios = compute_pricing_scenarios(db, project_id, request_id=getattr(request.state, "request_id", None))
     policy = get_or_create_pricing_policy(db)
     scenario_views = [_scenario_view_model(scenario, evaluate_floor(baseline, scenario, policy)) for scenario in scenarios]
+    segment = (project.client.client_segment if project.client and project.client.client_segment else "ANY")
+    completeness_by_mode = {scenario.mode: compute_completeness(db, project_id, mode=scenario.mode, segment=segment, lang=lang) for scenario in scenarios}
     db.add(
         AuditEvent(
             event_type="pricing_scenarios_viewed",
@@ -975,6 +981,8 @@ async def project_pricing_screen(
         scenarios=scenario_views,
         effective_by_mode=effective_by_mode,
         pricing_policy=policy,
+        completeness_by_mode=completeness_by_mode,
+        selected_completeness=completeness_by_mode.get(pricing.mode),
     )
     return templates.TemplateResponse(request, "projects/pricing.html", context)
 
@@ -1038,6 +1046,8 @@ async def update_project_pricing_screen(
         baseline, scenarios = compute_pricing_scenarios(db, project_id, request_id=getattr(request.state, "request_id", None))
         policy = get_or_create_pricing_policy(db)
         scenario_views = [_scenario_view_model(scenario, evaluate_floor(baseline, scenario, policy)) for scenario in scenarios]
+        segment = (project.client.client_segment if project.client and project.client.client_segment else "ANY")
+        completeness_by_mode = {scenario.mode: compute_completeness(db, project_id, mode=scenario.mode, segment=segment, lang=lang) for scenario in scenarios}
         context = build_project_context(
             db,
             request,
@@ -1064,6 +1074,8 @@ async def update_project_pricing_screen(
             scenarios=scenario_views,
             effective_by_mode={scenario.mode: _format_hourly(scenario.effective_hourly_sell_rate) for scenario in scenarios},
             pricing_policy=policy,
+            completeness_by_mode=completeness_by_mode,
+            selected_completeness=completeness_by_mode.get(pricing.mode),
         )
         return templates.TemplateResponse(request, "projects/pricing.html", context)
 
@@ -1137,6 +1149,8 @@ async def update_project_pricing_screen(
         baseline, scenarios = compute_pricing_scenarios(db, project_id, request_id=getattr(request.state, "request_id", None))
         policy = get_or_create_pricing_policy(db)
         scenario_views = [_scenario_view_model(scenario, evaluate_floor(baseline, scenario, policy)) for scenario in scenarios]
+        segment = (project.client.client_segment if project.client and project.client.client_segment else "ANY")
+        completeness_by_mode = {scenario.mode: compute_completeness(db, project_id, mode=scenario.mode, segment=segment, lang=lang) for scenario in scenarios}
         context = build_project_context(
             db,
             request,
@@ -1152,6 +1166,8 @@ async def update_project_pricing_screen(
             scenarios=scenario_views,
             effective_by_mode={scenario.mode: _format_hourly(scenario.effective_hourly_sell_rate) for scenario in scenarios},
             pricing_policy=policy,
+            completeness_by_mode=completeness_by_mode,
+            selected_completeness=completeness_by_mode.get(pricing.mode),
         )
         return templates.TemplateResponse(request, "projects/pricing.html", context, status_code=400)
 

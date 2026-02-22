@@ -60,6 +60,26 @@
     </ul>
 </section>
 
+
+<section>
+    <h2>Completeness / Confidence</h2>
+    <p><strong>Score:</strong> {{ completeness_report.score }}/100 ({{ completeness_report.level }})</p>
+    {% if not completeness_report.can_issue_fixed_price and (project.pricing and project.pricing.mode == 'FIXED_TOTAL') %}
+    <p style="color:#b00020;"><strong>Fixed price рискован/запрещён при текущей полноте данных.</strong></p>
+    {% endif %}
+    <ul>
+        {% for item in completeness_report.missing %}
+        <li>
+            <input type="checkbox" disabled>
+            <strong>[{{ item.severity }}]</strong> {{ item.message }}
+            {% if item.hint_link %}<a href="{{ item.hint_link }}">Go fix</a>{% endif %}
+        </li>
+        {% else %}
+        <li>Данных достаточно для выбранного режима.</li>
+        {% endfor %}
+    </ul>
+</section>
+
 <section>
     <h2>{{ t("menu.invoices") }}</h2>
     <p>
