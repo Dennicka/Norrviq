@@ -22,6 +22,10 @@ class Invoice(Base):
     rot_amount = Column(Numeric(12, 2), nullable=False)
     client_pays_total = Column(Numeric(12, 2), nullable=False)
 
+    subtotal_ex_vat = Column(Numeric(12, 2), nullable=False, default=0)
+    vat_total = Column(Numeric(12, 2), nullable=False, default=0)
+    total_inc_vat = Column(Numeric(12, 2), nullable=False, default=0)
+
     comment = Column(String, nullable=True)
     invoice_terms_snapshot_title = Column(Text, nullable=True)
     invoice_terms_snapshot_body = Column(Text, nullable=True)
@@ -31,3 +35,4 @@ class Invoice(Base):
     )
 
     project = relationship("Project", back_populates="invoices")
+    lines = relationship("InvoiceLine", back_populates="invoice", cascade="all, delete-orphan", order_by="InvoiceLine.position")

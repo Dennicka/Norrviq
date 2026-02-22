@@ -8,6 +8,7 @@ from .material import Material
 from .settings import Settings
 from .legal_note import LegalNote
 from .invoice import Invoice
+from .invoice_line import InvoiceLine
 from .user import User
 from .company_profile import CompanyProfile
 from .document_sequence import DocumentSequence
@@ -36,6 +37,7 @@ __all__ = [
     "Settings",
     "LegalNote",
     "Invoice",
+    "InvoiceLine",
     "User",
     "CompanyProfile",
     "DocumentSequence",
