@@ -417,9 +417,9 @@ async def finalize_invoice_action(
         add_flash_message(request, f"{exc}. Перейдите в Pricing.", "error")
         return RedirectResponse(url=f"/projects/{invoice.project_id}/pricing", status_code=status.HTTP_303_SEE_OTHER)
     except ValueError as exc:
-        if "Invoice totals mismatch pricing scenario" in str(exc):
+        if "Invoice totals mismatch pricing scenario" in str(exc) or "Enable include_materials in pricing or remove material lines" in str(exc):
             req_id = getattr(request.state, "request_id", "")
-            payload = {"detail": "Invoice totals mismatch pricing scenario", "request_id": req_id}
+            payload = {"detail": str(exc), "request_id": req_id}
             if "application/json" in request.headers.get("accept", ""):
                 return JSONResponse(status_code=409, content=payload)
             add_flash_message(request, f"{payload['detail']} (request_id={req_id})", "error")

@@ -69,6 +69,20 @@
 {% if commercial.mode == "PER_ROOM" %}<div>Qty: {{ commercial.units.rooms_count }} rum × Rate: {{ commercial.rate.rate_per_room }}</div>{% endif %}
 <h2>Invoice lines {{ help_icon('invoice.lines') }}</h2>
 {% if can_edit %}
+<h3>Materials</h3>
+<form method="post" action="/projects/{{ project.id }}/invoices/{{ invoice.id }}/add-material-lines">
+    {{ csrf_input(request) }}
+    <label>Source</label>
+    <select name="source"><option value="SHOPPING_LIST">SHOPPING_LIST</option><option value="BOM">BOM</option></select>
+    <label>Merge</label>
+    <select name="merge_strategy"><option value="REPLACE_MATERIALS">REPLACE_MATERIALS</option><option value="APPEND">APPEND</option><option value="UPSERT_BY_MATERIAL_ID">UPSERT_BY_MATERIAL_ID</option></select>
+    <label>Pricing override</label>
+    <select name="pricing_mode_override"><option value="">default</option><option value="COST_PLUS_MARKUP">COST_PLUS_MARKUP</option><option value="SELL_PRICE">SELL_PRICE</option></select>
+    <button type="submit">Add materials from Shopping List</button>
+</form>
+{% endif %}
+
+{% if can_edit %}
 <form method="post" action="/projects/{{ project.id }}/invoices/{{ invoice.id }}/generate-lines" onsubmit="return confirm('Replace all lines?');">
     {{ csrf_input(request) }}
     <input type="hidden" name="include_labor" value="true">

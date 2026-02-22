@@ -28,6 +28,14 @@ from app.services.invoice_lines import (
     recalculate_invoice_totals,
 )
 from app.services.terms_templates import DOC_TYPE_INVOICE, resolve_terms_template
+from app.services.invoice_material_lines import (
+    MERGE_APPEND as MATERIAL_MERGE_APPEND,
+    MERGE_REPLACE as MATERIAL_MERGE_REPLACE,
+    MERGE_UPSERT as MATERIAL_MERGE_UPSERT,
+    SOURCE_BOM,
+    SOURCE_SHOPPING,
+    add_material_lines,
+)
 
 router = APIRouter(prefix="/projects/{project_id}/invoices", tags=["invoices"])
 
@@ -461,6 +469,37 @@ async def generate_lines(
         url=f"/projects/{project_id}/invoices/{invoice_id}/edit",
         status_code=status.HTTP_303_SEE_OTHER,
     )
+
+
+@router.post("/{invoice_id}/add-material-lines")
+async def add_material_invoice_lines(
+    project_id: int,
+    invoice_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _role: str = Depends(require_role(ADMIN_ROLE, OPERATOR_ROLE)),
+):
+    invoice = _get_invoice(db, project_id, invoice_id)
+    _ensure_editable(invoice)
+    form = await request.form()
+    source = (form.get("source") or SOURCE_SHOPPING).upper()
+    if source not in {SOURCE_SHOPPING, SOURCE_BOM}:
+        raise HTTPException(status_code=400, detail="Unsupported source")
+    merge_strategy = (form.get("merge_strategy") or MATERIAL_MERGE_REPLACE).upper()
+    if merge_strategy not in {MATERIAL_MERGE_REPLACE, MATERIAL_MERGE_APPEND, MATERIAL_MERGE_UPSERT}:
+        raise HTTPException(status_code=400, detail="Unsupported merge strategy")
+    pricing_mode_override = form.get("pricing_mode_override") or None
+    add_material_lines(
+        db,
+        project_id=project_id,
+        invoice_id=invoice_id,
+        source=source,
+        merge_strategy=merge_strategy,
+        pricing_mode_override=pricing_mode_override,
+        user_id=request.session.get("user_email"),
+    )
+    db.commit()
+    return RedirectResponse(url=f"/projects/{project_id}/invoices/{invoice_id}/edit", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/{invoice_id}/lines/add")

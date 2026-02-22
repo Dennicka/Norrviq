@@ -41,6 +41,8 @@ class Invoice(Base):
     subtotal_ex_vat_snapshot = Column(Numeric(12, 2), nullable=True)
     vat_total_snapshot = Column(Numeric(12, 2), nullable=True)
     total_inc_vat_snapshot = Column(Numeric(12, 2), nullable=True)
+    material_pricing_snapshot = Column(Text, nullable=True)
+    material_source_snapshot_hash = Column(String(64), nullable=True)
 
     comment = Column(String, nullable=True)
     invoice_terms_snapshot_title = Column(Text, nullable=True)
