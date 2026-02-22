@@ -49,3 +49,7 @@ Pricing details показывает:
 - `GET /api/ui/buffer-rules/effective?project_id=&worktype_id=` — deterministic effective-rule preview.
 
 Effective selection is deterministic: active-only, scope precedence `WORKTYPE > PROJECT > GLOBAL`, then `priority desc`, then newest `created_at`, then lowest `id`.
+
+## Speed interaction
+
+Buffers based on labor hours are calculated from **labor_hours_after_speed** in v1.

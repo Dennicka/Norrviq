@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.models.cost import CostCategory
 from app.models.legal_note import LegalNote
 from app.models.worktype import WorkType
+from app.models.speed_profile import SpeedProfile
 
 
 def ensure_default_cost_categories(db: Session) -> None:
@@ -312,4 +313,17 @@ def ensure_default_worktypes(db: Session) -> None:
                 )
             )
 
+    db.commit()
+
+
+def ensure_default_speed_profiles(db: Session) -> None:
+    defaults = [
+        ("SLOW", "Медленно", "Långsam", Decimal("1.200")),
+        ("MEDIUM", "Средне", "Normal", Decimal("1.000")),
+        ("FAST", "Быстро", "Snabb", Decimal("0.850")),
+    ]
+    for code, name_ru, name_sv, multiplier in defaults:
+        existing = db.query(SpeedProfile).filter(SpeedProfile.code == code).first()
+        if existing is None:
+            db.add(SpeedProfile(code=code, name_ru=name_ru, name_sv=name_sv, multiplier=multiplier, is_active=True))
     db.commit()

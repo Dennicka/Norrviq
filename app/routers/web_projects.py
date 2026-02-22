@@ -15,6 +15,7 @@ from app.models.legal_note import LegalNote
 from app.models.material import Material
 from app.models.audit_event import AuditEvent
 from app.models.project import Project, ProjectWorkItem, ProjectWorkerAssignment
+from app.models.speed_profile import SpeedProfile
 from app.models.pricing_policy import get_or_create_pricing_policy
 from app.models.room import Room
 from app.models.worker import Worker
@@ -40,6 +41,7 @@ from app.services.pricing import (
     compute_project_baseline,
     get_or_create_project_pricing,
     get_or_create_project_buffer_settings,
+    get_or_create_project_execution_profile,
     select_pricing_mode,
     update_project_pricing,
     evaluate_floor,
@@ -1149,9 +1151,11 @@ async def project_buffers_page(
         raise HTTPException(status_code=403, detail="Insufficient role")
 
     buffer_settings = get_or_create_project_buffer_settings(db, project_id)
+    execution_profile = get_or_create_project_execution_profile(db, project_id)
+    speed_profiles = db.query(SpeedProfile).filter(SpeedProfile.is_active.is_(True)).order_by(SpeedProfile.code.asc()).all()
     baseline, _ = compute_pricing_scenarios(db, project_id, request_id=getattr(request.state, "request_id", None))
     context = template_context(request, lang)
-    context.update({"project": project, "buffer_settings": buffer_settings, "baseline": baseline})
+    context.update({"project": project, "buffer_settings": buffer_settings, "baseline": baseline, "execution_profile": execution_profile, "speed_profiles": speed_profiles})
     return templates.TemplateResponse(request, "projects/buffers.html", context)
 
 
@@ -1160,6 +1164,7 @@ async def update_project_buffers(
     project_id: int,
     request: Request,
     db: Session = Depends(get_db),
+    role: str = Depends(get_current_user_role),
 ):
     project = db.get(Project, project_id)
     if not project:
@@ -1170,10 +1175,14 @@ async def update_project_buffers(
 
     form = await request.form()
     settings_obj = get_or_create_project_buffer_settings(db, project_id)
+    execution_profile = get_or_create_project_execution_profile(db, project_id)
     before = {"include_setup_cleanup_travel": settings_obj.include_setup_cleanup_travel, "include_risk": settings_obj.include_risk}
     settings_obj.include_setup_cleanup_travel = form.get("include_setup_cleanup_travel") in ("on", "true", "1", True, 1)
     settings_obj.include_risk = form.get("include_risk") in ("on", "true", "1", True, 1)
+    speed_profile_raw = form.get("speed_profile_id")
+    execution_profile.speed_profile_id = int(speed_profile_raw) if speed_profile_raw else None
     db.add(settings_obj)
+    db.add(execution_profile)
     log_buffer_audit(
         db,
         actor=get_current_user_email(request) or "system",
@@ -1184,5 +1193,12 @@ async def update_project_buffers(
         after={"include_setup_cleanup_travel": settings_obj.include_setup_cleanup_travel, "include_risk": settings_obj.include_risk},
         request_id=getattr(request.state, "request_id", None),
     )
+    db.add(AuditEvent(
+        event_type="project_speed_profile_updated",
+        user_id=get_current_user_email(request),
+        entity_type="project",
+        entity_id=project.id,
+        details=json.dumps({"speed_profile_id": execution_profile.speed_profile_id}, ensure_ascii=False),
+    ))
     db.commit()
     return RedirectResponse(url=f"/projects/{project_id}/buffers", status_code=status.HTTP_303_SEE_OTHER)

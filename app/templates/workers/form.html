@@ -20,6 +20,15 @@
         <input type="number" step="0.01" id="default_tax_percent_for_net" name="default_tax_percent_for_net" value="{{ worker.default_tax_percent_for_net if worker else '' }}">
     </div>
     <div class="form-group">
+        <label for="default_speed_profile_id">Default speed profile</label>
+        <select id="default_speed_profile_id" name="default_speed_profile_id">
+            <option value="">MEDIUM (default)</option>
+            {% for profile in speed_profiles %}
+            <option value="{{ profile.id }}" {% if worker and worker.default_speed_profile_id == profile.id %}selected{% endif %}>{{ profile.code }} ({{ profile.multiplier }})</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="form-group">
         <label>
             <input type="checkbox" name="is_active" value="1" {% if worker is none or worker.is_active %}checked{% endif %}>
             {{ t("workers.is_active") }}

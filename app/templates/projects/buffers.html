@@ -6,11 +6,20 @@
   {{ csrf_input(request) }}
   <label><input type="checkbox" name="include_setup_cleanup_travel" {% if buffer_settings.include_setup_cleanup_travel %}checked{% endif %}> Include setup/cleanup/travel</label><br>
   <label><input type="checkbox" name="include_risk" {% if buffer_settings.include_risk %}checked{% endif %}> Include risk</label><br>
+  <label>Speed profile
+    <select name="speed_profile_id">
+      <option value="">MEDIUM (default)</option>
+      {% for profile in speed_profiles %}
+      <option value="{{ profile.id }}" {% if execution_profile.speed_profile_id == profile.id %}selected{% endif %}>{{ profile.code }} ({{ profile.multiplier }})</option>
+      {% endfor %}
+    </select>
+  </label><br>
   <button type="submit">Save</button>
 </form>
 
 <h3>Preview</h3>
 <div>Raw baseline: {{ baseline.raw_labor_hours_total }} h / {{ baseline.raw_internal_cost }} SEK</div>
+<div>Speed: raw={{ baseline.raw_labor_hours_total }} h, multiplier={{ baseline.speed_multiplier }}, after_speed={{ baseline.labor_hours_after_speed }} h (Δ {{ baseline.speed_hours_delta }} h)</div>
 <div>Buffers total: +{{ baseline.buffers_hours_total }} h / +{{ baseline.buffers_cost_total }} SEK</div>
 <div>After buffers: {{ baseline.labor_hours_total }} h / {{ baseline.internal_total_cost }} SEK</div>
 {% if baseline.buffers %}

@@ -10,6 +10,8 @@ from app.models.buffer_rule import BufferRule
 from app.models.cost import ProjectCostItem
 from app.models.project import Project, ProjectWorkItem, ProjectWorkerAssignment
 from app.models.project_buffer_settings import ProjectBufferSettings
+from app.models.project_execution_profile import ProjectExecutionProfile
+from app.models.speed_profile import SpeedProfile
 from app.models.project_pricing import ProjectPricing
 from app.models.pricing_policy import PricingPolicy
 from app.models.settings import get_or_create_settings
@@ -56,6 +58,10 @@ class FloorResult:
 @dataclass
 class ProjectBaseline:
     raw_labor_hours_total: Decimal
+    speed_profile_code: str
+    speed_multiplier: Decimal
+    speed_hours_delta: Decimal
+    labor_hours_after_speed: Decimal
     raw_internal_cost: Decimal
     labor_hours_total: Decimal
     labor_cost_internal: Decimal
@@ -155,6 +161,17 @@ def get_or_create_project_pricing(db: Session, project_id: int) -> ProjectPricin
     return pricing
 
 
+def get_or_create_project_execution_profile(db: Session, project_id: int) -> ProjectExecutionProfile:
+    profile = db.query(ProjectExecutionProfile).filter(ProjectExecutionProfile.project_id == project_id).first()
+    if profile:
+        return profile
+    profile = ProjectExecutionProfile(project_id=project_id, apply_scope="PROJECT")
+    db.add(profile)
+    db.commit()
+    db.refresh(profile)
+    return profile
+
+
 def get_or_create_project_buffer_settings(db: Session, project_id: int) -> ProjectBufferSettings:
     settings = db.query(ProjectBufferSettings).filter(ProjectBufferSettings.project_id == project_id).first()
     if settings:
@@ -183,6 +200,26 @@ def _parse_decimal(value: str | None, *, field: str, errors: dict[str, str], all
     return amount.quantize(Decimal("0.01"))
 
 
+
+
+def get_medium_speed_profile(db: Session) -> SpeedProfile:
+    profile = db.query(SpeedProfile).filter(SpeedProfile.code == "MEDIUM").first()
+    if profile:
+        return profile
+    profile = SpeedProfile(code="MEDIUM", name_ru="Средне", name_sv="Normal", multiplier=Decimal("1.000"), is_active=True)
+    db.add(profile)
+    db.commit()
+    db.refresh(profile)
+    return profile
+
+
+def resolve_project_speed_profile(db: Session, project: Project) -> SpeedProfile:
+    execution = db.query(ProjectExecutionProfile).filter(ProjectExecutionProfile.project_id == project.id).first()
+    if execution and execution.speed_profile_id:
+        profile = db.get(SpeedProfile, execution.speed_profile_id)
+        if profile and profile.is_active:
+            return profile
+    return get_medium_speed_profile(db)
 def compute_project_baseline(
     db: Session,
     project_id: int,
@@ -223,7 +260,11 @@ def compute_project_baseline(
             labor_hours_total += Decimal(str(item.calculated_hours or 0))
 
     raw_labor_hours_total = _quantize_hours(labor_hours_total)
-    labor_hours_total = raw_labor_hours_total
+    speed_profile = resolve_project_speed_profile(db, project)
+    speed_multiplier = Decimal(str(speed_profile.multiplier or 1))
+    labor_hours_after_speed = _quantize_hours(raw_labor_hours_total * speed_multiplier)
+    speed_hours_delta = _quantize_hours(labor_hours_after_speed - raw_labor_hours_total)
+    labor_hours_total = labor_hours_after_speed
     labor_cost_internal = _quantize_money(salary_fund + (salary_fund * employer_pct))
 
     materials_cost_internal = Decimal("0")
@@ -288,7 +329,7 @@ def compute_project_baseline(
             effective_meta = {"rule_id": rule.id, "applied": False, "reason": "rule disabled by project risk flag"}
         else:
             value = Decimal(str(rule.value or 0))
-            base = raw_labor_hours_total if rule.basis == "LABOR_HOURS" else raw_internal_cost
+            base = labor_hours_after_speed if rule.basis == "LABOR_HOURS" else raw_internal_cost
             delta = Decimal("0")
             if rule.unit == "PERCENT":
                 delta = base * (value / Decimal("100"))
@@ -331,14 +372,16 @@ def compute_project_baseline(
 
     buffers_hours_total = _quantize_hours(fixed_hours + percent_hours)
     buffers_cost_total = _quantize_money(fixed_cost + percent_cost)
-    labor_hours_total = _quantize_hours(raw_labor_hours_total + buffers_hours_total)
+    labor_hours_total = _quantize_hours(labor_hours_after_speed + buffers_hours_total)
     internal_total_cost = _quantize_money(raw_internal_cost + buffers_cost_total)
 
     logger.info(
-        "event=baseline_recomputed project_id=%s request_id=%s raw_hours=%s raw_cost=%s buffer_hours=%s buffer_cost=%s",
+        "event=baseline_recomputed project_id=%s request_id=%s raw_hours=%s speed_multiplier=%s speed_hours=%s raw_cost=%s buffer_hours=%s buffer_cost=%s",
         project_id,
         request_id or "-",
         raw_labor_hours_total,
+        speed_multiplier,
+        labor_hours_after_speed,
         raw_internal_cost,
         buffers_hours_total,
         buffers_cost_total,
@@ -352,6 +395,10 @@ def compute_project_baseline(
 
     return ProjectBaseline(
         raw_labor_hours_total=raw_labor_hours_total,
+        speed_profile_code=speed_profile.code,
+        speed_multiplier=speed_multiplier,
+        speed_hours_delta=speed_hours_delta,
+        labor_hours_after_speed=labor_hours_after_speed,
         raw_internal_cost=raw_internal_cost,
         labor_hours_total=labor_hours_total,
         labor_cost_internal=labor_cost_internal,

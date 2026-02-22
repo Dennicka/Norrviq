@@ -69,6 +69,12 @@ class Project(Base):
         uselist=False,
         cascade="all, delete-orphan",
     )
+    execution_profile = relationship(
+        "ProjectExecutionProfile",
+        back_populates="project",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
 
 
 class ProjectWorkItem(Base):
