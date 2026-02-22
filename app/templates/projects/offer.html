@@ -5,7 +5,8 @@
 {% block content %}
 <div class="offer-wrapper">
     <div class="offer-toolbar">
-        <button type="button" onclick="window.print()">{{ t("offer.print") }}</button>
+        <span class="doc-status">{{ t("label.status") }}: {{ offer_status|upper }}</span>
+        <a href="/offers/{{ project.id }}/pdf">Download PDF</a>
         {% if offer_status != 'issued' %}
         <form method="post" action="/offers/{{ project.id }}/finalize" onsubmit="finalizeOffer(this)">
             {{ csrf_input(request) }}

@@ -5,7 +5,8 @@
 {% block content %}
 <div class="offer-wrapper">
     <div class="offer-toolbar">
-        <button type="button" onclick="window.print()">{{ t("offer.print") }}</button>
+        <span class="doc-status">{{ t("label.status") }}: {{ invoice.status|upper }}</span>
+        <a href="/invoices/{{ invoice.id }}/pdf">Download PDF</a>
         {% if invoice.status != 'issued' %}
         <form method="post" action="/invoices/{{ invoice.id }}/finalize" onsubmit="finalizeInvoice(this)">
             {{ csrf_input(request) }}

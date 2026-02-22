@@ -11,8 +11,15 @@ body {
 .offer-toolbar {
     display: flex;
     justify-content: flex-end;
+    align-items: center;
     gap: 8px;
     padding: 12px 0;
+}
+
+.doc-status {
+    color: #374151;
+    font-weight: 600;
+    margin-right: auto;
 }
 
 .offer-toolbar a,
