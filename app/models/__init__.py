@@ -9,6 +9,7 @@ from .settings import Settings
 from .legal_note import LegalNote
 from .invoice import Invoice
 from .invoice_line import InvoiceLine
+from .rot_case import RotCase
 from .user import User
 from .company_profile import CompanyProfile
 from .document_sequence import DocumentSequence
@@ -38,6 +39,7 @@ __all__ = [
     "LegalNote",
     "Invoice",
     "InvoiceLine",
+    "RotCase",
     "User",
     "CompanyProfile",
     "DocumentSequence",

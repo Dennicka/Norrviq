@@ -39,6 +39,23 @@
         <label>{{ t("label.comment") }}</label>
         <textarea name="comment" {% if invoice and not can_edit %}disabled{% endif %}>{{ invoice.comment if invoice and invoice.comment else (defaults.comment or '') }}</textarea>
     </div>
+    {% if invoice %}
+    <fieldset style="margin-top:12px;">
+        <legend>ROT</legend>
+        <label>
+            <input type="checkbox" name="apply_rot" {% if invoice.rot_case and invoice.rot_case.is_enabled %}checked{% endif %} {% if not can_edit %}disabled{% endif %}>
+            Apply ROT
+        </label>
+        <label style="margin-left:12px;">ROT %
+            <input type="number" step="0.01" name="rot_pct" value="{{ invoice.rot_case.rot_pct if invoice.rot_case else '30.00' }}" {% if not can_edit %}disabled{% endif %}>
+        </label>
+        <div style="margin-top:8px;">
+            Eligible labor: {{ invoice.labour_ex_vat }}<br>
+            ROT amount: {{ invoice.rot_amount }}<br>
+            Final payable: {{ invoice.client_pays_total }}
+        </div>
+    </fieldset>
+    {% endif %}
     <button type="submit" {% if invoice and not can_edit %}disabled{% endif %}>{{ t("label.save") }}</button>
 </form>
 
@@ -88,9 +105,11 @@
     </tbody>
 </table>
 <div style="margin-top:12px;">
-    <strong>Subtotal:</strong> {{ invoice.subtotal_ex_vat }}<br>
-    <strong>VAT:</strong> {{ invoice.vat_total }}<br>
-    <strong>Total:</strong> <span id="invoice-total">{{ invoice.total_inc_vat }}</span>
+    <strong>Arbete exkl. moms:</strong> {{ invoice.labour_ex_vat }}<br>
+    <strong>Material exkl. moms:</strong> {{ invoice.material_ex_vat }}<br>
+    <strong>Moms:</strong> {{ invoice.vat_total }}<br>
+    {% if (invoice.rot_case and invoice.rot_case.is_enabled) or invoice.rot_snapshot_enabled %}<strong>ROT-avdrag:</strong> -{{ invoice.rot_amount }}<br>{% endif %}
+    <strong>Att betala:</strong> <span id="invoice-total">{{ invoice.client_pays_total }}</span>
 </div>
 {% endif %}
 

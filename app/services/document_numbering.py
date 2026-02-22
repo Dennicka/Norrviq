@@ -11,11 +11,13 @@ from app.models.audit_event import AuditEvent
 from app.models.company_profile import CompanyProfile
 from app.models.document_sequence import DocumentSequence
 from app.models.invoice import Invoice
+from app.models.rot_case import RotCase
 from app.models.pricing_policy import get_or_create_pricing_policy
 from app.models.project import Project
 from app.services.pricing import compute_pricing_scenarios, evaluate_floor
 from app.services.completeness import compute_completeness
 from app.services.terms_templates import DOC_TYPE_INVOICE, DOC_TYPE_OFFER, resolve_terms_template
+from app.services.invoice_lines import recalculate_invoice_totals
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -242,6 +244,9 @@ def finalize_invoice(db: Session, invoice_id: int, user_id: str | None, profile:
             _check_completeness_for_project(db, project_id=invoice.project_id, mode=selected_mode, user_id=user_id, doc_type="invoice", doc_id=invoice.id)
             _check_floor_policy_for_project(db, project_id=invoice.project_id, user_id=user_id, doc_type="invoice", doc_id=invoice.id)
 
+            recalculate_invoice_totals(db, invoice.id, user_id=user_id)
+            rot_case = db.query(RotCase).filter(RotCase.invoice_id == invoice.id).first()
+
             year = date.today().year
             seq = _next_sequence(db, DOC_TYPE_INVOICE_NUMBERING, year)
             invoice.invoice_number = format_document_number(
@@ -270,7 +275,25 @@ def finalize_invoice(db: Session, invoice_id: int, user_id: str | None, profile:
                     details={"template_id": template.id, "version": template.version},
                 )
             invoice.status = STATUS_ISSUED
+            invoice.rot_snapshot_enabled = bool(rot_case and rot_case.is_enabled)
+            invoice.rot_snapshot_pct = rot_case.rot_pct if rot_case else 0
+            invoice.rot_snapshot_eligible_labor_ex_vat = invoice.labour_ex_vat
+            invoice.rot_snapshot_amount = invoice.rot_amount
             db.add(invoice)
+
+            _create_audit_event(
+                db,
+                event_type="rot_snapshot_on_issue",
+                user_id=user_id,
+                entity_type="invoice",
+                entity_id=invoice.id,
+                details={
+                    "enabled": invoice.rot_snapshot_enabled,
+                    "pct": str(invoice.rot_snapshot_pct),
+                    "eligible": str(invoice.rot_snapshot_eligible_labor_ex_vat),
+                    "amount": str(invoice.rot_snapshot_amount),
+                },
+            )
 
             _create_audit_event(
                 db,

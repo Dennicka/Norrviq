@@ -13,6 +13,7 @@ from app.main import app
 from app.models.client import Client
 from app.models.invoice import Invoice
 from app.models.invoice_line import InvoiceLine
+from app.models.rot_case import RotCase
 from app.models.project import Project, ProjectWorkItem
 from app.models.worktype import WorkType
 
@@ -146,6 +147,29 @@ def test_invoice_pdf_endpoint_returns_pdf():
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/pdf"
     assert response.content.startswith(b"%PDF")
+
+
+def test_invoice_pdf_contains_rot_text():
+    invoice_id = _create_invoice(issued=False)
+    db = SessionLocal()
+    try:
+        db.add(RotCase(invoice_id=invoice_id, is_enabled=True, rot_pct=Decimal("30"), rot_amount=Decimal("30"), eligible_labor_ex_vat=Decimal("100")))
+        invoice = db.get(Invoice, invoice_id)
+        invoice.labour_ex_vat = Decimal("100")
+        invoice.material_ex_vat = Decimal("0")
+        invoice.vat_total = Decimal("25")
+        invoice.rot_amount = Decimal("30")
+        invoice.client_pays_total = Decimal("95")
+        db.commit()
+    finally:
+        db.close()
+    login()
+
+    response = client.get(f"/invoices/{invoice_id}/pdf")
+
+    assert response.status_code == 200
+    text = _extract_text(response.content)
+    assert "ROT-avdrag" in text
 
 
 def test_pdf_requires_auth():

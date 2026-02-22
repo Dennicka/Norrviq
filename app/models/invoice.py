@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, func
+from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, func
 from sqlalchemy.orm import relationship
 
 from app.db import Base
@@ -24,8 +24,16 @@ class Invoice(Base):
     client_pays_total = Column(Numeric(12, 2), nullable=False)
 
     subtotal_ex_vat = Column(Numeric(12, 2), nullable=False, default=0)
+    labour_ex_vat = Column(Numeric(12, 2), nullable=False, default=0)
+    material_ex_vat = Column(Numeric(12, 2), nullable=False, default=0)
+    other_ex_vat = Column(Numeric(12, 2), nullable=False, default=0)
     vat_total = Column(Numeric(12, 2), nullable=False, default=0)
     total_inc_vat = Column(Numeric(12, 2), nullable=False, default=0)
+
+    rot_snapshot_enabled = Column(Boolean, nullable=False, default=False)
+    rot_snapshot_pct = Column(Numeric(5, 2), nullable=False, default=0)
+    rot_snapshot_eligible_labor_ex_vat = Column(Numeric(12, 2), nullable=False, default=0)
+    rot_snapshot_amount = Column(Numeric(12, 2), nullable=False, default=0)
 
     comment = Column(String, nullable=True)
     invoice_terms_snapshot_title = Column(Text, nullable=True)
@@ -37,3 +45,4 @@ class Invoice(Base):
 
     project = relationship("Project", back_populates="invoices", foreign_keys=[project_id])
     lines = relationship("InvoiceLine", back_populates="invoice", cascade="all, delete-orphan", order_by="InvoiceLine.position")
+    rot_case = relationship("RotCase", back_populates="invoice", uselist=False, cascade="all, delete-orphan")
