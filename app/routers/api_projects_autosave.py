@@ -53,7 +53,7 @@ async def patch_room(project_id: int, room_id: int, request: Request, db: Sessio
         raise HTTPException(status_code=404, detail="Room not found")
 
     payload = await request.json()
-    allowed = {"name", "description", "floor_area_m2", "wall_perimeter_m", "wall_height_m", "wall_area_m2", "ceiling_area_m2", "baseboard_length_m"}
+    allowed = {"name", "description", "length_m", "width_m", "floor_area_m2", "wall_perimeter_m", "wall_height_m", "openings_area_m2", "wall_area_m2", "ceiling_area_m2", "baseboard_length_m"}
     fields: dict[str, str] = {}
 
     for key, value in payload.items():
@@ -71,8 +71,8 @@ async def patch_room(project_id: int, room_id: int, request: Request, db: Sessio
             except (InvalidOperation, ValueError):
                 fields[key] = "Must be numeric"
                 continue
-            if dec <= 0:
-                fields[key] = "Must be > 0"
+            if dec < 0:
+                fields[key] = "Must be >= 0"
                 continue
             setattr(room, key, dec)
         else:
