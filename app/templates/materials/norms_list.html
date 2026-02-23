@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t('materials.norms.title') }}</h1>
+<p><a href="/materials/norms/create">{{ t('label.create') }}</a></p>
+<table>
+  <thead><tr><th>ID</th><th>{{ t('label.material') }}</th><th>{{ t('label.work_type') }}</th><th>{{ t('label.surface_type') }}</th><th>{{ t('materials.norm') }}</th><th>{{ t('label.active') }}</th><th></th></tr></thead>
+  <tbody>
+    {% for norm in norms %}
+    <tr>
+      <td>{{ norm.id }}</td>
+      <td>{{ norm.material_name }}</td>
+      <td>{{ norm.applies_to_work_type }}</td>
+      <td>{{ norm.surface_type }}</td>
+      <td>{{ norm.consumption_value }} {{ t('materials.consumption_unit.' + norm.consumption_unit) }}</td>
+      <td>{{ t('label.yes') if norm.active else t('label.no') }}</td>
+      <td><a href="/materials/norms/{{ norm.id }}/edit">{{ t('label.edit') }}</a>
+        <form method="post" action="/materials/norms/{{ norm.id }}/delete" style="display:inline">{{ csrf_input(request) }}<button type="submit">{{ t('label.delete') }}</button></form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
