@@ -8,11 +8,11 @@
     |
     <a href="/projects/{{ project.id }}/edit">{{ t('projects.edit') }}</a>
     |
-    <a href="/projects/{{ project.id }}/pricing">Pricing</a>
-    <a href="/projects/{{ project.id }}/materials-plan">Materials plan</a>
-    | <a href="/projects/{{ project.id }}/shopping-list">Shopping list</a> | <a href="/projects/{{ project.id }}/materials-actuals">Materials actuals</a>
-    <a href="/projects/{{ project.id }}/paint-settings">Paint settings</a>
-    <a href="/projects/{{ project.id }}/buffers">Buffers</a>
+    <a href="/projects/{{ project.id }}/pricing">{{ t("menu.pricing_policy") }}</a>
+    <a href="/projects/{{ project.id }}/materials-plan">{{ t("materials.planned_materials") }}</a>
+    | <a href="/projects/{{ project.id }}/shopping-list">{{ t("shopping.title") }}</a> | <a href="/projects/{{ project.id }}/materials-actuals">{{ t("materials.actual_materials") }}</a>
+    <a href="/projects/{{ project.id }}/paint-settings">{{ t("menu.paint_systems") }}</a>
+    <a href="/projects/{{ project.id }}/buffers">{{ t("menu.buffer_rules") }}</a>
     <form method="post" action="/projects/{{ project.id }}/delete" style="display:inline;">
         {{ csrf_input(request) }}
         <button type="submit" onclick="return confirm('{{ t("label.delete") }}?');">{{ t('label.delete') }}</button>
@@ -22,7 +22,7 @@
     <h2>{{ t("projects.detail") }}</h2>
     <p><strong>{{ t("label.client") }}:</strong> {{ project.client.name if project.client else "" }}</p>
     <p><strong>{{ t("label.address") }}:</strong> {{ project.address or '' }}</p>
-    <p><strong>{{ t("label.status") }} <span class="help" title="{{ t('project.status.help') }}">?</span>:</strong> {{ project.status }}</p>
+    <p><strong>{{ t("label.status") }} <span class="help" title="{{ t('project.status.help') }}">?</span>:</strong> {{ t('statuses.project.' ~ project.status) }}</p>
     <p><strong>{{ t("label.use_rot") }}:</strong> {{ t("label.yes") if project.use_rot else t("label.no") }}</p>
     <p><strong>{{ t("label.comment") }}:</strong> {{ project.description or '' }}</p>
     <p><strong>{{ t('label.planned_start_date') }} <span class="help" title="{{ t('project.dates.help') }}">?</span>:</strong> {{ project.planned_start_date or '' }}</p>
@@ -32,19 +32,19 @@
 </section>
 
 <section>
-    <h2>Buffer applied</h2>
+    <h2>{{ t("projects.buffer_applied") }}</h2>
     {% if baseline.effective_buffer and baseline.effective_buffer.get('rule_id') %}
     <p>Buffer: +{{ baseline.effective_buffer.get('value') }}{% if baseline.effective_buffer.get('unit') == 'PERCENT' %}%{% endif %} (Rule <a href="/web/buffer-rules?rule_id={{ baseline.effective_buffer.get('rule_id') }}">#{{ baseline.effective_buffer.get('rule_id') }}</a>, scope: {{ baseline.effective_buffer.get('scope') or 'n/a' }})</p>
     {% else %}
-    <p>Buffer: none</p>
+    <p>{{ t("projects.buffer.none") }}</p>
     {% endif %}
 </section>
 
 
 <section>
-    <h2>Качество данных</h2>
+    <h2>{{ t("projects.quality.title") }}</h2>
     {% if quality_report.blocks_count == 0 and quality_report.warnings_count == 0 %}
-    <p style="color:green;">Статус: OK</p>
+    <p style="color:green;">{{ t("projects.quality.status_ok") }}</p>
     {% elif quality_report.blocks_count == 0 %}
     <p style="color:#9a7d00;">Статус: WARNING ({{ quality_report.warnings_count }})</p>
     {% else %}
@@ -58,7 +58,7 @@
             {% if issue.go_fix_url %}<a href="{{ issue.go_fix_url }}">Go fix</a>{% endif %}
         </li>
         {% else %}
-        <li>Проблем не найдено.</li>
+        <li>{{ t("projects.quality.no_issues") }}</li>
         {% endfor %}
     </ul>
 </section>
@@ -90,24 +90,24 @@
         |
         <a href="/projects/{{ project.id }}/invoices/create">{{ t("label.create") }}</a>
         |
-        <button type="button" id="open-create-invoice-dialog">Create invoice</button>
+        <button type="button" id="open-create-invoice-dialog">{{ t("invoice.create") }}</button>
     </p>
     <dialog id="create-invoice-dialog">
         <form method="post" action="/projects/{{ project.id }}/invoices/create-from-project">
             {{ csrf_input(request) }}
-            <h3>Create invoice from project</h3>
+            <h3>{{ t("invoice.create_from_project") }}</h3>
             <label>
                 <input type="checkbox" name="include_labor" value="true" checked>
-                Include labor
+                {{ t("invoice.include_labor") }}
             </label>
             <br>
             <label>
                 <input type="checkbox" name="include_materials" value="true">
-                Include materials
+                {{ t("invoice.include_materials") }}
             </label>
             <br>
             <label>
-                Merge strategy
+                {{ t("invoice.merge_strategy") }}
                 <select name="merge_strategy">
                     <option value="REPLACE_ALL" selected>REPLACE_ALL</option>
                     <option value="APPEND">APPEND</option>
@@ -117,11 +117,11 @@
             <br>
             <label>
                 Note
-                <input type="text" name="note" maxlength="255" placeholder="Optional note">
+                <input type="text" name="note" maxlength="255" placeholder="{{ t("common.optional_note") }}">
             </label>
             <div style="margin-top: 10px;">
-                <button type="submit">Create invoice</button>
-                <button type="button" id="cancel-create-invoice-dialog">Cancel</button>
+                <button type="submit">{{ t("invoice.create") }}</button>
+                <button type="button" id="cancel-create-invoice-dialog">{{ t("common.cancel") }}</button>
             </div>
         </form>
     </dialog>
@@ -151,7 +151,7 @@
 
 
 <section>
-    <h2>Геометрия проекта</h2>
+    <h2>{{ t("projects.geometry.title") }}</h2>
     <table>
         <tbody>
             <tr><th>Кол-во помещений</th><td>{{ geometry_summary.rooms_count }}</td></tr>
@@ -179,9 +179,9 @@
     <p>
         <a href="/projects/{{ project.id }}/rooms/create">{{ t("label.create") }}</a>
         | <a href="/projects/{{ project.id }}/rooms/">{{ t("rooms.section_title") }}</a>
-        | <a href="/projects/{{ project.id }}/rooms/export.csv">Export Rooms CSV</a>
-        | <a href="/projects/{{ project.id }}/work-items/export.csv">Export Work Items CSV</a>
-        | <a href="/projects/{{ project.id }}/import">Import CSV</a>
+        | <a href="/projects/{{ project.id }}/rooms/export.csv">{{ t("rooms.export_csv") }}</a>
+        | <a href="/projects/{{ project.id }}/work-items/export.csv">{{ t("projects.work_items.export_csv") }}</a>
+        | <a href="/projects/{{ project.id }}/import">{{ t("common.import_csv") }}</a>
     </p>
     <table>
         <thead>

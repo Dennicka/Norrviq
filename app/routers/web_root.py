@@ -1,3 +1,5 @@
+from urllib.parse import quote
+
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse
 
@@ -15,8 +17,11 @@ async def root(request: Request, lang: str = Depends(get_current_lang)):
 
 
 @router.get("/lang/{lang_code}")
-async def set_language(lang_code: str):
-    lang = lang_code if lang_code in ("ru", "sv") else settings.default_lang
-    response = RedirectResponse(url="/")
+async def set_language(request: Request, lang_code: str):
+    lang = lang_code if lang_code in ("ru", "sv", "en") else settings.default_lang
+    next_url = request.query_params.get("next") or request.headers.get("referer") or "/"
+    if not next_url.startswith("/"):
+        next_url = "/"
+    response = RedirectResponse(url=quote(next_url, safe="/:?&=%#"))
     response.set_cookie(key="lang", value=lang)
     return response
