@@ -15,7 +15,6 @@ from app.models.room import Room
 from app.security import require_role
 from app.services.quality import evaluate_project_quality
 from app.services.materials_bom import get_or_create_room_paint_settings
-from app.services.geometry import GeometryValidationError
 from app.services.rooms import recalc_room_dimensions
 
 router = APIRouter(prefix="/projects/{project_id}/rooms", tags=["rooms"])
