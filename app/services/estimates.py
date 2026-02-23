@@ -1,11 +1,14 @@
 from decimal import Decimal
 
+from sqlalchemy import func
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.models.project import Project, ProjectWorkItem
+from app.models.room import Room
 from app.models.settings import get_or_create_settings
 from app.models.worktype import WorkType
+from app.services.geometry import compute_room_geometry_from_model
 
 
 class ProjectTotals(BaseModel):
@@ -13,6 +16,74 @@ class ProjectTotals(BaseModel):
     moms_amount: Decimal
     rot_amount: Decimal
     client_pays_total: Decimal
+
+
+class BulkEstimateResult(BaseModel):
+    created_item_ids: list[int]
+    skipped_rooms: list[str]
+
+
+def calculate_project_total_hours(db: Session, project_id: int) -> Decimal:
+    total = (
+        db.query(func.coalesce(func.sum(ProjectWorkItem.calculated_hours), 0))
+        .filter(ProjectWorkItem.project_id == project_id)
+        .scalar()
+    )
+    return Decimal(str(total or 0)).quantize(Decimal("0.01"))
+
+
+def _resolve_bulk_quantity_for_room(room: Room, work_type: WorkType) -> Decimal | None:
+    geometry = compute_room_geometry_from_model(room)
+    unit = (work_type.unit or "").lower()
+    category = (work_type.category or "").lower()
+
+    if unit == "room":
+        return Decimal("1.00")
+    if unit == "m":
+        return geometry.baseboard_lm
+    if unit != "m2":
+        return None
+
+    if any(marker in category for marker in ("wall", "стен", "vägg")):
+        return geometry.wall_area_net_m2
+    if any(marker in category for marker in ("ceiling", "потол", "tak")):
+        return geometry.ceiling_area_m2
+    if any(marker in category for marker in ("floor", "пол", "golv")):
+        return geometry.floor_area_m2
+    return geometry.floor_area_m2
+
+
+def estimate_project_work_bulk(
+    db: Session,
+    *,
+    project: Project,
+    work_type: WorkType,
+    difficulty_factor: Decimal,
+    comment: str | None,
+) -> BulkEstimateResult:
+    created_item_ids: list[int] = []
+    skipped_rooms: list[str] = []
+    rooms = db.query(Room).filter(Room.project_id == project.id).all()
+
+    for room in rooms:
+        quantity = _resolve_bulk_quantity_for_room(room, work_type)
+        if quantity is None or quantity <= 0:
+            skipped_rooms.append(room.name)
+            continue
+
+        item = ProjectWorkItem(
+            project_id=project.id,
+            work_type_id=work_type.id,
+            room_id=room.id,
+            quantity=quantity.quantize(Decimal("0.01")),
+            difficulty_factor=difficulty_factor,
+            comment=comment,
+        )
+        db.add(item)
+        db.flush()
+        created_item_ids.append(item.id)
+
+    return BulkEstimateResult(created_item_ids=created_item_ids, skipped_rooms=skipped_rooms)
 
 
 def calculate_work_item(

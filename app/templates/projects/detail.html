@@ -245,6 +245,13 @@
             <div id="worktype-info" class="muted"></div>
         </div>
         <div>
+            <label>{{ t("projects.work_items.apply_to") }}</label>
+            <select name="apply_to" id="apply-to-select">
+                <option value="selected_room" selected>{{ t("projects.work_items.apply_to.selected_room") }}</option>
+                <option value="all_rooms">{{ t("projects.work_items.apply_to.all_rooms") }}</option>
+            </select>
+        </div>
+        <div id="room-select-wrapper">
             <label>{{ t("label.room") }}</label>
             <select name="room_id" id="room-select">
                 <option value="">{{ t("rooms.no_room") }}</option>
@@ -284,6 +291,11 @@
         </div>
         <button type="submit">{{ t("label.add_work_item") }}</button>
     </form>
+</section>
+
+<section>
+    <h2>{{ t("projects.work_items.summary") }}</h2>
+    <p><strong>{{ t("projects.work_items.total_labor_hours") }}:</strong> {{ total_labor_hours }}</p>
 </section>
 
 <section>
@@ -643,6 +655,19 @@ document.addEventListener("click", function (event) {
   }
 });
 
+function updateApplyToState() {
+  const applyTo = document.getElementById("apply-to-select");
+  const roomWrapper = document.getElementById("room-select-wrapper");
+  const roomSelect = document.getElementById("room-select");
+  const isAllRooms = applyTo && applyTo.value === "all_rooms";
+  if (roomWrapper) {
+    roomWrapper.style.display = isAllRooms ? "none" : "block";
+  }
+  if (roomSelect) {
+    roomSelect.disabled = !!isAllRooms;
+  }
+}
+
 document.addEventListener("change", function (event) {
   if (event.target && event.target.id === "room-select") {
     updateRoomInfo();
@@ -650,11 +675,15 @@ document.addEventListener("change", function (event) {
   if (event.target && event.target.id === "work-type-select") {
     updateWorktypeInfo();
   }
+  if (event.target && event.target.id === "apply-to-select") {
+    updateApplyToState();
+  }
 });
 
 document.addEventListener("DOMContentLoaded", function () {
   updateRoomInfo();
   updateWorktypeInfo();
+  updateApplyToState();
 });
 </script>
 <script>

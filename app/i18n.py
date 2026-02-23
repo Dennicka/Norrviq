@@ -66,6 +66,14 @@ TRANSLATIONS_RU = {
     "projects.delete.success": "Проект удален",
     "projects.work_items.updated": "Строка сметы обновлена",
     "projects.work_items.deleted": "Строка сметы удалена",
+    "projects.work_items.apply_to": "Применить к",
+    "projects.work_items.apply_to.selected_room": "Выбранная комната",
+    "projects.work_items.apply_to.all_rooms": "Все комнаты проекта",
+    "projects.work_items.summary": "Сводка трудозатрат",
+    "projects.work_items.total_labor_hours": "Общие трудозатраты, часы",
+    "projects.work_items.bulk_applied": "Работа применена ко всем подходящим комнатам",
+    "projects.work_items.bulk_no_valid_rooms": "Нет комнат с подходящей геометрией для выбранной работы",
+    "projects.work_items.bulk_skipped_geometry": "Пропущены комнаты из-за отсутствующей геометрии ({count}): {rooms}",
     "label.name": "Название",
     "label.contact_person": "Контактное лицо",
     "label.phone": "Телефон",
@@ -435,6 +443,14 @@ TRANSLATIONS_SV = {
     "projects.delete.success": "Projektet har tagits bort",
     "projects.work_items.updated": "Rad i kalkylen uppdaterad",
     "projects.work_items.deleted": "Rad i kalkylen borttagen",
+    "projects.work_items.apply_to": "Applicera på",
+    "projects.work_items.apply_to.selected_room": "Valt rum",
+    "projects.work_items.apply_to.all_rooms": "Alla rum i projektet",
+    "projects.work_items.summary": "Sammanfattning av arbetstid",
+    "projects.work_items.total_labor_hours": "Total arbetstid (timmar)",
+    "projects.work_items.bulk_applied": "Arbetet applicerades på alla giltiga rum",
+    "projects.work_items.bulk_no_valid_rooms": "Inga rum med giltig geometri för valt arbete",
+    "projects.work_items.bulk_skipped_geometry": "Rum hoppades över på grund av saknad geometri ({count}): {rooms}",
     "label.name": "Namn",
     "label.contact_person": "Kontaktperson",
     "label.phone": "Telefon",
@@ -739,9 +755,26 @@ TRANSLATIONS_SV = {
 }
 
 
+TRANSLATIONS_EN = {
+    "projects.work_items.apply_to": "Apply to",
+    "projects.work_items.apply_to.selected_room": "Selected room",
+    "projects.work_items.apply_to.all_rooms": "All rooms in project",
+    "projects.work_items.summary": "Labor summary",
+    "projects.work_items.total_labor_hours": "Total labor hours",
+    "projects.work_items.bulk_applied": "Work was applied to all eligible rooms",
+    "projects.work_items.bulk_no_valid_rooms": "No rooms with valid geometry for the selected work",
+    "projects.work_items.bulk_skipped_geometry": "Skipped rooms due to missing geometry ({count}): {rooms}",
+}
+
+
 def get_translation(lang: str, key: str) -> str:
-    translations = TRANSLATIONS_RU if lang == "ru" else TRANSLATIONS_SV
-    return translations.get(key, key)
+    if lang == "ru":
+        return TRANSLATIONS_RU.get(key, key)
+    if lang == "en":
+        if key in TRANSLATIONS_EN:
+            return TRANSLATIONS_EN[key]
+        return TRANSLATIONS_SV.get(key, key)
+    return TRANSLATIONS_SV.get(key, key)
 
 
 def make_t(lang: str) -> Callable[[str], str]:
