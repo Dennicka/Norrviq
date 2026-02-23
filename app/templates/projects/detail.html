@@ -286,6 +286,26 @@
             <input type="number" step="0.01" name="difficulty_factor" value="1.0">
         </div>
         <div>
+            <label>{{ t("projects.work_items.pricing_mode") }}</label>
+            <select name="pricing_mode" data-pricing-mode>
+                <option value="hourly">{{ t("projects.work_items.pricing_mode.hourly") }}</option>
+                <option value="area">{{ t("projects.work_items.pricing_mode.area") }}</option>
+                <option value="fixed">{{ t("projects.work_items.pricing_mode.fixed") }}</option>
+            </select>
+        </div>
+        <div data-pricing-field="hourly">
+            <label>{{ t("projects.work_items.hourly_rate") }}</label>
+            <input type="number" step="0.01" name="hourly_rate_sek" value="{{ settings_obj.hourly_rate_company }}">
+        </div>
+        <div data-pricing-field="area" style="display:none;">
+            <label>{{ t("projects.work_items.area_rate") }}</label>
+            <input type="number" step="0.01" name="area_rate_sek">
+        </div>
+        <div data-pricing-field="fixed" style="display:none;">
+            <label>{{ t("projects.work_items.fixed_price") }}</label>
+            <input type="number" step="0.01" name="fixed_price_sek">
+        </div>
+        <div>
             <label>{{ t("label.comment") }}</label>
             <textarea name="comment"></textarea>
         </div>
@@ -295,7 +315,11 @@
 
 <section>
     <h2>{{ t("projects.work_items.summary") }}</h2>
-    <p><strong>{{ t("projects.work_items.total_labor_hours") }}:</strong> {{ total_labor_hours }}</p>
+    <p><strong>{{ t("projects.work_items.total_labor_hours") }}:</strong> {{ pricing_totals.total_labor_hours }}</p>
+    <p><strong>{{ t("projects.work_items.total_price") }}:</strong> {{ pricing_totals.total_price_sek }}</p>
+    <p><strong>{{ t("projects.work_items.total_cost") }}:</strong> {{ pricing_totals.total_cost_sek }}</p>
+    <p><strong>{{ t("projects.work_items.total_margin") }}:</strong> {{ pricing_totals.total_margin_sek }}</p>
+    <p><strong>{{ t("projects.work_items.margin_percent") }}:</strong> {{ pricing_totals.total_margin_pct }}%</p>
 </section>
 
 <section>
@@ -309,6 +333,9 @@
                 <th>{{ t("label.difficulty") }}</th>
                 <th>{{ t("label.hours") }}</th>
                 <th>{{ t("label.cost_without_moms") }}</th>
+                <th>{{ t("projects.work_items.total_cost") }}</th>
+                <th>{{ t("projects.work_items.margin") }}</th>
+                <th>{{ t("projects.work_items.margin_percent") }}</th>
                 <th>{{ t("label.actions") }}</th>
             </tr>
         </thead>
@@ -321,6 +348,9 @@
                 <td>{{ item.difficulty_factor }}</td>
                 <td>{{ item.calculated_hours or '' }}</td>
                 <td>{{ item.calculated_cost_without_moms or '' }}</td>
+                <td>{{ item.total_cost_sek or '' }}</td>
+                <td>{{ item.margin_sek or '' }}</td>
+                <td>{{ item.margin_pct or '' }}</td>
                 <td>
                     <a href="/projects/{{ project.id }}/items/{{ item.id }}/edit">{{ t('projects.edit') }}</a>
                     <form method="post" action="/projects/{{ project.id }}/items/{{ item.id }}/delete" style="display:inline;">
@@ -330,7 +360,7 @@
                 </td>
             </tr>
             {% else %}
-            <tr><td colspan="7">—</td></tr>
+            <tr><td colspan="10">—</td></tr>
             {% endfor %}
         </tbody>
     </table>
@@ -713,4 +743,20 @@ document.addEventListener("DOMContentLoaded", function () {
 })();
 </script>
 
+
+<script>
+(function(){
+  const forms=document.querySelectorAll('form[action$="/add-work-item"]');
+  forms.forEach((form)=>{
+    const mode=form.querySelector('[data-pricing-mode]');
+    if(!mode) return;
+    const fields=form.querySelectorAll('[data-pricing-field]');
+    const sync=()=>{
+      fields.forEach((node)=>{ node.style.display=node.dataset.pricingField===mode.value?'block':'none';});
+    };
+    mode.addEventListener('change',sync);
+    sync();
+  });
+})();
+</script>
 {% endblock %}

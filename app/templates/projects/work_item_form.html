@@ -33,6 +33,26 @@
         <input type="number" step="0.01" name="difficulty_factor" value="{{ item.difficulty_factor }}">
     </div>
     <div>
+        <label>{{ t("projects.work_items.pricing_mode") }}</label>
+        <select name="pricing_mode" data-pricing-mode>
+            <option value="hourly" {% if item.pricing_mode == 'hourly' %}selected{% endif %}>{{ t("projects.work_items.pricing_mode.hourly") }}</option>
+            <option value="area" {% if item.pricing_mode == 'area' %}selected{% endif %}>{{ t("projects.work_items.pricing_mode.area") }}</option>
+            <option value="fixed" {% if item.pricing_mode == 'fixed' %}selected{% endif %}>{{ t("projects.work_items.pricing_mode.fixed") }}</option>
+        </select>
+    </div>
+    <div data-pricing-field="hourly">
+        <label>{{ t("projects.work_items.hourly_rate") }}</label>
+        <input type="number" step="0.01" name="hourly_rate_sek" value="{{ item.hourly_rate_sek or '' }}">
+    </div>
+    <div data-pricing-field="area">
+        <label>{{ t("projects.work_items.area_rate") }}</label>
+        <input type="number" step="0.01" name="area_rate_sek" value="{{ item.area_rate_sek or '' }}">
+    </div>
+    <div data-pricing-field="fixed">
+        <label>{{ t("projects.work_items.fixed_price") }}</label>
+        <input type="number" step="0.01" name="fixed_price_sek" value="{{ item.fixed_price_sek or '' }}">
+    </div>
+    <div>
         <label>{{ t("label.comment") }}</label>
         <textarea name="comment">{{ item.comment or '' }}</textarea>
     </div>
@@ -46,4 +66,18 @@
 </form>
 {% endblock %}
 
-{% block extra_head %}<script defer src="{{ url_for('static', path='js/autosave.js') }}"></script>{% endblock %}
+{% block extra_head %}<script defer src="{{ url_for('static', path='js/autosave.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const mode = document.querySelector('[data-pricing-mode]');
+    const fields = document.querySelectorAll('[data-pricing-field]');
+    if (!mode) return;
+    const sync = function () {
+        fields.forEach((node) => {
+            node.style.display = node.dataset.pricingField === mode.value ? 'block' : 'none';
+        });
+    };
+    mode.addEventListener('change', sync);
+    sync();
+});
+</script>{% endblock %}

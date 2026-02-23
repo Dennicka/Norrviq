@@ -31,6 +31,7 @@ from app.models.settings import get_or_create_settings
 from app.services.estimates import (
     calculate_project_total_hours,
     calculate_project_totals,
+    calculate_project_pricing_totals,
     estimate_project_work_bulk,
     recalculate_project_work_items,
 )
@@ -255,6 +256,30 @@ def _parse_csv_decimal(value: str | None) -> Decimal | None:
         return None
 
 
+
+
+def _parse_pricing_form(form) -> dict:
+    mode = (form.get("pricing_mode") or "hourly").lower()
+    data = {"pricing_mode": mode, "hourly_rate_sek": None, "area_rate_sek": None, "fixed_price_sek": None}
+
+    def _to_decimal(key: str):
+        raw = form.get(key)
+        if raw in (None, ""):
+            return None
+        return Decimal(str(raw))
+
+    if mode == "hourly":
+        data["hourly_rate_sek"] = _to_decimal("hourly_rate_sek")
+    elif mode == "area":
+        data["area_rate_sek"] = _to_decimal("area_rate_sek")
+    elif mode == "fixed":
+        data["fixed_price_sek"] = _to_decimal("fixed_price_sek")
+    else:
+        data["pricing_mode"] = "hourly"
+        data["hourly_rate_sek"] = _to_decimal("hourly_rate_sek")
+
+    return data
+
 def _read_csv_rows(file_bytes: bytes) -> tuple[list[str], list[dict[str, str]]]:
     text = file_bytes.decode("utf-8-sig")
     reader = csv.DictReader(io.StringIO(text), delimiter=",")
@@ -388,6 +413,8 @@ async def project_detail(
         baseline=baseline,
         geometry_summary=geometry_summary,
         total_labor_hours=calculate_project_total_hours(db, project.id),
+        pricing_totals=calculate_project_pricing_totals(project),
+        settings_obj=settings,
     )
     return templates.TemplateResponse(request, "projects/detail.html", context)
 
@@ -887,6 +914,8 @@ async def add_work_item(
     comment = form.get("comment")
     apply_to = form.get("apply_to") or "selected_room"
 
+    pricing_data = _parse_pricing_form(form)
+
     if apply_to == "all_rooms":
         result = estimate_project_work_bulk(
             db,
@@ -894,6 +923,10 @@ async def add_work_item(
             work_type=work_type,
             difficulty_factor=difficulty_factor,
             comment=comment,
+            pricing_mode=pricing_data["pricing_mode"],
+            hourly_rate_sek=pricing_data["hourly_rate_sek"],
+            area_rate_sek=pricing_data["area_rate_sek"],
+            fixed_price_sek=pricing_data["fixed_price_sek"],
         )
         if result.skipped_rooms:
             names = ", ".join(result.skipped_rooms[:5])
@@ -928,6 +961,10 @@ async def add_work_item(
         room_id=room.id if room else None,
         quantity=Decimal(form.get("quantity") or "0"),
         difficulty_factor=difficulty_factor,
+        pricing_mode=pricing_data["pricing_mode"],
+        hourly_rate_sek=pricing_data["hourly_rate_sek"],
+        area_rate_sek=pricing_data["area_rate_sek"],
+        fixed_price_sek=pricing_data["fixed_price_sek"],
         comment=comment,
     )
     db.add(item)
@@ -1008,6 +1045,11 @@ async def update_work_item(
     item.work_type = work_type
     item.quantity = Decimal(form.get("quantity") or "0")
     item.difficulty_factor = Decimal(form.get("difficulty_factor") or "1")
+    pricing_data = _parse_pricing_form(form)
+    item.pricing_mode = pricing_data["pricing_mode"]
+    item.hourly_rate_sek = pricing_data["hourly_rate_sek"]
+    item.area_rate_sek = pricing_data["area_rate_sek"]
+    item.fixed_price_sek = pricing_data["fixed_price_sek"]
     item.comment = form.get("comment")
 
     db.add(item)
