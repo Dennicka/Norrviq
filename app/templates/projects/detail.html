@@ -149,6 +149,30 @@
     </table>
 </section>
 
+
+<section>
+    <h2>Геометрия проекта</h2>
+    <table>
+        <tbody>
+            <tr><th>Кол-во помещений</th><td>{{ geometry_summary.rooms_count }}</td></tr>
+            <tr><th>Пол (м²)</th><td>{{ geometry_summary.total_floor_area_m2 }}</td></tr>
+            <tr><th>Потолок (м²)</th><td>{{ geometry_summary.total_ceiling_area_m2 }}</td></tr>
+            <tr><th>Стены брутто (м²)</th><td>{{ geometry_summary.total_wall_area_gross_m2 }}</td></tr>
+            <tr><th>Проемы (м²)</th><td>{{ geometry_summary.total_openings_area_m2 }}</td></tr>
+            <tr><th>Стены нетто (м²)</th><td>{{ geometry_summary.total_wall_area_net_m2 }}</td></tr>
+            <tr><th>Периметр (м.п.)</th><td>{{ geometry_summary.total_perimeter_m }}</td></tr>
+        </tbody>
+    </table>
+    {% if geometry_summary.warnings %}
+    <h4>Warnings</h4>
+    <ul>
+        {% for warning in geometry_summary.warnings %}
+        <li>{{ warning }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+</section>
+
 <section>
     <h2>{{ t("rooms.section_title") }}</h2>
     <p>{{ t("rooms.help") }}</p>

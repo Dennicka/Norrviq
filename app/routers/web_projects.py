@@ -36,6 +36,7 @@ from app.services.terms_templates import DOC_TYPE_OFFER, resolve_terms_template
 from app.services.buffer_audit import log_buffer_audit
 from app.services.quality import evaluate_project_quality
 from app.services.completeness import compute_completeness
+from app.services.geometry import aggregate_project_geometry
 from app.services.pricing import (
     LOW_MARGIN_WARN_PCT,
     WARNING_LOW_MARGIN,
@@ -366,6 +367,7 @@ async def project_detail(
     recent_invoices = sorted(
         project.invoices, key=lambda inv: inv.issue_date or inv.created_at or date.min, reverse=True
     )[:2]
+    geometry_summary = aggregate_project_geometry(db, project.id)
     context = build_project_context(
         db,
         request,
@@ -379,6 +381,7 @@ async def project_detail(
         finance_summary=finance_summary,
         recent_invoices=recent_invoices,
         baseline=baseline,
+        geometry_summary=geometry_summary,
     )
     return templates.TemplateResponse(request, "projects/detail.html", context)
 

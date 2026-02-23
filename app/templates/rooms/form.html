@@ -13,6 +13,14 @@
         <textarea name="description">{{ room.description if room else '' }}</textarea>
     </div>
     <div>
+        <label>Length (m)</label>
+        <input type="number" step="0.01" min="0" name="length_m" value="{{ room.length_m if room else '' }}">
+    </div>
+    <div>
+        <label>Width (m)</label>
+        <input type="number" step="0.01" min="0" name="width_m" value="{{ room.width_m if room else '' }}">
+    </div>
+    <div>
         <label>{{ t("rooms.field.floor_area") }}</label>
         <input type="number" step="0.01" name="floor_area_m2" value="{{ room.floor_area_m2 if room else '' }}">
     </div>
@@ -23,6 +31,10 @@
     <div>
         <label>{{ t("rooms.field.wall_height") }}</label>
         <input type="number" step="0.01" name="wall_height_m" value="{{ room.wall_height_m if room else '' }}">
+    </div>
+    <div>
+        <label>Openings area (m²)</label>
+        <input type="number" step="0.01" min="0" name="openings_area_m2" value="{{ room.openings_area_m2 if room else '' }}">
     </div>
     <div>
         <label>{{ t("rooms.field.wall_area") }}</label>

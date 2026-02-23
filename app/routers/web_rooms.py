@@ -15,6 +15,7 @@ from app.models.room import Room
 from app.security import require_role
 from app.services.quality import evaluate_project_quality
 from app.services.materials_bom import get_or_create_room_paint_settings
+from app.services.geometry import GeometryValidationError
 from app.services.rooms import recalc_room_dimensions
 
 router = APIRouter(prefix="/projects/{project_id}/rooms", tags=["rooms"])
@@ -62,6 +63,11 @@ def _validate_positive_decimal(field_name: str, value: Decimal | None) -> None:
         raise HTTPException(status_code=400, detail=f"{field_name} must be greater than 0")
 
 
+def _validate_non_negative_decimal(field_name: str, value: Decimal | None) -> None:
+    if value is not None and value < 0:
+        raise HTTPException(status_code=400, detail=f"{field_name} can not be negative")
+
+
 def _audit(db: Session, *, event_type: str, user_id: str | None, project_id: int, details: dict) -> None:
     db.add(
         AuditEvent(
@@ -79,9 +85,12 @@ def _clone_room(project_id: int, source: Room, name: str) -> Room:
         project_id=project_id,
         name=name,
         description=source.description,
+        length_m=source.length_m,
+        width_m=source.width_m,
         floor_area_m2=source.floor_area_m2,
         wall_perimeter_m=source.wall_perimeter_m,
         wall_height_m=source.wall_height_m,
+        openings_area_m2=source.openings_area_m2,
         wall_area_m2=source.wall_area_m2,
         ceiling_area_m2=source.ceiling_area_m2,
         baseboard_length_m=source.baseboard_length_m,
@@ -145,13 +154,18 @@ async def create_room(
         project_id=project.id,
         name=form.get("name"),
         description=form.get("description"),
+        length_m=_parse_decimal(form.get("length_m")),
+        width_m=_parse_decimal(form.get("width_m")),
         floor_area_m2=_parse_decimal(form.get("floor_area_m2")),
         wall_perimeter_m=_parse_decimal(form.get("wall_perimeter_m")),
         wall_height_m=_parse_decimal(form.get("wall_height_m")),
+        openings_area_m2=_parse_decimal(form.get("openings_area_m2")),
         wall_area_m2=_parse_decimal(form.get("wall_area_m2")),
         ceiling_area_m2=_parse_decimal(form.get("ceiling_area_m2")),
         baseboard_length_m=_parse_decimal(form.get("baseboard_length_m")),
     )
+    for field in ("length_m", "width_m", "floor_area_m2", "wall_perimeter_m", "wall_height_m", "openings_area_m2"):
+        _validate_non_negative_decimal(field, getattr(room, field))
     recalc_room_dimensions(room)
     db.add(room)
     db.flush()
@@ -200,12 +214,17 @@ async def update_room(
     form = await request.form()
     room.name = form.get("name")
     room.description = form.get("description")
+    room.length_m = _parse_decimal(form.get("length_m"))
+    room.width_m = _parse_decimal(form.get("width_m"))
     room.floor_area_m2 = _parse_decimal(form.get("floor_area_m2"))
     room.wall_perimeter_m = _parse_decimal(form.get("wall_perimeter_m"))
     room.wall_height_m = _parse_decimal(form.get("wall_height_m"))
+    room.openings_area_m2 = _parse_decimal(form.get("openings_area_m2"))
     manual_wall_area = _parse_decimal(form.get("wall_area_m2"))
     manual_ceiling_area = _parse_decimal(form.get("ceiling_area_m2"))
     manual_baseboard = _parse_decimal(form.get("baseboard_length_m"))
+    for field in ("length_m", "width_m", "floor_area_m2", "wall_perimeter_m", "wall_height_m", "openings_area_m2"):
+        _validate_non_negative_decimal(field, getattr(room, field))
     recalc_room_dimensions(room)
     if manual_wall_area is not None:
         room.wall_area_m2 = manual_wall_area

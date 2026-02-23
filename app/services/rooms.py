@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from app.models.room import Room
+from app.services.geometry import GeometryValidationError, compute_room_geometry_from_model
 
 
 def _to_decimal(value):
@@ -15,12 +16,18 @@ def _to_decimal(value):
 
 
 def recalc_room_dimensions(room: Room) -> None:
-    """Recalculate derived fields (wall_area_m2, ceiling_area_m2, baseboard_length_m)."""
+    """Recalculate derived fields without crashing on incomplete room geometry."""
 
-    wall_perimeter = _to_decimal(room.wall_perimeter_m)
-    wall_height = _to_decimal(room.wall_height_m)
-    floor_area = _to_decimal(room.floor_area_m2)
+    try:
+        result = compute_room_geometry_from_model(room)
+    except GeometryValidationError:
+        room.wall_area_m2 = None
+        room.ceiling_area_m2 = None
+        room.baseboard_length_m = None
+        return
 
-    room.wall_area_m2 = wall_perimeter * wall_height if wall_perimeter is not None and wall_height is not None else None
-    room.ceiling_area_m2 = floor_area if floor_area is not None else None
-    room.baseboard_length_m = wall_perimeter if wall_perimeter is not None else None
+    room.wall_perimeter_m = result.perimeter_m if result.perimeter_m is not None else _to_decimal(room.wall_perimeter_m)
+    room.floor_area_m2 = result.floor_area_m2 if result.floor_area_m2 is not None else _to_decimal(room.floor_area_m2)
+    room.wall_area_m2 = result.wall_area_net_m2
+    room.ceiling_area_m2 = result.ceiling_area_m2
+    room.baseboard_length_m = result.baseboard_lm

@@ -13,9 +13,12 @@ class Room(Base):
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
 
+    length_m = Column(Numeric(10, 2), nullable=True)
+    width_m = Column(Numeric(10, 2), nullable=True)
     floor_area_m2 = Column(Numeric(10, 2), nullable=True)
     wall_perimeter_m = Column(Numeric(10, 2), nullable=True)
     wall_height_m = Column(Numeric(10, 2), nullable=True)
+    openings_area_m2 = Column(Numeric(10, 2), nullable=True)
 
     wall_area_m2 = Column(Numeric(10, 2), nullable=True)
     ceiling_area_m2 = Column(Numeric(10, 2), nullable=True)
