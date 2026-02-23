@@ -28,7 +28,12 @@ from app.models.room import Room
 from app.models.worker import Worker
 from app.models.worktype import WorkType
 from app.models.settings import get_or_create_settings
-from app.services.estimates import calculate_project_totals, recalculate_project_work_items
+from app.services.estimates import (
+    calculate_project_total_hours,
+    calculate_project_totals,
+    estimate_project_work_bulk,
+    recalculate_project_work_items,
+)
 from app.services.offer_commercial import compute_offer_commercial, deserialize_offer_commercial
 from app.services.commercial_snapshot import DOC_TYPE_OFFER as SNAP_OFFER, read_commercial_snapshot
 from app.services.finance import calculate_project_financials, compute_project_finance
@@ -382,6 +387,7 @@ async def project_detail(
         recent_invoices=recent_invoices,
         baseline=baseline,
         geometry_summary=geometry_summary,
+        total_labor_hours=calculate_project_total_hours(db, project.id),
     )
     return templates.TemplateResponse(request, "projects/detail.html", context)
 
@@ -871,10 +877,45 @@ async def add_work_item(
         raise HTTPException(status_code=404, detail="Project not found")
 
     form = await request.form()
+    translator = make_t(lang)
     work_type_id = form.get("work_type_id")
     work_type = db.get(WorkType, int(work_type_id)) if work_type_id else None
     if not work_type:
         raise HTTPException(status_code=400, detail="Work type required")
+
+    difficulty_factor = Decimal(form.get("difficulty_factor") or "1")
+    comment = form.get("comment")
+    apply_to = form.get("apply_to") or "selected_room"
+
+    if apply_to == "all_rooms":
+        result = estimate_project_work_bulk(
+            db,
+            project=project,
+            work_type=work_type,
+            difficulty_factor=difficulty_factor,
+            comment=comment,
+        )
+        if result.skipped_rooms:
+            names = ", ".join(result.skipped_rooms[:5])
+            if len(result.skipped_rooms) > 5:
+                names = f"{names}, …"
+            add_flash_message(
+                request,
+                translator("projects.work_items.bulk_skipped_geometry").format(
+                    count=len(result.skipped_rooms),
+                    rooms=names,
+                ),
+                "warning",
+            )
+        if not result.created_item_ids:
+            add_flash_message(request, translator("projects.work_items.bulk_no_valid_rooms"), "error")
+            db.rollback()
+            return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
+
+        recalculate_project_work_items(db, project)
+        calculate_project_totals(db, project)
+        add_flash_message(request, translator("projects.work_items.bulk_applied"), "success")
+        return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
 
     room_id = form.get("room_id")
     room = db.get(Room, int(room_id)) if room_id else None
@@ -886,8 +927,8 @@ async def add_work_item(
         work_type_id=work_type.id,
         room_id=room.id if room else None,
         quantity=Decimal(form.get("quantity") or "0"),
-        difficulty_factor=Decimal(form.get("difficulty_factor") or "1"),
-        comment=form.get("comment"),
+        difficulty_factor=difficulty_factor,
+        comment=comment,
     )
     db.add(item)
     db.flush()
@@ -900,6 +941,8 @@ async def add_work_item(
         db.rollback()
         return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
 
+    recalculate_project_work_items(db, project)
+    calculate_project_totals(db, project)
     db.commit()
     return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
 
