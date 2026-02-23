@@ -65,6 +65,9 @@ async def update_settings(
     settings_obj.default_worker_hourly_rate = Decimal(
         form_data.get("default_worker_hourly_rate") or settings_obj.default_worker_hourly_rate
     )
+    settings_obj.internal_labor_cost_rate_sek = Decimal(
+        form_data.get("internal_labor_cost_rate_sek") or settings_obj.internal_labor_cost_rate_sek
+    )
     settings_obj.employer_contributions_percent = Decimal(
         form_data.get("employer_contributions_percent") or settings_obj.employer_contributions_percent
     )

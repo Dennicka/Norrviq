@@ -137,3 +137,44 @@ def test_worktype_create_form_post():
         assert created.minutes_per_unit == 90
     finally:
         db.close()
+
+
+def test_add_work_item_hidden_pricing_fields_do_not_fail():
+    login()
+    db = SessionLocal()
+    try:
+        project = Project(name=f"Pricing Hidden Fields {uuid4().hex[:8]}")
+        worktype = WorkType(
+            code=f"WT-HIDDEN-{uuid4().hex[:8]}",
+            category="wall",
+            unit="m2",
+            name_ru="Тест",
+            name_sv="Test",
+            hours_per_unit=Decimal("1.00"),
+            base_difficulty_factor=Decimal("1.0"),
+            is_active=True,
+        )
+        db.add_all([project, worktype])
+        db.commit()
+        db.refresh(project)
+        db.refresh(worktype)
+        project_id = project.id
+        worktype_id = worktype.id
+    finally:
+        db.close()
+
+    response = client.post(
+        f"/projects/{project_id}/add-work-item",
+        data={
+            "work_type_id": str(worktype_id),
+            "quantity": "5",
+            "difficulty_factor": "1.0",
+            "pricing_mode": "hourly",
+            "hourly_rate_sek": "550",
+            "area_rate_sek": "",
+            "fixed_price_sek": "",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303

@@ -1,4 +1,5 @@
 from decimal import Decimal
+from enum import Enum
 
 from sqlalchemy import func
 from pydantic import BaseModel
@@ -21,6 +22,42 @@ class ProjectTotals(BaseModel):
 class BulkEstimateResult(BaseModel):
     created_item_ids: list[int]
     skipped_rooms: list[str]
+
+
+class WorkItemPricingMode(str, Enum):
+    HOURLY = "hourly"
+    AREA = "area"
+    FIXED = "fixed"
+
+
+class ProjectPricingTotals(BaseModel):
+    total_labor_hours: Decimal
+    total_price_sek: Decimal
+    total_cost_sek: Decimal
+    total_margin_sek: Decimal
+    total_margin_pct: Decimal
+
+
+def _norm_mode(value: str | None) -> WorkItemPricingMode:
+    try:
+        return WorkItemPricingMode((value or WorkItemPricingMode.HOURLY.value).lower())
+    except ValueError:
+        return WorkItemPricingMode.HOURLY
+
+
+def resolve_billable_area_m2(item: ProjectWorkItem, work_type: WorkType) -> Decimal:
+    room = item.room
+    if room is None:
+        return Decimal("0.00")
+
+    category = (work_type.category or "").lower()
+    if any(marker in category for marker in ("ceiling", "потол", "tak")):
+        return Decimal(str(room.ceiling_area_m2 or 0)).quantize(Decimal("0.01"))
+    if any(marker in category for marker in ("wall", "стен", "vägg")):
+        return Decimal(str(room.wall_area_m2 or 0)).quantize(Decimal("0.01"))
+    if any(marker in category for marker in ("floor", "пол", "golv", "protect", "защит", "skydd")):
+        return Decimal(str(room.floor_area_m2 or 0)).quantize(Decimal("0.01"))
+    return Decimal(str(room.floor_area_m2 or 0)).quantize(Decimal("0.01"))
 
 
 def calculate_project_total_hours(db: Session, project_id: int) -> Decimal:
@@ -60,6 +97,10 @@ def estimate_project_work_bulk(
     work_type: WorkType,
     difficulty_factor: Decimal,
     comment: str | None,
+    pricing_mode: str = WorkItemPricingMode.HOURLY.value,
+    hourly_rate_sek: Decimal | None = None,
+    area_rate_sek: Decimal | None = None,
+    fixed_price_sek: Decimal | None = None,
 ) -> BulkEstimateResult:
     created_item_ids: list[int] = []
     skipped_rooms: list[str] = []
@@ -75,8 +116,12 @@ def estimate_project_work_bulk(
             project_id=project.id,
             work_type_id=work_type.id,
             room_id=room.id,
-            quantity=quantity.quantize(Decimal("0.01")),
+            quantity=quantity.quantize(Decimal("0.01"),),
             difficulty_factor=difficulty_factor,
+            pricing_mode=_norm_mode(pricing_mode).value,
+            hourly_rate_sek=hourly_rate_sek,
+            area_rate_sek=area_rate_sek,
+            fixed_price_sek=fixed_price_sek,
             comment=comment,
         )
         db.add(item)
@@ -90,34 +135,77 @@ def calculate_work_item(
     item: ProjectWorkItem,
     work_type: WorkType,
     hourly_rate_company: Decimal,
+    internal_labor_cost_rate_sek: Decimal = Decimal("0"),
 ) -> None:
-    """
-    Заполняет item.calculated_hours и item.calculated_cost_without_moms по формуле:
-
-        base_hours = quantity * hours_per_unit
-        hours_with_difficulty = base_hours * difficulty_factor
-        cost_without_moms = hours_with_difficulty * hourly_rate_company
-    """
-
     quantity = Decimal(str(item.quantity))
     hours_per_unit = Decimal(str(work_type.hours_per_unit))
     difficulty_factor = Decimal(str(item.difficulty_factor))
 
     base_hours = (quantity * hours_per_unit).quantize(Decimal("0.01"))
-    hours_with_difficulty = (base_hours * difficulty_factor).quantize(Decimal("0.01"))
-    cost_without_moms = (hours_with_difficulty * hourly_rate_company).quantize(Decimal("0.01"))
+    labor_hours = (base_hours * difficulty_factor).quantize(Decimal("0.01"))
 
-    item.calculated_hours = hours_with_difficulty
-    item.calculated_cost_without_moms = cost_without_moms
+    item.calculated_hours = labor_hours
+
+    mode = _norm_mode(getattr(item, "pricing_mode", None))
+    price_sek = Decimal("0.00")
+
+    if mode is WorkItemPricingMode.HOURLY:
+        rate = Decimal(str(item.hourly_rate_sek if item.hourly_rate_sek is not None else hourly_rate_company))
+        item.hourly_rate_sek = rate.quantize(Decimal("0.01"))
+        price_sek = (labor_hours * rate).quantize(Decimal("0.01"))
+    elif mode is WorkItemPricingMode.AREA:
+        area_rate = Decimal(str(item.area_rate_sek or 0)).quantize(Decimal("0.01"))
+        billable_area = resolve_billable_area_m2(item, work_type)
+        item.billable_area_m2 = billable_area
+        item.area_rate_sek = area_rate
+        price_sek = (billable_area * area_rate).quantize(Decimal("0.01"))
+    else:
+        fixed_price = Decimal(str(item.fixed_price_sek or 0)).quantize(Decimal("0.01"))
+        item.fixed_price_sek = fixed_price
+        price_sek = fixed_price
+
+    labor_cost_sek = (labor_hours * internal_labor_cost_rate_sek).quantize(Decimal("0.01"))
+    materials_cost_sek = Decimal(str(item.materials_cost_sek or 0)).quantize(Decimal("0.01"))
+    total_cost_sek = (labor_cost_sek + materials_cost_sek).quantize(Decimal("0.01"))
+    margin_sek = (price_sek - total_cost_sek).quantize(Decimal("0.01"))
+    margin_pct = Decimal("0.00")
+    if price_sek > 0:
+        margin_pct = ((margin_sek / price_sek) * Decimal("100")).quantize(Decimal("0.01"))
+
+    item.pricing_mode = mode.value
+    item.calculated_cost_without_moms = price_sek
+    item.labor_cost_sek = labor_cost_sek
+    item.total_cost_sek = total_cost_sek
+    item.margin_sek = margin_sek
+    item.margin_pct = margin_pct
+
+
+def calculate_project_pricing_totals(project: Project) -> ProjectPricingTotals:
+    total_labor_hours = sum((Decimal(str(item.calculated_hours or 0)) for item in project.work_items), Decimal("0"))
+    total_price_sek = sum((Decimal(str(item.calculated_cost_without_moms or 0)) for item in project.work_items), Decimal("0"))
+    total_cost_sek = sum((Decimal(str(item.total_cost_sek or 0)) for item in project.work_items), Decimal("0"))
+    total_margin_sek = (total_price_sek - total_cost_sek).quantize(Decimal("0.01"))
+    total_margin_pct = Decimal("0.00")
+    if total_price_sek > 0:
+        total_margin_pct = ((total_margin_sek / total_price_sek) * Decimal("100")).quantize(Decimal("0.01"))
+
+    return ProjectPricingTotals(
+        total_labor_hours=total_labor_hours.quantize(Decimal("0.01")),
+        total_price_sek=total_price_sek.quantize(Decimal("0.01")),
+        total_cost_sek=total_cost_sek.quantize(Decimal("0.01")),
+        total_margin_sek=total_margin_sek,
+        total_margin_pct=total_margin_pct,
+    )
 
 
 def recalculate_project_work_items(db: Session, project: Project) -> None:
     settings = get_or_create_settings(db)
     hourly_rate = Decimal(str(settings.hourly_rate_company))
+    internal_labor_cost_rate = Decimal(str(settings.internal_labor_cost_rate_sek or 0))
 
     for item in project.work_items:
         work_type = item.work_type
-        calculate_work_item(item, work_type, hourly_rate)
+        calculate_work_item(item, work_type, hourly_rate, internal_labor_cost_rate)
 
     db.commit()
 

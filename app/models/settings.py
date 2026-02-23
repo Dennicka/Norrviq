@@ -10,6 +10,7 @@ class Settings(Base):
     id = Column(Integer, primary_key=True, index=True)
     hourly_rate_company = Column(Numeric(10, 2), nullable=False, default=550.00)
     default_worker_hourly_rate = Column(Numeric(10, 2), nullable=False, default=180.00)
+    internal_labor_cost_rate_sek = Column(Numeric(10, 2), nullable=False, default=300.00)
     employer_contributions_percent = Column(Numeric(5, 2), nullable=False, default=31.42)
     moms_percent = Column(Numeric(5, 2), nullable=False, default=25.00)
     rot_percent = Column(Numeric(5, 2), nullable=False, default=50.00)

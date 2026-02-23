@@ -23,6 +23,12 @@ router = APIRouter(prefix="/api/projects", tags=["api_projects_autosave"])
 logger = logging.getLogger("uvicorn.error")
 
 
+def _parse_optional_decimal(value):
+    if value in (None, ""):
+        return None
+    return Decimal(str(value))
+
+
 def _resp_ok(request: Request, updated_at) -> JSONResponse:
     return JSONResponse({"ok": True, "updated_at": updated_at.isoformat() if updated_at else None, "request_id": getattr(request.state, "request_id", None)})
 
@@ -114,6 +120,28 @@ async def patch_work_item(project_id: int, item_id: int, request: Request, db: S
             item.difficulty_factor = difficulty
         except Exception:
             fields["difficulty_factor"] = "Must be > 0"
+
+    if "pricing_mode" in payload:
+        mode = str(payload.get("pricing_mode") or "hourly").lower()
+        if mode not in {"hourly", "area", "fixed"}:
+            fields["pricing_mode"] = "Invalid mode"
+        else:
+            item.pricing_mode = mode
+
+    for field in ("hourly_rate_sek", "area_rate_sek", "fixed_price_sek", "materials_cost_sek"):
+        if field in payload:
+            try:
+                setattr(item, field, _parse_optional_decimal(payload.get(field)))
+            except Exception:
+                fields[field] = "Must be numeric"
+
+    mode = (item.pricing_mode or "hourly").lower()
+    if mode == "hourly" and item.hourly_rate_sek in (None, 0):
+        fields["hourly_rate_sek"] = "Required for hourly mode"
+    if mode == "area" and item.area_rate_sek in (None, 0):
+        fields["area_rate_sek"] = "Required for area mode"
+    if mode == "fixed" and item.fixed_price_sek in (None, 0):
+        fields["fixed_price_sek"] = "Required for fixed mode"
 
     if "comment" in payload:
         item.comment = payload.get("comment")
