@@ -62,7 +62,7 @@ async def enforce_csrf(request: Request) -> None:
 
 async def get_current_lang(request: Request) -> str:
     lang = request.cookies.get("lang", settings.default_lang)
-    if lang not in ("ru", "sv"):
+    if lang not in ("ru", "sv", "en"):
         lang = settings.default_lang
     return lang
 

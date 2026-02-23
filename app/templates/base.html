@@ -33,12 +33,12 @@
             <a href="/stats/">{{ t("menu.stats") }}</a>
             <a href="/settings/">{{ t("menu.settings") }}</a>
             <a href="/settings/company">{{ t("menu.company") }}</a>
-            <a href="/settings/terms">Terms</a>
-            <a href="/settings/pricing-policy">Pricing policy</a>
-            <a href="/settings/paint-systems">Paint systems</a>
-            <a href="/web/buffer-rules">Buffer rules</a>
+            <a href="/settings/terms">{{ t("menu.terms") }}</a>
+            <a href="/settings/pricing-policy">{{ t("menu.pricing_policy") }}</a>
+            <a href="/settings/paint-systems">{{ t("menu.paint_systems") }}</a>
+            <a href="/web/buffer-rules">{{ t("menu.buffer_rules") }}</a>
             <a href="/help/">{{ t("menu.help") }}</a>
-            <a href="/admin/backups">Backups</a>
+            <a href="/admin/backups">{{ t("menu.backups") }}</a>
         </div>
         <div class="auth-links">
             {% if current_user %}
@@ -49,12 +49,14 @@
             {% endif %}
         </div>
         <div class="lang-switcher">
-            <a href="/lang/ru" class="{{ 'active' if lang == 'ru' else '' }}">RU</a>
+            <a href="/lang/ru?next={{ request.url.path }}" class="{{ 'active' if lang == 'ru' else '' }}">RU</a>
             <span>|</span>
-            <a href="/lang/sv" class="{{ 'active' if lang == 'sv' else '' }}">SV</a>
+            <a href="/lang/sv?next={{ request.url.path }}" class="{{ 'active' if lang == 'sv' else '' }}">SV</a>
+            <span>|</span>
+            <a href="/lang/en?next={{ request.url.path }}" class="{{ 'active' if lang == 'en' else '' }}">EN</a>
         </div>
     </nav>
-    {% if maintenance_mode %}<div class="flash error">Maintenance mode enabled. Write operations are temporarily blocked.</div>{% endif %}
+    {% if maintenance_mode %}<div class="flash error">{{ t("common.maintenance_mode") }}</div>{% endif %}
     <main>
         {% if flash_message %}
         <div class="flash {{ flash_message.category }}">{{ flash_message.text }}</div>

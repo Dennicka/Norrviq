@@ -10,7 +10,7 @@
       <td>{{ norm.id }}</td>
       <td>{{ norm.material_name }}</td>
       <td>{{ norm.applies_to_work_type }}</td>
-      <td>{{ norm.surface_type }}</td>
+      <td>{{ t('statuses.surface.' + norm.surface_type) }}</td>
       <td>{{ norm.consumption_value }} {{ t('materials.consumption_unit.' + norm.consumption_unit) }}</td>
       <td>{{ t('label.yes') if norm.active else t('label.no') }}</td>
       <td><a href="/materials/norms/{{ norm.id }}/edit">{{ t('label.edit') }}</a>
