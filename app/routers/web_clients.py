@@ -101,23 +101,6 @@ async def list_clients(
     return templates.TemplateResponse(request, "clients/list.html", context)
 
 
-@router.get("/{client_id}")
-async def client_detail(
-    client_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-    lang: str = Depends(get_current_lang),
-):
-    client = db.query(Client).filter(Client.id == client_id).first()
-    if not client:
-        raise HTTPException(status_code=404, detail="Client not found")
-
-    projects = db.query(Project).filter(Project.client_id == client_id).all()
-    context = template_context(request, lang)
-    context.update({"client": client, "projects": projects})
-    return templates.TemplateResponse(request, "clients/detail.html", context)
-
-
 @router.get("/new")
 async def new_client_form(
     request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang)
@@ -151,6 +134,23 @@ async def save_client(
         client_id=None,
         form_action="/clients/save",
     )
+
+
+@router.get("/{client_id}")
+async def client_detail(
+    client_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    lang: str = Depends(get_current_lang),
+):
+    client = db.query(Client).filter(Client.id == client_id).first()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    projects = db.query(Project).filter(Project.client_id == client_id).all()
+    context = template_context(request, lang)
+    context.update({"client": client, "projects": projects})
+    return templates.TemplateResponse(request, "clients/detail.html", context)
 
 
 @router.get("/{client_id}/edit")

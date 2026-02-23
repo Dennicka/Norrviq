@@ -28,9 +28,9 @@ async def login_page(request: Request, lang: str = Depends(get_current_lang), ne
 @router.post("/login")
 async def login(request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang)):
     form = await request.form()
-    email = str(form.get("email") or form.get("username") or "")
-    password = str(form.get("password") or "")
-    next_path = str(form.get("next") or "/")
+    email = (form.get("email") or form.get("username") or "").strip()
+    password = form.get("password") or ""
+    next_path = (form.get("next") or "/").strip() or "/"
 
     user = authenticate_user(db, email=email, password=password)
     if user:
@@ -40,7 +40,7 @@ async def login(request: Request, db: Session = Depends(get_db), lang: str = Dep
         request.session["user_role"] = user.role
         log_event(db, request, "login_success", entity_type="SYSTEM", severity="SECURITY", metadata={"user_email": user.email, "role": user.role})
         db.commit()
-        return RedirectResponse(url=next_path or "/", status_code=HTTP_302_FOUND)
+        return RedirectResponse(url=next_path, status_code=HTTP_302_FOUND)
 
     log_event(db, request, "login_failed", entity_type="SYSTEM", severity="SECURITY", metadata={"user_email": email.strip().lower()})
     db.commit()
