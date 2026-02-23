@@ -88,6 +88,7 @@ from app.services.material_actuals import (
     export_plan_vs_actual_csv,
     export_plan_vs_actual_pdf,
     export_purchases_csv,
+    upsert_actual_entry,
 )
 from app.models.supplier import Supplier
 from app.models.user import User
@@ -1763,6 +1764,28 @@ async def project_materials_actuals_page(project_id: int, request: Request, db: 
     return templates.TemplateResponse(request, "projects/materials_actuals.html", context)
 
 
+
+
+@router.post("/{project_id}/materials-actuals/manual")
+async def save_materials_actuals_manual(project_id: int, request: Request, db: Session = Depends(get_db)):
+    if get_current_user_role(request) not in {ADMIN_ROLE, OPERATOR_ROLE}:
+        raise HTTPException(status_code=403, detail="Insufficient role")
+    form = await request.form()
+    material_name = (form.get("material_name") or "").strip()
+    if not material_name:
+        return RedirectResponse(url=f"/projects/{project_id}/materials-actuals", status_code=status.HTTP_303_SEE_OTHER)
+    upsert_actual_entry(
+        db,
+        project_id=project_id,
+        material_name=material_name,
+        actual_qty=Decimal(form.get("actual_qty") or "0"),
+        actual_packages=Decimal(form.get("actual_packages") or "0"),
+        actual_cost_sek=Decimal(form.get("actual_cost_sek") or "0"),
+        supplier=(form.get("supplier") or None),
+        receipt_note=(form.get("receipt_note") or None),
+    )
+    db.commit()
+    return RedirectResponse(url=f"/projects/{project_id}/materials-actuals", status_code=status.HTTP_303_SEE_OTHER)
 @router.post("/{project_id}/materials-actuals/purchases")
 async def create_materials_purchase(project_id: int, request: Request, db: Session = Depends(get_db)):
     if get_current_user_role(request) not in {ADMIN_ROLE, OPERATOR_ROLE}:

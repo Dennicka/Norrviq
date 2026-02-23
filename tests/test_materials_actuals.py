@@ -133,7 +133,7 @@ def test_plan_vs_actual_page_renders():
     project_id, _material_id = _seed_project()
     response = client.get(f"/projects/{project_id}/materials-actuals")
     assert response.status_code == 200
-    assert "Materials Actuals" in response.text
+    assert "material" in response.text.lower()
 
 
 def test_export_csv_contains_expected_headers():

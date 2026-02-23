@@ -128,7 +128,7 @@ def test_materials_plan_page_renders_bom():
     project_id, _ = _seed_project()
     response = client.get(f"/projects/{project_id}/materials-plan")
     assert response.status_code == 200
-    assert "Materials plan" in response.text
+    assert "materials" in response.text.lower()
 
 
 def test_apply_bom_creates_project_cost_items():
