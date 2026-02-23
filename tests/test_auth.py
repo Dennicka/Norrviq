@@ -85,6 +85,49 @@ def test_login_post_never_returns_500_with_csrf_token():
     assert response.status_code != 500
 
 
+def test_valid_login_does_not_return_500():
+    email, password = _ensure_admin()
+    form_response = client.get("/login")
+    assert form_response.status_code == 200
+    csrf_token = extract_csrf_token(form_response.text)
+
+    response = client.post(
+        "/login",
+        data={
+            "username": email,
+            "password": password,
+            "next": "/projects/",
+            "csrf_token": csrf_token,
+        },
+        headers={"X-CSRF-Token": csrf_token},
+        follow_redirects=False,
+    )
+
+    assert response.status_code != 500
+    assert response.status_code in (302, 303)
+
+
+def test_invalid_login_returns_error_page_without_500():
+    form_response = client.get("/login")
+    assert form_response.status_code == 200
+    csrf_token = extract_csrf_token(form_response.text)
+
+    response = client.post(
+        "/login",
+        data={
+            "username": "missing@example.com",
+            "password": "bad-password",
+            "next": "/",
+            "csrf_token": csrf_token,
+        },
+        headers={"X-CSRF-Token": csrf_token},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 200
+    assert "class=\"error\"" in response.text
+
+
 def test_login_logout_session_rotation():
     email, password = _ensure_admin()
     anon_response = client.get("/login")

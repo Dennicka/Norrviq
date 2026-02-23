@@ -22,10 +22,17 @@ def test_clients_list_page_loads():
     assert response.status_code == 200
 
 
-def test_create_client_happy_path():
+def test_clients_new_form_loads():
+    login()
+    response = client.get("/clients/new")
+    assert response.status_code == 200
+    assert "<form" in response.text
+
+
+def test_create_client_via_new_happy_path():
     login()
     response = client.post(
-        "/clients/save",
+        "/clients/new",
         data={
             "name": "New Client",
             "contact_person": "Contact",
@@ -39,6 +46,8 @@ def test_create_client_happy_path():
         follow_redirects=False,
     )
     assert response.status_code == 303
+    location = response.headers.get("location", "")
+    assert location.startswith("/clients/")
 
     created = None
     db = SessionLocal()
@@ -47,6 +56,10 @@ def test_create_client_happy_path():
         assert created is not None
         assert created.contact_person == "Contact"
         assert created.is_rot_eligible is True
+
+        detail_response = client.get(f"/clients/{created.id}")
+        assert detail_response.status_code == 200
+        assert "New Client" in detail_response.text
     finally:
         if created:
             db.delete(created)
