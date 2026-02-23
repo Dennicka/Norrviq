@@ -29,6 +29,17 @@
 - `ADMIN_EMAIL` / `ADMIN_PASSWORD` (bootstrap-only).
 - `ALLOW_DEV_DEFAULTS` (legacy; не использовать для prod).
 
+
+## Минимальный `.env` для local
+
+```env
+APP_ENV=local
+DATABASE_URL=sqlite:///./norrviq.db
+BACKUP_DIR=./backups
+```
+
+`SESSION_SECRET` в local необязателен, но в non-local обязателен и валидируется на длину.
+
 ## Пример `.env` для production
 
 ```env

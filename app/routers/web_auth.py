@@ -9,6 +9,7 @@ from app.dependencies import get_current_lang, get_db, template_context, templat
 from app.audit import log_event
 from app.security import get_current_user_email
 from app.services.auth import authenticate_user
+from app.web_utils import clean_str, safe_commit
 
 router = APIRouter(tags=["auth"])
 
@@ -28,9 +29,9 @@ async def login_page(request: Request, lang: str = Depends(get_current_lang), ne
 @router.post("/login")
 async def login(request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang)):
     form = await request.form()
-    email = (form.get("email") or form.get("username") or "").strip()
+    email = clean_str(form.get("email") or form.get("username")) or ""
     password = form.get("password") or ""
-    next_path = (form.get("next") or "/").strip() or "/"
+    next_path = clean_str(form.get("next")) or "/"
 
     user = authenticate_user(db, email=email, password=password)
     if user:
@@ -39,11 +40,15 @@ async def login(request: Request, db: Session = Depends(get_db), lang: str = Dep
         request.session["user_email"] = user.email
         request.session["user_role"] = user.role
         log_event(db, request, "login_success", entity_type="SYSTEM", severity="SECURITY", metadata={"user_email": user.email, "role": user.role})
-        db.commit()
+        if not safe_commit(db, request, message="login_success_audit"):
+            context = template_context(request, lang)
+            context["next_path"] = next_path
+            context["invalid_credentials"] = True
+            return templates.TemplateResponse(request, "auth/login.html", context, status_code=400)
         return RedirectResponse(url=next_path, status_code=HTTP_302_FOUND)
 
     log_event(db, request, "login_failed", entity_type="SYSTEM", severity="SECURITY", metadata={"user_email": email.strip().lower()})
-    db.commit()
+    safe_commit(db, request, message="login_failed_audit")
     context = template_context(request, lang)
     context["next_path"] = next_path
     context["invalid_credentials"] = True
@@ -56,5 +61,5 @@ async def logout(request: Request, db: Session = Depends(get_db)):
     request.session.clear()
     if user_email:
         log_event(db, request, "logout", entity_type="SYSTEM", severity="SECURITY", metadata={"user_email": user_email})
-        db.commit()
+        safe_commit(db, request, message="logout_audit")
     return RedirectResponse(url="/login", status_code=HTTP_302_FOUND)

@@ -8,30 +8,25 @@ from app.dependencies import add_flash_message, get_current_lang, get_db, templa
 from app.i18n import make_t
 from app.models.client import Client
 from app.models.project import Project
+from app.web_utils import clean_str, parse_checkbox, safe_commit
 
 router = APIRouter(prefix="/clients", tags=["clients"])
 
 
 def _parse_client_form(form_data: dict) -> dict:
-    def _clean(value: str | None) -> str | None:
-        if value is None:
-            return None
-        value = value.strip()
-        return value or None
-
-    segment = (form_data.get("client_segment") or "B2C").strip().upper()
+    segment = (clean_str(form_data.get("client_segment")) or "B2C").upper()
     if segment not in {"B2C", "BRF", "B2B"}:
         segment = "B2C"
 
     return {
-        "name": (form_data.get("name") or "").strip(),
-        "contact_person": _clean(form_data.get("contact_person")),
-        "phone": _clean(form_data.get("phone")),
-        "email": _clean(form_data.get("email")),
-        "address": _clean(form_data.get("address")),
-        "comment": _clean(form_data.get("comment")),
-        "is_private_person": bool(form_data.get("is_private_person")),
-        "is_rot_eligible": bool(form_data.get("is_rot_eligible")),
+        "name": clean_str(form_data.get("name")) or "",
+        "contact_person": clean_str(form_data.get("contact_person")),
+        "phone": clean_str(form_data.get("phone")),
+        "email": clean_str(form_data.get("email")),
+        "address": clean_str(form_data.get("address")),
+        "comment": clean_str(form_data.get("comment")),
+        "is_private_person": parse_checkbox(form_data.get("is_private_person")),
+        "is_rot_eligible": parse_checkbox(form_data.get("is_rot_eligible")),
         "client_segment": segment,
     }
 
@@ -84,7 +79,12 @@ async def _save_client(
 
     _apply_client_data(client, data)
     db.add(client)
-    db.commit()
+    if not safe_commit(db, request, message="save_client"):
+        add_flash_message(request, "Не удалось сохранить клиента. Попробуйте снова.", "error")
+        context = template_context(request, lang)
+        placeholder = SimpleNamespace(**{**data, "id": resolved_client_id})
+        context.update({"client": placeholder, "form_action": form_action})
+        return templates.TemplateResponse(request, "clients/form.html", context, status_code=400)
     db.refresh(client)
 
     add_flash_message(request, translator("clients.save.success"), "success")
@@ -205,6 +205,10 @@ async def delete_client(
         )
 
     db.delete(client)
-    db.commit()
+    if not safe_commit(db, request, message="delete_client"):
+        add_flash_message(request, "Не удалось удалить клиента. Попробуйте снова.", "error")
+        return RedirectResponse(
+            url=f"/clients/{client_id}", status_code=status.HTTP_303_SEE_OTHER
+        )
     add_flash_message(request, translator("clients.delete.success"), "success")
     return RedirectResponse(url="/clients/", status_code=status.HTTP_303_SEE_OTHER)
