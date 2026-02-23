@@ -93,6 +93,7 @@ from app.services.material_actuals import (
 from app.models.supplier import Supplier
 from app.models.user import User
 from app.observability import REQUEST_ID_HEADER
+from app.web_utils import clean_str, parse_checkbox, parse_int_field, safe_commit
 from app.security import OPERATOR_ROLE, ADMIN_ROLE, get_current_user_email, get_current_user_role, require_auth, require_role
 from app.i18n import make_t
 
@@ -346,19 +347,24 @@ async def create_project(
     form = await request.form()
     client_id = form.get("client_id")
     project = Project(
-        name=form.get("name"),
-        client_id=int(client_id) if client_id else None,
-        address=form.get("address"),
-        description=form.get("description"),
-        use_rot=bool(form.get("use_rot")),
-        status=form.get("status") or "draft",
+        name=clean_str(form.get("name")),
+        client_id=parse_int_field(client_id, field_name="client_id") if client_id else None,
+        address=clean_str(form.get("address")),
+        description=clean_str(form.get("description")),
+        use_rot=parse_checkbox(form.get("use_rot")),
+        status=clean_str(form.get("status")) or "draft",
         planned_start_date=_parse_date(form.get("planned_start_date")),
         planned_end_date=_parse_date(form.get("planned_end_date")),
         actual_start_date=_parse_date(form.get("actual_start_date")),
         actual_end_date=_parse_date(form.get("actual_end_date")),
     )
     db.add(project)
-    db.commit()
+    if not safe_commit(db, request, message="create_project"):
+        add_flash_message(request, "Не удалось сохранить проект. Попробуйте снова.", "error")
+        clients = db.query(Client).all()
+        context = template_context(request, lang)
+        context.update({"clients": clients, "project": project})
+        return templates.TemplateResponse(request, "projects/form.html", context, status_code=400)
     db.refresh(project)
     get_or_create_project_pricing(db, project.id)
     return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
@@ -450,18 +456,20 @@ async def update_project(
     form = await request.form()
     client_id = form.get("client_id")
     project.name = form.get("name")
-    project.client_id = int(client_id) if client_id else None
-    project.address = form.get("address")
-    project.description = form.get("description")
-    project.use_rot = bool(form.get("use_rot"))
-    project.status = form.get("status") or project.status
+    project.client_id = parse_int_field(client_id, field_name="client_id") if client_id else None
+    project.address = clean_str(form.get("address"))
+    project.description = clean_str(form.get("description"))
+    project.use_rot = parse_checkbox(form.get("use_rot"))
+    project.status = clean_str(form.get("status")) or project.status
     project.planned_start_date = _parse_date(form.get("planned_start_date"))
     project.planned_end_date = _parse_date(form.get("planned_end_date"))
     project.actual_start_date = _parse_date(form.get("actual_start_date"))
     project.actual_end_date = _parse_date(form.get("actual_end_date"))
 
     db.add(project)
-    db.commit()
+    if not safe_commit(db, request, message="update_project"):
+        add_flash_message(request, "Не удалось обновить проект. Попробуйте снова.", "error")
+        return RedirectResponse(url=f"/projects/{project.id}/edit", status_code=status.HTTP_303_SEE_OTHER)
 
     return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
 

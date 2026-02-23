@@ -98,6 +98,28 @@ def test_smoke_critical_business_flow_end_to_end():
         )
         assert add_item_response.status_code == 303
     
+
+        create_room_response = csrf_post(
+            client,
+            form_url=f"/projects/{project_id}/rooms/create",
+            post_url=f"/projects/{project_id}/rooms/create",
+            data={"name": "Living room", "length_m": "5", "width_m": "4", "wall_height_m": "2.5"},
+            follow_redirects=False,
+        )
+        assert create_room_response.status_code == 303
+
+        pricing_page = client.get(f"/projects/{project_id}/pricing")
+        assert pricing_page.status_code == 200
+        _assert_request_id(pricing_page)
+
+        takeoff_page = client.get(f"/projects/{project_id}/takeoff")
+        assert takeoff_page.status_code == 200
+        _assert_request_id(takeoff_page)
+
+        materials_page = client.get("/materials/")
+        assert materials_page.status_code == 200
+        _assert_request_id(materials_page)
+
         recalc_response = csrf_post(
             client,
             form_url=f"/projects/{project_id}",
@@ -166,3 +188,8 @@ def test_smoke_critical_business_flow_end_to_end():
                 assert re.match(r"^TR-\d{4}-\d{4}$", invoice.invoice_number)
         finally:
             db.close()
+
+
+        logout_response = client.get("/logout", follow_redirects=False)
+        assert logout_response.status_code in (302, 303)
+        _assert_request_id(logout_response)

@@ -1,5 +1,4 @@
 from decimal import Decimal
-from urllib.parse import parse_qs
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
@@ -8,21 +7,11 @@ from sqlalchemy.orm import Session
 from app.dependencies import get_current_lang, get_db, template_context, templates
 from app.models.project import ProjectWorkItem
 from app.models.worktype import WORKTYPE_UNITS, WorkType
+from app.web_utils import FormValidationError, parse_checkbox, parse_decimal_field, parse_int_field, safe_commit
 
 
 async def _extract_form_data(request: Request) -> dict:
-    data: dict = {}
-    try:
-        form = await request.form()
-        data = dict(form)
-    except Exception:
-        data = {}
-
-    if not data:
-        body = await request.body()
-        if body:
-            data = {key: values[0] for key, values in parse_qs(body.decode()).items()}
-    return data
+    return dict(await request.form())
 
 router = APIRouter(prefix="/worktypes", tags=["worktypes"])
 
@@ -53,10 +42,19 @@ async def create_worktype(
     request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang)
 ):
     form = await _extract_form_data(request)
-    minutes_raw = form.get("minutes_per_unit")
-    hours_raw = form.get("hours_per_unit")
-    minutes = int(minutes_raw) if minutes_raw not in (None, "") else None
-    hours = Decimal(hours_raw) if hours_raw not in (None, "") else None
+    context = template_context(request, lang)
+    context["worktype_units"] = WORKTYPE_UNITS
+    try:
+        minutes = parse_int_field(form.get("minutes_per_unit"), field_name="minutes_per_unit", min_value=0)
+        hours = parse_decimal_field(form.get("hours_per_unit"), field_name="hours_per_unit", min_value=Decimal("0"))
+        base_difficulty_factor = parse_decimal_field(
+            form.get("base_difficulty_factor") or "1",
+            field_name="base_difficulty_factor",
+            min_value=Decimal("0"),
+        )
+    except FormValidationError as exc:
+        context.update({"worktype": WorkType(**{k: v for k, v in form.items() if k in WorkType.__table__.columns.keys()}), "error_message": str(exc)})
+        return templates.TemplateResponse(request, "worktypes/form.html", context, status_code=400)
 
     worktype = WorkType(
         code=form.get("code"),
@@ -67,12 +65,14 @@ async def create_worktype(
         description_ru=form.get("description_ru"),
         description_sv=form.get("description_sv"),
         hours_per_unit=hours,
-        base_difficulty_factor=Decimal(form.get("base_difficulty_factor") or "1"),
-        is_active=bool(form.get("is_active")),
+        base_difficulty_factor=base_difficulty_factor,
+        is_active=parse_checkbox(form.get("is_active")),
     )
     worktype.set_minutes_per_unit(minutes)
     db.add(worktype)
-    db.commit()
+    if not safe_commit(db, request, message="create_worktype"):
+        context.update({"worktype": worktype, "error_message": "Не удалось сохранить вид работ. Попробуйте снова."})
+        return templates.TemplateResponse(request, "worktypes/form.html", context, status_code=400)
     return RedirectResponse(url="/worktypes/", status_code=status.HTTP_303_SEE_OTHER)
 
 
@@ -105,10 +105,19 @@ async def update_worktype(
         raise HTTPException(status_code=404, detail="WorkType not found")
 
     form = await _extract_form_data(request)
-    minutes_raw = form.get("minutes_per_unit")
-    hours_raw = form.get("hours_per_unit")
-    minutes = int(minutes_raw) if minutes_raw not in (None, "") else None
-    hours = Decimal(hours_raw) if hours_raw not in (None, "") else None
+    context = template_context(request, lang)
+    context["worktype_units"] = WORKTYPE_UNITS
+    try:
+        minutes = parse_int_field(form.get("minutes_per_unit"), field_name="minutes_per_unit", min_value=0)
+        hours = parse_decimal_field(form.get("hours_per_unit"), field_name="hours_per_unit", min_value=Decimal("0"))
+        base_difficulty_factor = parse_decimal_field(
+            form.get("base_difficulty_factor") or "1",
+            field_name="base_difficulty_factor",
+            min_value=Decimal("0"),
+        )
+    except FormValidationError as exc:
+        context.update({"worktype": worktype, "error_message": str(exc)})
+        return templates.TemplateResponse(request, "worktypes/form.html", context, status_code=400)
     worktype.code = form.get("code")
     worktype.category = form.get("category")
     worktype.unit = form.get("unit")
@@ -118,11 +127,13 @@ async def update_worktype(
     worktype.description_sv = form.get("description_sv")
     worktype.hours_per_unit = hours
     worktype.set_minutes_per_unit(minutes)
-    worktype.base_difficulty_factor = Decimal(form.get("base_difficulty_factor") or "1")
-    worktype.is_active = bool(form.get("is_active"))
+    worktype.base_difficulty_factor = base_difficulty_factor
+    worktype.is_active = parse_checkbox(form.get("is_active"))
 
     db.add(worktype)
-    db.commit()
+    if not safe_commit(db, request, message="update_worktype"):
+        context.update({"worktype": worktype, "error_message": "Не удалось обновить вид работ. Попробуйте снова."})
+        return templates.TemplateResponse(request, "worktypes/form.html", context, status_code=400)
 
     return RedirectResponse(url="/worktypes/", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -155,7 +166,10 @@ async def delete_worktype(
         return templates.TemplateResponse(request, "worktypes/list.html", context, status_code=400)
 
     db.delete(worktype)
-    db.commit()
+    if not safe_commit(db, request, message="delete_worktype"):
+        context = template_context(request, lang)
+        context.update({"worktypes": db.query(WorkType).all(), "worktype_units": WORKTYPE_UNITS, "error_message": "worktypes.error.cannot_delete_in_use"})
+        return templates.TemplateResponse(request, "worktypes/list.html", context, status_code=400)
     return RedirectResponse(url="/worktypes/", status_code=status.HTTP_303_SEE_OTHER)
 
 

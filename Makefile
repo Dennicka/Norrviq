@@ -1,4 +1,4 @@
-.PHONY: check migrate run preflight i18n-audit
+.PHONY: check migrate run preflight doctor i18n-audit
 
 check:
 	ruff check .
@@ -13,6 +13,8 @@ run:
 preflight:
 	bash scripts/ops/preflight.sh
 
+doctor:
+	bash scripts/ops/doctor.sh
 
 i18n-audit:
 	bash scripts/i18n_audit.sh
