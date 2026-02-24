@@ -11,8 +11,8 @@ from app.models.material_norm import MaterialConsumptionNorm
 
 router = APIRouter(prefix="/materials", tags=["materials"])
 
-VALID_BASIS_TYPES = {"floor_area", "ceiling_area", "wall_area", "opening_area", "perimeter", "manual_quantity"}
-VALID_WORK_KINDS = {"painting_ceiling", "painting_walls", "putty_walls", "primer_walls", "floor_covering"}
+VALID_BASIS_TYPES = {"floor_area", "wall_area", "ceiling_area", "walls_plus_ceilings", "perimeter", "room_count", "custom"}
+VALID_WORK_KINDS = {"paint_ceiling", "paint_walls", "putty_walls", "primer_walls", "cover_floor", "painting_ceiling", "painting_walls", "floor_covering"}
 VALID_UNITS = {"l", "kg", "m2", "pcs", "roll", "bucket"}
 
 
@@ -33,11 +33,15 @@ def _parse_rule_form(form) -> tuple[dict, list[str]]:
     payload: dict = {}
     payload["is_active"] = form.get("is_active") in ("on", "true", "1", True, 1)
     payload["active"] = payload["is_active"]
+    payload["name"] = (form.get("name") or "").strip()
     payload["material_name"] = (form.get("material_name") or "").strip()
+    payload["material_catalog_item_id"] = form.get("material_catalog_item_id") or None
     payload["material_category"] = (form.get("material_category") or "other").strip()
     payload["work_kind"] = (form.get("work_kind") or "").strip().lower()
+    payload["work_type_code"] = payload["work_kind"]
     payload["basis_type"] = (form.get("basis_type") or "").strip().lower()
     payload["basis_unit"] = (form.get("basis_unit") or "m2").strip()
+    payload["per_basis_unit"] = payload["basis_unit"]
     payload["material_unit"] = (form.get("material_unit") or "").strip()
     payload["notes"] = form.get("notes") or None
 
@@ -51,8 +55,9 @@ def _parse_rule_form(form) -> tuple[dict, list[str]]:
         errors.append("material_unit")
 
     try:
-        payload["quantity_per_basis"] = _to_decimal(form.get("quantity_per_basis"), field="quantity_per_basis")
-        if payload["quantity_per_basis"] is not None and payload["quantity_per_basis"] < 0:
+        payload["consumption_qty"] = _to_decimal(form.get("consumption_qty") or form.get("quantity_per_basis"), field="consumption_qty")
+        payload["quantity_per_basis"] = payload["consumption_qty"]
+        if payload["consumption_qty"] is not None and payload["consumption_qty"] <= 0:
             errors.append("quantity_per_basis")
     except ValueError:
         errors.append("quantity_per_basis")
@@ -64,23 +69,29 @@ def _parse_rule_form(form) -> tuple[dict, list[str]]:
     except ValueError:
         errors.append("waste_factor_pct")
 
+    if payload["material_catalog_item_id"] not in (None, ""):
+        try:
+            payload["material_catalog_item_id"] = int(str(payload["material_catalog_item_id"]))
+        except ValueError:
+            errors.append("material_catalog_item_id")
     payload["applies_to_work_type"] = payload["work_kind"]
     payload["surface_type"] = {
         "wall_area": "wall",
         "ceiling_area": "ceiling",
         "floor_area": "floor",
     }.get(payload["basis_type"], "custom")
-    payload["consumption_value"] = payload.get("quantity_per_basis") or Decimal("0")
+    payload["consumption_value"] = payload.get("consumption_qty") or Decimal("0")
     payload["consumption_unit"] = "per_1_m2"
     payload["waste_percent"] = payload.get("waste_factor_pct") or Decimal("0")
     payload["coats_multiplier_mode"] = "none"
+    payload["layers_multiplier_enabled"] = form.get("layers_multiplier_enabled") in ("on", "true", "1", True, 1)
 
     return payload, errors
 
 
-def _render_rules_form(request: Request, lang: str, norm: MaterialConsumptionNorm | None, errors: list[str], form_data: dict | None = None, status_code: int = 200):
+def _render_rules_form(request: Request, lang: str, norm: MaterialConsumptionNorm | None, errors: list[str], form_data: dict | None = None, catalog_items: list[MaterialCatalogItem] | None = None, status_code: int = 200):
     context = template_context(request, lang)
-    context.update({"norm": norm, "errors": errors, "form_data": form_data or {}})
+    context.update({"norm": norm, "errors": errors, "form_data": form_data or {}, "catalog_items": catalog_items or []})
     return templates.TemplateResponse(request, "materials/norms_form.html", context, status_code=status_code)
 
 
@@ -138,7 +149,7 @@ async def list_rules(request: Request, db: Session = Depends(get_db), lang: str 
 @router.get("/rules/new")
 @router.get("/norms/create")
 async def rule_create_form(request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang)):
-    return _render_rules_form(request, lang, None, [], {})
+    return _render_rules_form(request, lang, None, [], {}, db.query(MaterialCatalogItem).filter(MaterialCatalogItem.is_active.is_(True)).all())
 
 
 @router.post("/rules/new")
@@ -146,8 +157,10 @@ async def rule_create_form(request: Request, db: Session = Depends(get_db), lang
 async def rule_create(request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang)):
     form = await request.form()
     payload, errors = _parse_rule_form(form)
+    if payload.get("material_catalog_item_id") and not db.get(MaterialCatalogItem, payload["material_catalog_item_id"]):
+        errors.append("material_catalog_item_id")
     if errors:
-        return _render_rules_form(request, lang, None, errors, dict(form), status_code=422)
+        return _render_rules_form(request, lang, None, errors, dict(form), db.query(MaterialCatalogItem).filter(MaterialCatalogItem.is_active.is_(True)).all(), status_code=422)
     db.add(MaterialConsumptionNorm(**payload))
     db.commit()
     return RedirectResponse(url="/materials/rules", status_code=status.HTTP_303_SEE_OTHER)
@@ -159,7 +172,7 @@ async def rule_edit_form(norm_id: int, request: Request, db: Session = Depends(g
     norm = db.get(MaterialConsumptionNorm, norm_id)
     if not norm:
         raise HTTPException(status_code=404, detail="Rule not found")
-    return _render_rules_form(request, lang, norm, [], {})
+    return _render_rules_form(request, lang, norm, [], {}, db.query(MaterialCatalogItem).filter(MaterialCatalogItem.is_active.is_(True)).all())
 
 
 @router.post("/rules/{norm_id}/edit")
@@ -170,8 +183,10 @@ async def rule_edit(norm_id: int, request: Request, db: Session = Depends(get_db
         raise HTTPException(status_code=404, detail="Rule not found")
     form = await request.form()
     payload, errors = _parse_rule_form(form)
+    if payload.get("material_catalog_item_id") and not db.get(MaterialCatalogItem, payload["material_catalog_item_id"]):
+        errors.append("material_catalog_item_id")
     if errors:
-        return _render_rules_form(request, lang, norm, errors, dict(form), status_code=422)
+        return _render_rules_form(request, lang, norm, errors, dict(form), db.query(MaterialCatalogItem).filter(MaterialCatalogItem.is_active.is_(True)).all(), status_code=422)
     for key, value in payload.items():
         setattr(norm, key, value)
     db.add(norm)
@@ -329,3 +344,9 @@ async def catalog_edit(item_id: int, request: Request, db: Session = Depends(get
     db.commit()
     add_flash_message(request, "Catalog item updated", "success")
     return RedirectResponse(url="/materials/catalog", status_code=status.HTTP_303_SEE_OTHER)
+    try:
+        payload["per_basis_qty"] = _to_decimal(form.get("per_basis_qty") or "1", field="per_basis_qty")
+        if payload["per_basis_qty"] is not None and payload["per_basis_qty"] <= 0:
+            errors.append("per_basis_qty")
+    except ValueError:
+        errors.append("per_basis_qty")

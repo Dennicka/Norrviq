@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, Numeric, String, Text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, Numeric, String, Text
 
 from app.db import Base
 
@@ -13,6 +13,9 @@ class MaterialConsumptionNorm(Base):
     __tablename__ = "material_consumption_norms"
 
     id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=True)
+    work_type_code = Column(String(100), nullable=True, index=True)
+    material_catalog_item_id = Column(Integer, ForeignKey("material_catalog_items.id", ondelete="SET NULL"), nullable=True)
     active = Column(Boolean, nullable=False, default=True)
     is_active = Column(Boolean, nullable=True)
     material_name = Column(String(255), nullable=False)
@@ -21,6 +24,11 @@ class MaterialConsumptionNorm(Base):
     work_kind = Column(String(100), nullable=True, index=True)
     basis_type = Column(String(30), nullable=True)
     quantity_per_basis = Column(Numeric(12, 4), nullable=True)
+    consumption_qty = Column(Numeric(12, 4), nullable=True)
+    per_basis_qty = Column(Numeric(12, 4), nullable=True)
+    per_basis_unit = Column(String(20), nullable=True)
+    layers_multiplier_enabled = Column(Boolean, nullable=False, default=True)
+    allow_fractional = Column(Boolean, nullable=True)
     basis_unit = Column(String(20), nullable=True)
     waste_factor_pct = Column(Numeric(6, 2), nullable=True)
     surface_type = Column(String(20), nullable=False, default="custom")

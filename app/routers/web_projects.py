@@ -80,6 +80,7 @@ from app.services.materials_bom import (
     get_or_create_project_paint_settings,
 )
 from app.services.materials_consumption import calculate_material_needs_for_project
+from app.services.material_norms import build_project_material_bom
 from app.services.material_costing import cost_project_materials
 from app.services.pdf_export import render_pdf_from_html
 from app.services.shopping_list import (
@@ -457,6 +458,7 @@ async def project_detail(
         estimator_summary.totals.vat_amount = estimator_summary.totals.subtotal * Decimal(str(settings.moms_percent or 0)) / Decimal("100")
         estimator_summary.totals.total_inc_vat = estimator_summary.totals.subtotal + estimator_summary.totals.vat_amount
     material_rows, material_totals = calculate_material_needs_for_project(db, project.id)
+    auto_bom = build_project_material_bom(project.id, db)
     pricing_summary = build_project_pricing_summary(project, db)
     context = build_project_context(
         db,
@@ -481,6 +483,7 @@ async def project_detail(
         project_pricing_summary=pricing_summary,
         materials_calc_rows=material_rows,
         materials_calc_totals=material_totals,
+        materials_auto_bom=auto_bom,
     )
     return templates.TemplateResponse(request, "projects/detail.html", context)
 
