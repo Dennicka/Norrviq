@@ -125,3 +125,15 @@ def test_offer_stale_detection_by_project_marker():
         assert is_offer_snapshot_stale(db, project_id, snap) is True
     finally:
         db.close()
+
+
+def test_offer_public_line_items_do_not_expose_internal_fields():
+    project_id = _seed_project()
+    db = SessionLocal()
+    try:
+        offer = compute_offer_commercial(db, project_id, lang="sv")
+        assert offer.line_items
+        forbidden = {"category", "source_ref", "split", "visible"}
+        assert forbidden.isdisjoint(set(offer.line_items[0].keys()))
+    finally:
+        db.close()

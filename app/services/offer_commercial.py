@@ -13,6 +13,7 @@ from app.services.pricing import compute_pricing_scenarios
 from app.services.offer_totals import OfferTotalsInput, compute_offer_totals
 
 MONEY = Decimal("0.01")
+LINE_ITEM_PUBLIC_KEYS = ("description", "qty", "unit", "unit_price", "total")
 
 
 @dataclass
@@ -54,7 +55,7 @@ def _basis_label(lang: str, basis: str) -> str:
     return labels.get(lang, labels["sv"]).get(basis, basis)
 
 
-def _line_items(mode: str, selected, baseline, lang: str) -> list[dict]:
+def _internal_line_items(mode: str, selected, baseline, lang: str) -> list[dict]:
     if mode == "FIXED_TOTAL":
         return [{"source_ref": "generated:fixed", "description": "Fast pris för målning enligt överenskommelse" if lang == "sv" else "Фиксированная цена на малярные работы", "qty": Decimal("1.00"), "unit": "st", "unit_price": selected.price_ex_vat, "total": selected.price_ex_vat, "category": "painting", "split": "labour", "visible": True}]
     if mode == "PER_M2":
@@ -65,6 +66,15 @@ def _line_items(mode: str, selected, baseline, lang: str) -> list[dict]:
         return [{"source_ref": "generated:piecework", "description": "Arbete enligt styckpris", "qty": Decimal(str(baseline.items_count)), "unit": "st", "unit_price": _q(Decimal(str(selected.input_params.get('rate_per_piece') or 0))), "total": selected.price_ex_vat, "category": "painting", "split": "labour", "visible": True}]
     return [{"source_ref": "generated:hourly", "description": "Arbete (löpande räkning)", "qty": baseline.labor_hours_total, "unit": "h", "unit_price": _q(Decimal(str(selected.input_params.get('hourly_rate') or 0))), "total": selected.price_ex_vat, "category": "painting", "split": "labour", "visible": True}]
 
+
+
+
+def _public_line_item(item: dict) -> dict:
+    return {key: item[key] for key in LINE_ITEM_PUBLIC_KEYS if key in item}
+
+
+def _public_line_items(items: list[dict]) -> list[dict]:
+    return [_public_line_item(item) for item in items]
 
 def _project_marker(project: Project) -> str:
     pricing = project.pricing
@@ -100,10 +110,12 @@ def _to_payload(offer: OfferCommercial) -> dict:
         "price_ex_vat": offer.price_ex_vat,
         "vat_amount": offer.vat_amount,
         "price_inc_vat": offer.price_inc_vat,
-        "line_items": offer.line_items,
+        "line_items": _public_line_items(offer.line_items),
         "warnings": offer.warnings,
         "math_breakdown": offer.math_breakdown,
-        "sections": offer.sections,
+        "sections": [
+            {**section, "lines": _public_line_items(section.get("lines", []))} for section in (offer.sections or [])
+        ],
         "summary": offer.summary,
         "metadata": offer.metadata,
     })
@@ -130,7 +142,8 @@ def compute_offer_commercial(db: Session, project_id: int, *, lang: str = "sv") 
     vat_pct = Decimal(str(settings.moms_percent if settings.moms_percent is not None else 25))
     vat_amount = _q(selected.price_ex_vat * vat_pct / Decimal("100"))
     price_inc_vat = _q(selected.price_ex_vat + vat_amount)
-    line_items = _line_items(mode, selected, baseline, lang)
+    internal_line_items = _internal_line_items(mode, selected, baseline, lang)
+    line_items = _public_line_items(internal_line_items)
     totals = compute_offer_totals(
         OfferTotalsInput(
             labour_subtotal=selected.price_ex_vat,
@@ -149,15 +162,11 @@ def compute_offer_commercial(db: Session, project_id: int, *, lang: str = "sv") 
                 "order": 50,
                 "lines": [
                     {
-                        "source_ref": "generated:materials",
                         "description": "Materials",
                         "qty": Decimal("1.00"),
                         "unit": "lot",
                         "unit_price": _q(baseline.materials_cost_internal),
                         "total": _q(baseline.materials_cost_internal),
-                        "category": "materials",
-                        "split": "material",
-                        "visible": True,
                     }
                 ],
             }
