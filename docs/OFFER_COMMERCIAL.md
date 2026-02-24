@@ -1,28 +1,40 @@
 # Offer commercial model
 
-`compute_offer_commercial(db, project_id)` is the single source of truth for offer commercial totals.
+`compute_offer_commercial(db, project_id)` builds both client-facing and internal commercial structures from pricing/takeoff/material inputs.
 
-## Customer-facing line rules
+## Single source of truth
 
-- `HOURLY`: one line `Arbete (löpande räkning)` with hours and hourly rate.
-- `FIXED_TOTAL`: one line `Fast pris för målning enligt överenskommelse` (`qty=1`, `unit=st`).
-- `PER_M2`: one line with selected takeoff basis and `m²` quantity.
-- `PER_ROOM`: one line `Målning per rum` with room count.
-- `PIECEWORK`: one line `Arbete enligt styckpris` with items count.
+- Builder: `app/services/offer_commercial.py`.
+- Totals engine: `app/services/offer_totals.py` via `compute_offer_totals(...)`.
+- Templates render prepared sections/summary and never recompute business totals inline.
 
-## Snapshot on issue
+## Commercial structure
 
-When offer is issued, project stores `offer_commercial_snapshot` JSON containing:
+Commercial payload includes:
 
-- selected mode
-- units (`m2_basis`, `total_m2`, `rooms_count`, `items_count`)
-- rates used
-- totals (`price_ex_vat`, `vat_amount`, `price_inc_vat`)
-- line items and warnings
-- internal `math_breakdown`
+- `sections[]` (ordered groups with line items).
+- line item fields: `source_ref`, `description`, `qty`, `unit`, `unit_price`, `total`, `category`, `split`, `visible`.
+- `summary`: `labour_subtotal`, `materials_subtotal`, `other_subtotal`, `discount`, `subtotal_ex_vat`, `vat_amount`, `total_inc_vat`, `rot_ready_base`.
+- `math_breakdown`: internal-only profitability inputs (hours/costs/buffers/profile).
+- `metadata.project_marker`: hash used for stale snapshot detection.
 
-Issued offer page/PDF always renders from snapshot (no live recomputation).
+## Rounding policy (SEK)
 
-## Why fixed mode is not itemized
+`compute_offer_totals` applies:
 
-For fixed offers customer sees only negotiated fixed line, to avoid exposing internal hourly construction and to keep document consistent with selected selling model.
+1. component rounding to öre (`0.01`, HALF_UP),
+2. discounts on ex-VAT subtotal,
+3. VAT on discounted subtotal,
+4. final total rounding.
+
+## Internal vs client view
+
+`/projects/{id}/offer?view=client|internal`:
+
+- client view: sections + clean totals + terms.
+- internal view: technical breakdown (hours/cost basis/buffers/speed profile).
+
+## Snapshot consistency
+
+- Issued offer keeps immutable commercial snapshot.
+- Staleness warning compares snapshot marker vs current project marker.

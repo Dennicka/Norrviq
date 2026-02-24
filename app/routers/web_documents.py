@@ -165,6 +165,13 @@ async def offer_pdf(
                 "price_inc_vat": Decimal(str(snap["totals"].get("price_inc_vat") or 0)),
                 "warnings": [],
                 "math_breakdown": {},
+                "sections": [{"id": "default", "title": "", "order": 10, "lines": snap["line_items"]}],
+                "summary": {
+                    "subtotal_ex_vat": Decimal(str(snap["totals"].get("price_ex_vat") or 0)),
+                    "vat_amount": Decimal(str(snap["totals"].get("vat_amount") or 0)),
+                    "total_inc_vat": Decimal(str(snap["totals"].get("price_inc_vat") or 0)),
+                },
+                "metadata": {},
             }
         if commercial is None:
             commercial = deserialize_offer_commercial(project.offer_commercial_snapshot)
@@ -181,6 +188,9 @@ async def offer_pdf(
             "price_inc_vat": computed.price_inc_vat,
             "warnings": computed.warnings,
             "math_breakdown": computed.math_breakdown,
+            "sections": computed.sections,
+            "summary": computed.summary,
+            "metadata": computed.metadata,
         }
 
     profile = get_or_create_company_profile(db)

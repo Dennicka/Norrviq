@@ -279,6 +279,10 @@ TRANSLATIONS_RU = {
     "offer.print": "Печать",
     "offer.language.ru": "Русский",
     "offer.language.sv": "Svenska",
+    "offer.view.client": "Для клиента",
+    "offer.view.internal": "Внутренний вид",
+    "offer.refresh": "Обновить из проекта",
+    "offer.stale_warning": "Данные предложения устарели. Обновите документ из проекта.",
     "offer.signature.company": "Подпись представителя компании",
     "offer.signature.client": "Подпись клиента",
     "rooms.section_title": "Комнаты и зоны",
@@ -671,6 +675,10 @@ TRANSLATIONS_SV = {
     "offer.print": "Skriv ut",
     "offer.language.ru": "Ryska",
     "offer.language.sv": "Svenska",
+    "offer.view.client": "Kundvy",
+    "offer.view.internal": "Intern vy",
+    "offer.refresh": "Uppdatera från projekt",
+    "offer.stale_warning": "Offerten är inaktuell jämfört med projektdata. Uppdatera.",
     "offer.signature.company": "Företagets underskrift",
     "offer.signature.client": "Kundens underskrift",
     "rooms.section_title": "Rum och zoner",
@@ -1063,4 +1071,11 @@ TRANSLATIONS_EN.update({
     "units.pcs": "pcs",
     "units.roll": "roll",
     "units.bucket": "bucket",
+})
+
+TRANSLATIONS_EN.update({
+    "offer.view.client": "Client view",
+    "offer.view.internal": "Internal view",
+    "offer.refresh": "Refresh from project",
+    "offer.stale_warning": "Offer is stale compared to latest project changes.",
 })
