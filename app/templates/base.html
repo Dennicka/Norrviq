@@ -49,11 +49,12 @@
             {% endif %}
         </div>
         <div class="lang-switcher">
-            <a href="/lang/ru?next={{ request.url.path }}" class="{{ 'active' if lang == 'ru' else '' }}">RU</a>
+            {% set next_url = request.url.path ~ ('?' ~ request.url.query if request.url.query else '') %}
+            <a href="/lang/ru?next={{ next_url|urlencode }}" class="{{ 'active' if lang == 'ru' else '' }}">RU</a>
             <span>|</span>
-            <a href="/lang/sv?next={{ request.url.path }}" class="{{ 'active' if lang == 'sv' else '' }}">SV</a>
+            <a href="/lang/sv?next={{ next_url|urlencode }}" class="{{ 'active' if lang == 'sv' else '' }}">SV</a>
             <span>|</span>
-            <a href="/lang/en?next={{ request.url.path }}" class="{{ 'active' if lang == 'en' else '' }}">EN</a>
+            <a href="/lang/en?next={{ next_url|urlencode }}" class="{{ 'active' if lang == 'en' else '' }}">EN</a>
         </div>
     </nav>
     {% if maintenance_mode %}<div class="flash error">{{ t("common.maintenance_mode") }}</div>{% endif %}

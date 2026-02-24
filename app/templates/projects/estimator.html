@@ -42,7 +42,7 @@
                 <option value="single_room">{{ t('projects.work_items.scope.single_room') }}</option>
             </select>
         </label>
-        <label>Coats <input type="number" name="coats" value="2" step="1" min="1"></label>
+        <label>{{ t('estimator.coats') }} <input type="number" name="coats" value="2" step="1" min="1"></label>
         {% for room in rooms %}
         <label><input type="checkbox" name="selected_room_ids" value="{{ room.id }}">{{ room.name }}</label>
         {% endfor %}
@@ -53,11 +53,15 @@
 <section>
     <h2>{{ t('estimator.work_items') }}</h2>
     {% for room_id, items in workspace.work_items.grouped.items() %}
-    <h3>{{ items[0].room.name if items and items[0].room else 'Project' }}</h3>
+    <h3>{{ items[0].room.name if items and items[0].room else t('label.project') }}</h3>
     <table>
         <tr><th>{{ t('label.name') }}</th><th>{{ t('label.quantity') }}</th><th>{{ t('estimator.total_hours') }}</th></tr>
         {% for item in items %}
-        <tr><td>{{ item.work_type.name_ru if item.work_type else '-' }}</td><td>{{ item.quantity }}</td><td>{{ item.calculated_hours }}</td></tr>
+        <tr>
+            <td>{{ item.work_type and (item.work_type.name_ru if lang == 'ru' else (item.work_type.name_en if lang == 'en' else item.work_type.name_sv)) or '-' }}</td>
+            <td>{{ item.quantity }}</td>
+            <td>{{ item.calculated_hours }}</td>
+        </tr>
         {% endfor %}
     </table>
     {% endfor %}
@@ -66,12 +70,12 @@
 <section>
     <h2>{{ t('estimator.pricing_options') }}</h2>
     <table>
-        <tr><th>Mode</th><th>Labour</th><th>Materials</th><th>Total</th><th>Margin %</th><th></th></tr>
+        <tr><th>{{ t('estimator.mode') }}</th><th>{{ t('estimator.labour_cost') }}</th><th>{{ t('estimator.materials_cost') }}</th><th>{{ t('estimator.total_estimate') }}</th><th>{{ t('estimator.margin_percent') }}</th><th></th></tr>
         {% for mode, row in workspace.pricing.scenarios.items() %}
         <tr>
-            <td>{{ mode }}</td><td>{{ row.labour_amount }}</td><td>{{ row.materials_amount }}</td><td>{{ row.total }}</td><td>{{ row.margin_pct }}</td>
+            <td>{{ t('estimator.pricing_mode.' ~ mode) }}</td><td>{{ row.labour_amount }}</td><td>{{ row.materials_amount }}</td><td>{{ row.total }}</td><td>{{ row.margin_pct }}</td>
             <td>
-                {% if row.below_margin_floor %}<span>⚠</span>{% endif %}
+                {% if row.below_margin_floor %}<span title="{{ t('estimator.below_margin_floor') }}">⚠</span>{% endif %}
                 <form method="post" action="/projects/{{ project.id }}/estimator/select-pricing">{{ csrf_input(request) }}<input type="hidden" name="mode" value="{{ mode }}"><button type="submit">{{ t('estimator.select_pricing_mode') }}</button></form>
             </td>
         </tr>

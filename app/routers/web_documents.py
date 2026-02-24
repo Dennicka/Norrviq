@@ -32,6 +32,7 @@ from app.services.completeness import compute_completeness
 from app.services.quality import evaluate_project_quality
 from app.services.terms_templates import DOC_TYPE_INVOICE, DOC_TYPE_OFFER, resolve_terms_template
 from app.dependencies import template_context, templates
+from app.i18n import make_t
 
 router = APIRouter(tags=["document-finalize"])
 logger = logging.getLogger("app.pdf")
@@ -357,19 +358,19 @@ async def finalize_offer_action(
         db.commit()
         return _quality_gate_response(request, project_id=project_id, issues=issues)
     if quality_report.warnings_count > 0:
-        add_flash_message(request, "Есть предупреждения качества данных", "warning")
+        add_flash_message(request, make_t(_lang)("documents.quality_warnings"), "warning")
     try:
         finalize_offer(db, project_id=project_id, user_id=user_id, profile=profile, lang=terms_lang)
-        add_flash_message(request, "Offer finalized", "success")
+        add_flash_message(request, make_t(_lang)("documents.offer_finalized"), "success")
     except NumberingConflictError:
         req_id = getattr(request.state, "request_id", "-")
-        add_flash_message(request, f"Номер уже выдан, обновите страницу (request_id={req_id})", "error")
+        add_flash_message(request, make_t(_lang)("documents.number_already_issued").format(request_id=req_id), "error")
     except CompletenessViolationError as exc:
         return _completeness_gate_response(request, project_id=project_id, exc=exc)
     except FloorPolicyViolationError as exc:
         if "application/json" in request.headers.get("accept", ""):
             return JSONResponse(status_code=409, content={"detail": str(exc), "reasons": exc.reasons, "pricing_url": f"/projects/{project_id}/pricing"})
-        add_flash_message(request, f"{exc}. Перейдите в Pricing.", "error")
+        add_flash_message(request, make_t(_lang)("documents.go_to_pricing").format(message=exc), "error")
         return RedirectResponse(url=f"/projects/{project_id}/pricing", status_code=status.HTTP_303_SEE_OTHER)
     except ValueError as exc:
         if "Offer totals mismatch pricing scenario" in str(exc):
@@ -411,20 +412,20 @@ async def finalize_invoice_action(
         db.commit()
         return _quality_gate_response(request, project_id=invoice.project_id, issues=issues)
     if quality_report.warnings_count > 0:
-        add_flash_message(request, "Есть предупреждения качества данных", "warning")
+        add_flash_message(request, make_t(_lang)("documents.quality_warnings"), "warning")
 
     try:
         finalize_invoice(db, invoice_id=invoice_id, user_id=user_id, profile=profile, lang=terms_lang)
-        add_flash_message(request, "Invoice finalized", "success")
+        add_flash_message(request, make_t(_lang)("documents.invoice_finalized"), "success")
     except NumberingConflictError:
         req_id = getattr(request.state, "request_id", "-")
-        add_flash_message(request, f"Номер уже выдан, обновите страницу (request_id={req_id})", "error")
+        add_flash_message(request, make_t(_lang)("documents.number_already_issued").format(request_id=req_id), "error")
     except CompletenessViolationError as exc:
         return _completeness_gate_response(request, project_id=invoice.project_id, exc=exc)
     except FloorPolicyViolationError as exc:
         if "application/json" in request.headers.get("accept", ""):
             return JSONResponse(status_code=409, content={"detail": str(exc), "reasons": exc.reasons, "pricing_url": f"/projects/{invoice.project_id}/pricing"})
-        add_flash_message(request, f"{exc}. Перейдите в Pricing.", "error")
+        add_flash_message(request, make_t(_lang)("documents.go_to_pricing").format(message=exc), "error")
         return RedirectResponse(url=f"/projects/{invoice.project_id}/pricing", status_code=status.HTTP_303_SEE_OTHER)
     except ValueError as exc:
         if "Invoice totals mismatch pricing scenario" in str(exc) or "Enable include_materials in pricing or remove material lines" in str(exc):

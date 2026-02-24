@@ -428,7 +428,7 @@ async def create_project(
     )
     db.add(project)
     if not safe_commit(db, request, message="create_project"):
-        add_flash_message(request, "Не удалось сохранить проект. Попробуйте снова.", "error")
+        add_flash_message(request, make_t(lang)("common.save_error_retry"), "error")
         clients = db.query(Client).all()
         context = template_context(request, lang)
         context.update({"clients": clients, "project": project})
@@ -619,7 +619,7 @@ async def update_project(
 
     db.add(project)
     if not safe_commit(db, request, message="update_project"):
-        add_flash_message(request, "Не удалось обновить проект. Попробуйте снова.", "error")
+        add_flash_message(request, make_t(lang)("common.update_error_retry"), "error")
         return RedirectResponse(url=f"/projects/{project.id}/edit", status_code=status.HTTP_303_SEE_OTHER)
 
     return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
@@ -2398,7 +2398,7 @@ async def update_project_pricing_screen(
         setattr(pricing, field_name, value.quantize(Decimal("0.01")))
         db.add(pricing)
         db.commit()
-        add_flash_message(request, "Recommended values applied", "success")
+        add_flash_message(request, make_t(lang)("projects.takeoff.recommended_applied"), "success")
         return RedirectResponse(url=f"/projects/{project_id}/pricing", status_code=status.HTTP_303_SEE_OTHER)
 
     if intent == "apply_conversion":
@@ -2417,7 +2417,7 @@ async def update_project_pricing_screen(
         db.add(pricing)
         log_event(db, request, "pricing_conversion_applied", entity_type="PROJECT", entity_id=project_id, metadata={"project_id": project_id, "mode": apply_mode, "value": str(apply_value)})
         db.commit()
-        add_flash_message(request, "Conversion applied", "success")
+        add_flash_message(request, make_t(lang)("projects.takeoff.conversion_applied"), "success")
         return RedirectResponse(url=f"/projects/{project_id}/pricing", status_code=status.HTTP_303_SEE_OTHER)
 
     try:
