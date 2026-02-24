@@ -971,18 +971,20 @@ async def add_work_item(
 
     difficulty_factor = Decimal(form.get("difficulty_factor") or "1")
     comment = form.get("comment")
-    scope_mode = form.get("scope_mode") or form.get("apply_to") or "single_room"
+    scope_mode = (form.get("scope_mode") or form.get("apply_to") or "room").strip()
+    if scope_mode == "selected_room":
+        scope_mode = "room"
     layers = Decimal(form.get("layers") or "1")
 
     pricing_data = _parse_pricing_form(form)
 
     project_room_ids = {room.id for room in project.rooms}
-    if not project_room_ids:
-        add_flash_message(request, translator("projects.work_items.no_rooms"), "error")
-        db.rollback()
-        return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
 
     if scope_mode in {"all_rooms", "selected_rooms"}:
+        if not project_room_ids:
+            add_flash_message(request, translator("projects.work_items.no_rooms"), "error")
+            db.rollback()
+            return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
         selected_room_ids: list[int] | None = None
         if scope_mode == "selected_rooms":
             selected_raw = form.getlist("selected_room_ids") or form.getlist("room_ids")
