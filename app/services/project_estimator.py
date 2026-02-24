@@ -41,8 +41,26 @@ class ProjectEstimateSummary:
     geometry: GeometryTotals
     labour: LabourTotals
     total_price: Decimal
+    materials_cost: Decimal
+    estimate_total: Decimal
+    has_missing_data: bool
     pricing_mode: str
+    room_rows: list["RoomEstimateRow"] = field(default_factory=list)
     scoped_work_items: list[ProjectWorkItem] = field(default_factory=list)
+
+
+@dataclass
+class RoomEstimateRow:
+    room_id: int
+    room_name: str
+    floor_area_m2: Decimal | None
+    wall_area_m2: Decimal | None
+    ceiling_area_m2: Decimal | None
+    hours: Decimal
+    labour_cost: Decimal
+    materials_cost: Decimal
+    total: Decimal
+    has_missing_geometry: bool = False
 
 
 def _q(value: Decimal) -> Decimal:
@@ -159,11 +177,58 @@ def build_project_estimate_summary(
         sqm_rate=sqm_rate,
         fixed_price=fixed_price,
     )
+    room_rows: list[RoomEstimateRow] = []
+    has_missing_data = False
+    for room in scope.rooms:
+        room_items = [item for item in scoped_items if item.room_id == room.id]
+        hours = _q(sum((Decimal(str(item.calculated_hours or 0)) for item in room_items), Decimal("0")))
+        labour_cost = _q(
+            sum(
+                (Decimal(str(item.labor_cost_sek if item.labor_cost_sek is not None else (item.calculated_hours or 0) * hourly_rate)) for item in room_items),
+                Decimal("0"),
+            )
+        )
+        materials_cost = _q(sum((Decimal(str(item.materials_cost_sek or 0)) for item in room_items), Decimal("0")))
+        room_missing_geometry = any(
+            value is None for value in (room.floor_area_m2, room.wall_perimeter_m, room.wall_height_m)
+        )
+        try:
+            geometry = compute_room_geometry_from_model(room)
+            floor_area = _q(Decimal(str(geometry.floor_area_m2 or 0)))
+            wall_area = _q(Decimal(str(geometry.wall_area_net_m2 or 0)))
+            ceiling_area = _q(Decimal(str(geometry.ceiling_area_m2 or 0)))
+        except GeometryValidationError:
+            floor_area = None
+            wall_area = None
+            ceiling_area = None
+            room_missing_geometry = True
+        if room_missing_geometry:
+            has_missing_data = True
+        room_rows.append(
+            RoomEstimateRow(
+                room_id=room.id,
+                room_name=room.name or f"#{room.id}",
+                floor_area_m2=floor_area,
+                wall_area_m2=wall_area,
+                ceiling_area_m2=ceiling_area,
+                hours=hours,
+                labour_cost=labour_cost,
+                materials_cost=materials_cost,
+                total=_q(labour_cost + materials_cost),
+                has_missing_geometry=room_missing_geometry,
+            )
+        )
+    total_materials_cost = _q(sum((row.materials_cost for row in room_rows), Decimal("0")))
+    estimate_total = _q(total_price + total_materials_cost)
     return ProjectEstimateSummary(
         scope=scope,
         geometry=geometry,
         labour=labour,
         total_price=total_price,
+        materials_cost=total_materials_cost,
+        estimate_total=estimate_total,
+        has_missing_data=has_missing_data,
         pricing_mode=(pricing_mode or "hourly").lower(),
+        room_rows=room_rows,
         scoped_work_items=scoped_items,
     )

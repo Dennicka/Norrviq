@@ -314,7 +314,7 @@
 </section>
 
 <section>
-    <h2>{{ t("projects.work_items.summary") }}</h2>
+    <h2>Сводка сметы</h2>
     <form method="get" action="/projects/{{ project.id }}">
         <fieldset>
             <legend>{{ t("projects.estimator.scope") }}</legend>
@@ -330,29 +330,54 @@
     </form>
     <form method="post" action="/projects/{{ project.id }}/estimator-pricing-mode">
         {{ csrf_input(request) }}
-        <label>{{ t("projects.work_items.pricing_mode") }}</label>
+        <label>Режим расчёта</label>
         <select name="project_pricing_mode" onchange="this.form.submit()">
             <option value="hourly" {% if project_pricing.mode == 'HOURLY' %}selected{% endif %}>{{ t("projects.estimator.pricing_mode.hourly") }}</option>
             <option value="sqm" {% if project_pricing.mode == 'PER_M2' %}selected{% endif %}>{{ t("projects.estimator.pricing_mode.sqm") }}</option>
             <option value="fixed" {% if project_pricing.mode == 'FIXED_TOTAL' %}selected{% endif %}>{{ t("projects.estimator.pricing_mode.fixed") }}</option>
         </select>
     </form>
-    <p><strong>{{ t("projects.estimator.summary.rooms_count") }}:</strong> {{ estimator_summary.geometry.rooms_count }}</p>
-    <p><strong>{{ t("projects.estimator.summary.floors") }}:</strong> {{ estimator_summary.geometry.floors_m2 }}</p>
-    <p><strong>{{ t("projects.estimator.summary.ceilings") }}:</strong> {{ estimator_summary.geometry.ceilings_m2 }}</p>
-    <p><strong>{{ t("projects.estimator.summary.walls") }}:</strong> {{ estimator_summary.geometry.walls_m2 }}</p>
-    <p><strong>{{ t("projects.estimator.summary.perimeter") }}:</strong> {{ estimator_summary.geometry.perimeter_m }}</p>
-
-    <h3>{{ t("projects.estimator.labour_total") }}</h3>
-    <p><strong>{{ t("projects.work_items.total_labor_hours") }}:</strong> {{ estimator_summary.labour.total_hours }}</p>
-    <p><strong>{{ t("projects.estimator.labour.prep") }}:</strong> {{ estimator_summary.labour.by_category.prep }}</p>
-    <p><strong>{{ t("projects.estimator.labour.filler") }}:</strong> {{ estimator_summary.labour.by_category.filler }}</p>
-    <p><strong>{{ t("projects.estimator.labour.paint") }}:</strong> {{ estimator_summary.labour.by_category.paint }}</p>
-    <p><strong>{{ t("projects.estimator.labour.other") }}:</strong> {{ estimator_summary.labour.by_category.other }}</p>
-    {% if estimator_summary.pricing_mode == "hourly" %}
-    <p><strong>{{ t("projects.estimator.labour.hourly_cost") }}:</strong> {{ estimator_summary.labour.hourly_labor_cost }}</p>
+    {% if estimator_summary.has_missing_data %}
+    <p><span class="badge badge-warning">Не хватает данных для полного расчёта</span></p>
     {% endif %}
-    <p><strong>{{ t("projects.work_items.total_price") }}:</strong> {{ estimator_summary.total_price }}</p>
+    <p><strong>Часы всего:</strong> {{ estimator_summary.labour.total_hours }}</p>
+    <p><strong>Работы:</strong> {{ estimator_summary.total_price }}</p>
+    <p><strong>Материалы:</strong> {{ estimator_summary.materials_cost }}</p>
+    <p><strong>Итого:</strong> {{ estimator_summary.estimate_total }}</p>
+
+    <details>
+        <summary>По помещениям</summary>
+        <table>
+            <thead>
+                <tr>
+                    <th>Помещение</th>
+                    <th>Площадь пола</th>
+                    <th>Площадь стен</th>
+                    <th>Площадь потолка</th>
+                    <th>Часы</th>
+                    <th>Стоимость работ</th>
+                    <th>Стоимость материалов</th>
+                    <th>Итого</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in estimator_summary.room_rows %}
+                <tr>
+                    <td>{{ row.room_name }}</td>
+                    <td>{{ row.floor_area_m2 if row.floor_area_m2 is not none else '—' }}</td>
+                    <td>{{ row.wall_area_m2 if row.wall_area_m2 is not none else '—' }}</td>
+                    <td>{{ row.ceiling_area_m2 if row.ceiling_area_m2 is not none else '—' }}</td>
+                    <td>{{ row.hours }}</td>
+                    <td>{{ row.labour_cost }}</td>
+                    <td>{{ row.materials_cost }}</td>
+                    <td>{{ row.total }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="8">—</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </details>
 </section>
 
 <section>
