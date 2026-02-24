@@ -36,6 +36,7 @@ from .project_procurement_settings import ProjectProcurementSettings, RoundingMo
 from .material_actuals import MaterialPurchase, MaterialPurchaseLine, ProjectMaterialActuals, ProjectMaterialStock
 from .material_norm import MaterialConsumptionNorm
 from .material_actual_entry import ProjectMaterialActualEntry
+from .material_catalog_item import MaterialCatalogItem
 
 __all__ = [
     "Client",
@@ -87,4 +88,5 @@ __all__ = [
     "ProjectMaterialStock",
     "MaterialConsumptionNorm",
     "ProjectMaterialActualEntry",
+    "MaterialCatalogItem",
 ]
