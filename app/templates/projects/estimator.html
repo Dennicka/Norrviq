@@ -5,8 +5,9 @@
 
 <section>
     <h2>{{ t('estimator.kpi') }}</h2>
-    <p><strong>{{ t('estimator.total_hours') }}:</strong> {{ workspace.work_items.total_hours }}</p>
-    <p><strong>{{ t('estimator.materials_summary') }}:</strong> {{ workspace.materials.total_estimated_cost }}</p>
+    <p><strong>{{ t('estimator.total_hours') }}:</strong> {{ workspace.estimate.totals.total_hours }}</p>
+    <p><strong>{{ t('estimator.materials_summary') }}:</strong> {{ workspace.estimate.totals.materials_cost_planned }}</p>
+    <p><strong>{{ t('estimator.total_estimate') }}:</strong> {{ workspace.estimate.totals.total_cost }}</p>
     <p><strong>{{ t('estimator.completeness') }}:</strong> {{ workspace.quality.completeness_score }}%</p>
     <form method="post" action="/projects/{{ project.id }}/estimator/recalc">{{ csrf_input(request) }}<button type="submit">{{ t('estimator.recalculate') }}</button></form>
 </section>
@@ -101,6 +102,9 @@
 <section>
     <h2>{{ t('estimator.warnings') }}</h2>
     <ul>
+        {% for warning in workspace.estimate.warnings %}
+        <li>{{ warning }}</li>
+        {% endfor %}
         {% for warning in workspace.quality.sanity_warnings %}
         <li>{{ warning }}</li>
         {% endfor %}
