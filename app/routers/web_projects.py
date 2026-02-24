@@ -16,6 +16,7 @@ from app.models.company_profile import get_or_create_company_profile
 from app.models.cost import CostCategory, ProjectCostItem
 from app.models.legal_note import LegalNote
 from app.models.material import Material
+from app.models.material_consumption_override import MaterialConsumptionOverride
 from app.models.paint_system import PaintSystem
 from app.models.invoice import Invoice
 from app.models.audit_event import AuditEvent
@@ -118,6 +119,24 @@ CRITICAL_WARNING_CODES = {
     WARNING_MISSING_ITEMS,
 }
 
+
+
+
+def _parse_decimal_override(request: Request, value: str | None, key: str, t):
+    try:
+        parsed = Decimal(str(value or "")).quantize(Decimal("0.0001"))
+    except Exception:
+        add_flash_message(request, t(key), "error")
+        return None
+    return parsed
+
+
+def _allowed_surface_kind(value: str) -> bool:
+    return value in {"walls", "ceiling", "floor", "combined", "pieces"}
+
+
+def _allowed_unit_basis(value: str) -> bool:
+    return value in {"m2", "piece", "room"}
 
 def _parse_purchase_datetime(value: str | None) -> datetime:
     if not value:
@@ -1849,6 +1868,123 @@ async def project_materials_plan_update_settings(project_id: int, request: Reque
     return RedirectResponse(url=f"/projects/{project_id}/materials-plan", status_code=status.HTTP_303_SEE_OTHER)
 
 
+
+
+@router.get("/{project_id}/materials/overrides")
+async def project_material_overrides_page(project_id: int, request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang)):
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    overrides = db.query(MaterialConsumptionOverride).filter(MaterialConsumptionOverride.project_id == project_id).order_by(MaterialConsumptionOverride.id.desc()).all()
+    rooms = db.query(Room).filter(Room.project_id == project_id).order_by(Room.name.asc()).all()
+    work_types = db.query(WorkType).filter(WorkType.is_active.is_(True)).order_by(WorkType.code.asc()).all()
+    materials = db.query(Material).filter(Material.is_active.is_(True)).order_by(Material.name_sv.asc()).all()
+    edit_id = request.query_params.get("edit_id")
+    edit_override = db.get(MaterialConsumptionOverride, int(edit_id)) if edit_id and edit_id.isdigit() else None
+    context = build_project_context(db, request, project, lang, overrides=overrides, rooms=rooms, work_types=work_types, materials=materials, edit_override=edit_override, is_readonly=get_current_user_role(request) not in {ADMIN_ROLE, OPERATOR_ROLE})
+    return templates.TemplateResponse(request, "projects/material_overrides.html", context)
+
+
+@router.post("/{project_id}/materials/overrides")
+async def project_material_overrides_create(project_id: int, request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang)):
+    if get_current_user_role(request) not in {ADMIN_ROLE, OPERATOR_ROLE}:
+        raise HTTPException(status_code=403, detail="Insufficient role")
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    t = make_t(lang)
+    form = await request.form()
+    room_id_raw = (form.get("room_id") or "").strip()
+    room_id = int(room_id_raw) if room_id_raw.isdigit() else None
+    if room_id is not None and not db.query(Room).filter(Room.id == room_id, Room.project_id == project_id).first():
+        add_flash_message(request, t("materials.overrides.invalid_room"), "error")
+        return RedirectResponse(url=f"/projects/{project_id}/materials/overrides", status_code=status.HTTP_303_SEE_OTHER)
+
+    surface_kind = (form.get("surface_kind") or "").strip()
+    unit_basis = (form.get("unit_basis") or "").strip()
+    if not _allowed_surface_kind(surface_kind) or not _allowed_unit_basis(unit_basis):
+        add_flash_message(request, t("materials.overrides.invalid_fields"), "error")
+        return RedirectResponse(url=f"/projects/{project_id}/materials/overrides", status_code=status.HTTP_303_SEE_OTHER)
+
+    qty = _parse_decimal_override(request, form.get("quantity_per_unit"), "materials.overrides.invalid_quantity", t)
+    base = _parse_decimal_override(request, form.get("base_unit_size"), "materials.overrides.invalid_base", t)
+    if qty is None or base is None or qty <= 0 or base <= 0:
+        add_flash_message(request, t("materials.overrides.invalid_positive"), "error")
+        return RedirectResponse(url=f"/projects/{project_id}/materials/overrides", status_code=status.HTTP_303_SEE_OTHER)
+
+    waste = None
+    if (form.get("waste_factor_percent") or "").strip():
+        waste = _parse_decimal_override(request, form.get("waste_factor_percent"), "materials.overrides.invalid_waste", t)
+        if waste is None:
+            return RedirectResponse(url=f"/projects/{project_id}/materials/overrides", status_code=status.HTTP_303_SEE_OTHER)
+
+    obj = MaterialConsumptionOverride(
+        project_id=project_id,
+        room_id=room_id,
+        work_type_id=int(form.get("work_type_id")),
+        material_id=int(form.get("material_id")),
+        surface_kind=surface_kind,
+        unit_basis=unit_basis,
+        quantity_per_unit=qty,
+        base_unit_size=base,
+        waste_factor_percent=waste,
+        comment=(form.get("comment") or "").strip() or None,
+        is_active=form.get("is_active") in ("on", "true", "1", True, 1),
+    )
+    db.add(obj)
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        add_flash_message(request, t("materials.overrides.duplicate"), "error")
+        return RedirectResponse(url=f"/projects/{project_id}/materials/overrides", status_code=status.HTTP_303_SEE_OTHER)
+
+    add_flash_message(request, t("materials.overrides.saved"), "success")
+    return RedirectResponse(url=f"/projects/{project_id}/materials-plan", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{project_id}/materials/overrides/{override_id}/edit")
+async def project_material_overrides_edit(project_id: int, override_id: int, request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang)):
+    if get_current_user_role(request) not in {ADMIN_ROLE, OPERATOR_ROLE}:
+        raise HTTPException(status_code=403, detail="Insufficient role")
+    existing = db.get(MaterialConsumptionOverride, override_id)
+    if not existing or existing.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Override not found")
+    t = make_t(lang)
+    form = await request.form()
+    existing.surface_kind = (form.get("surface_kind") or existing.surface_kind).strip()
+    existing.unit_basis = (form.get("unit_basis") or existing.unit_basis).strip()
+    existing.quantity_per_unit = Decimal(str(form.get("quantity_per_unit") or existing.quantity_per_unit))
+    existing.base_unit_size = Decimal(str(form.get("base_unit_size") or existing.base_unit_size))
+    existing.waste_factor_percent = Decimal(str(form.get("waste_factor_percent"))) if (form.get("waste_factor_percent") or "").strip() else None
+    existing.comment = (form.get("comment") or "").strip() or None
+    existing.is_active = form.get("is_active") in ("on", "true", "1", True, 1)
+    if existing.quantity_per_unit <= 0 or existing.base_unit_size <= 0 or not _allowed_surface_kind(existing.surface_kind) or not _allowed_unit_basis(existing.unit_basis):
+        add_flash_message(request, t("materials.overrides.invalid_fields"), "error")
+        return RedirectResponse(url=f"/projects/{project_id}/materials/overrides?edit_id={override_id}", status_code=status.HTTP_303_SEE_OTHER)
+    try:
+        db.add(existing)
+        db.commit()
+    except Exception:
+        db.rollback()
+        add_flash_message(request, t("materials.overrides.duplicate"), "error")
+        return RedirectResponse(url=f"/projects/{project_id}/materials/overrides?edit_id={override_id}", status_code=status.HTTP_303_SEE_OTHER)
+    add_flash_message(request, t("materials.overrides.updated"), "success")
+    return RedirectResponse(url=f"/projects/{project_id}/materials-plan", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{project_id}/materials/overrides/{override_id}/delete")
+async def project_material_overrides_delete(project_id: int, override_id: int, request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang)):
+    if get_current_user_role(request) not in {ADMIN_ROLE, OPERATOR_ROLE}:
+        raise HTTPException(status_code=403, detail="Insufficient role")
+    existing = db.get(MaterialConsumptionOverride, override_id)
+    if not existing or existing.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Override not found")
+    existing.is_active = False
+    db.add(existing)
+    db.commit()
+    add_flash_message(request, make_t(lang)("materials.overrides.deleted"), "success")
+    return RedirectResponse(url=f"/projects/{project_id}/materials-plan", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.get("/{project_id}/shopping-list")

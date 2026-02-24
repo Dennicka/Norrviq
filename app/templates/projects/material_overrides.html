@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t('materials.overrides.title') }}</h1>
+<p><a href="/projects/{{ project.id }}/materials-plan">← {{ t('materials.planned_materials') }}</a></p>
+
+<table>
+  <thead><tr><th>ID</th><th>{{ t('label.room') }}</th><th>{{ t('label.work_type') }}</th><th>{{ t('label.material') }}</th><th>{{ t('materials.overrides.surface_kind') }}</th><th>{{ t('materials.overrides.quantity_per') }}</th><th>{{ t('materials.overrides.waste') }}</th><th>{{ t('label.comment') }}</th><th>{{ t('materials.overrides.active') }}</th><th>{{ t('label.actions') }}</th></tr></thead>
+  <tbody>
+  {% for row in overrides %}
+    <tr>
+      <td>{{ row.id }}</td><td>{{ row.room.name if row.room else t('materials.overrides.project_wide') }}</td><td>{{ row.work_type.code }}</td><td>{{ row.material.name_sv }}</td><td>{{ row.surface_kind }}</td><td>{{ row.quantity_per_unit }} / {{ row.base_unit_size }} {{ row.unit_basis }}</td><td>{{ row.waste_factor_percent if row.waste_factor_percent is not none else '—' }}</td><td>{{ row.comment or '—' }}</td><td>{{ t('label.yes') if row.is_active else t('label.no') }}</td>
+      <td>
+        <a href="/projects/{{ project.id }}/materials/overrides?edit_id={{ row.id }}">{{ t('label.edit') }}</a>
+        <form method="post" action="/projects/{{ project.id }}/materials/overrides/{{ row.id }}/delete" style="display:inline">
+          <button type="submit">{{ t('label.delete') }}</button>
+        </form>
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="10">{{ t('materials.overrides.empty') }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+{% set target = edit_override if edit_override else none %}
+<h2>{{ t('label.edit') if target else t('label.create') }}</h2>
+<form method="post" action="{% if target %}/projects/{{ project.id }}/materials/overrides/{{ target.id }}/edit{% else %}/projects/{{ project.id }}/materials/overrides{% endif %}">
+  <label>{{ t('materials.overrides.scope') }}</label>
+  <select name="room_id">
+    <option value="">{{ t('materials.overrides.project_wide') }}</option>
+    {% for room in rooms %}<option value="{{ room.id }}" {% if target and target.room_id == room.id %}selected{% endif %}>{{ room.name }}</option>{% endfor %}
+  </select>
+  <label>{{ t('label.work_type') }}</label>
+  <select name="work_type_id" {% if target %}disabled{% endif %}>{% for wt in work_types %}<option value="{{ wt.id }}" {% if target and target.work_type_id == wt.id %}selected{% endif %}>{{ wt.code }}</option>{% endfor %}</select>
+  <label>{{ t('label.material') }}</label>
+  <select name="material_id" {% if target %}disabled{% endif %}>{% for m in materials %}<option value="{{ m.id }}" {% if target and target.material_id == m.id %}selected{% endif %}>{{ m.name_sv }}</option>{% endfor %}</select>
+  <label>{{ t('materials.overrides.surface_kind') }}</label>
+  <select name="surface_kind">{% for sk in ['walls','ceiling','floor','combined','pieces'] %}<option value="{{ sk }}" {% if target and target.surface_kind == sk %}selected{% endif %}>{{ t('materials.overrides.surface.' ~ sk) }}</option>{% endfor %}</select>
+  <label>{{ t('materials.overrides.quantity') }}</label><input name="quantity_per_unit" value="{{ target.quantity_per_unit if target else '' }}" />
+  <label>{{ t('materials.overrides.base_area') }}</label><input name="base_unit_size" value="{{ target.base_unit_size if target else '10' }}" />
+  <label>{{ t('materials.overrides.unit_basis') }}</label><select name="unit_basis">{% for ub in ['m2','piece','room'] %}<option value="{{ ub }}" {% if target and target.unit_basis == ub %}selected{% endif %}>{{ ub }}</option>{% endfor %}</select>
+  <label>{{ t('materials.overrides.waste') }}</label><input name="waste_factor_percent" value="{{ target.waste_factor_percent if target and target.waste_factor_percent is not none else '' }}" />
+  <label>{{ t('label.comment') }}</label><input name="comment" value="{{ target.comment if target else '' }}" />
+  <label>{{ t('materials.overrides.active') }}</label><input type="checkbox" name="is_active" {% if not target or target.is_active %}checked{% endif %}/>
+  <p>{{ t('materials.overrides.preview') }}: {{ (target.quantity_per_unit if target else 3) }} {{ t('label.unit') }} / {{ (target.base_unit_size if target else 10) }} {{ t('materials.overrides.unit_m2') }}</p>
+  <button type="submit">{{ t('common.save') }}</button>
+</form>
+{% endblock %}

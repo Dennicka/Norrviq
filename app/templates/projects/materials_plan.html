@@ -2,7 +2,7 @@
 {% block content %}
 <h1>{{ t('materials.planned_materials') }}</h1>
 <p><a href="/projects/{{ project.id }}">← {{ t('projects.detail') }}</a></p>
-<p><a href="/projects/{{ project.id }}/materials-plan">{{ t('materials.recalculate') }}</a></p>
+<p><a href="/projects/{{ project.id }}/materials-plan">{{ t('materials.recalculate') }}</a> · <a href="/projects/{{ project.id }}/materials/overrides">{{ t('materials.overrides.title') }}</a></p>
 <table>
   <thead>
     <tr>
