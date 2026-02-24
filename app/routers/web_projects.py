@@ -35,7 +35,7 @@ from app.services.estimates import (
     estimate_project_work_bulk,
     recalculate_project_work_items,
 )
-from app.services.offer_commercial import compute_offer_commercial, deserialize_offer_commercial
+from app.services.offer_commercial import compute_offer_commercial, deserialize_offer_commercial, is_offer_snapshot_stale
 from app.services.commercial_snapshot import DOC_TYPE_OFFER as SNAP_OFFER, read_commercial_snapshot
 from app.services.finance import calculate_project_financials, compute_project_finance
 from app.services.terms_templates import DOC_TYPE_OFFER, resolve_terms_template
@@ -523,7 +523,8 @@ def project_offer(
     Показывает чистый оферт-документ для клиента.
     """
 
-    if lang not in ("ru", "sv"):
+    view = request.query_params.get("view", "client")
+    if lang not in ("ru", "sv", "en"):
         lang = "sv"
 
     project = (
@@ -555,6 +556,13 @@ def project_offer(
                 "price_inc_vat": Decimal(str(snap["totals"].get("price_inc_vat") or 0)),
                 "warnings": [],
                 "math_breakdown": {},
+                "sections": [{"id": "default", "title": "", "order": 10, "lines": snap["line_items"]}],
+                "summary": {
+                    "subtotal_ex_vat": Decimal(str(snap["totals"].get("price_ex_vat") or 0)),
+                    "vat_amount": Decimal(str(snap["totals"].get("vat_amount") or 0)),
+                    "total_inc_vat": Decimal(str(snap["totals"].get("price_inc_vat") or 0)),
+                },
+                "metadata": {},
             }
         if commercial is None:
             commercial = deserialize_offer_commercial(project.offer_commercial_snapshot)
@@ -571,6 +579,9 @@ def project_offer(
             "price_inc_vat": offer_commercial.price_inc_vat,
             "warnings": offer_commercial.warnings,
             "math_breakdown": offer_commercial.math_breakdown,
+            "sections": offer_commercial.sections,
+            "summary": offer_commercial.summary,
+            "metadata": offer_commercial.metadata,
         }
 
     legal_notes = {
@@ -607,6 +618,8 @@ def project_offer(
         company_profile=company_profile,
         offer_number=project.offer_number,
         offer_status=project.offer_status,
+        stale_warning=is_offer_snapshot_stale(db, project.id, commercial),
+        offer_view=view if view in {"client", "internal"} else "client",
         terms_title=terms_title,
         terms_body=terms_body,
     )

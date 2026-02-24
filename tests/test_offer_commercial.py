@@ -10,7 +10,7 @@ from app.models.project import Project, ProjectWorkItem
 from app.models.project_pricing import ProjectPricing
 from app.models.room import Room
 from app.models.worktype import WorkType
-from app.services.offer_commercial import compute_offer_commercial
+from app.services.offer_commercial import compute_offer_commercial, is_offer_snapshot_stale
 
 client = TestClient(app)
 settings = get_settings()
@@ -110,3 +110,18 @@ def test_offer_issue_blocks_on_mismatch(monkeypatch):
     response = client.post(f"/offers/{project_id}/finalize", headers={"accept": "application/json"}, data={"terms_lang": "sv"})
     assert response.status_code == 409
     assert response.json()["detail"] == "Offer totals mismatch pricing scenario"
+
+
+def test_offer_stale_detection_by_project_marker():
+    project_id = _seed_project()
+    db = SessionLocal()
+    try:
+        offer = compute_offer_commercial(db, project_id, lang="sv")
+        snap = {"metadata": offer.metadata}
+        assert is_offer_snapshot_stale(db, project_id, snap) is False
+        pricing = db.query(ProjectPricing).filter(ProjectPricing.project_id == project_id).first()
+        pricing.hourly_rate_override = Decimal("999.00")
+        db.commit()
+        assert is_offer_snapshot_stale(db, project_id, snap) is True
+    finally:
+        db.close()

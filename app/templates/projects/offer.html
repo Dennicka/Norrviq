@@ -15,6 +15,9 @@
         </form>
         {% endif %}
     </div>
+    {% if stale_warning %}
+    <div class="flash flash-warning">{{ t("offer.stale_warning") }}</div>
+    {% endif %}
     <div class="offer-page">
         <div class="offer-header">
             <div class="offer-company">
@@ -32,6 +35,16 @@
             </div>
         </div>
 
+        {% if offer_view == 'internal' %}
+        <div class="offer-section">
+            <h2>{{ t("offer.view.internal") }}</h2>
+            <p><strong>Mode:</strong> {{ commercial.mode }}</p>
+            <p><strong>Hours:</strong> {{ commercial.math_breakdown.baseline_hours }}</p>
+            <p><strong>Cost basis:</strong> {{ commercial.math_breakdown.internal_total_cost }}</p>
+            <p><strong>Buffers (h):</strong> {{ commercial.math_breakdown.buffers_hours_total }}</p>
+            <p><strong>Speed profile:</strong> {{ commercial.math_breakdown.speed_profile_code }}</p>
+        </div>
+        {% else %}
         <div class="offer-section">
             <h2>{{ t("offer.client") }}</h2>
             <p>{{ client.name if client else '' }}</p>
@@ -45,8 +58,10 @@
             {% endif %}
         </div>
 
+        {% for section in commercial.sections or [{"title":"", "lines": work_items}] %}
         <div class="offer-section">
             <h2>{{ t("offer.table.header.description") }}</h2>
+            {% if section.title %}<p><strong>{{ section.title }}</strong></p>{% endif %}
             <table class="offer-table">
                 <thead>
                     <tr>
@@ -59,7 +74,8 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for item in work_items %}
+                    {% for item in section.lines %}
+                    {% if item.visible is not defined or item.visible %}
                     <tr>
                         <td>{{ loop.index }}</td>
                         <td>{{ item.description }}</td>
@@ -68,17 +84,21 @@
                         <td>{{ item.unit_price }}</td>
                         <td>{{ item.total }}</td>
                     </tr>
+                    {% endif %}
                     {% endfor %}
                 </tbody>
             </table>
+        </div>
+        {% endfor %}
+        {% endif %}
 
-            <div class="offer-summary" style="margin-top: 8px;">
-                <div><span>{{ t("offer.summary.work_sum") }}</span><span>{{ commercial.price_ex_vat or 0 }}</span></div>
-                <div><span>{{ t("offer.summary.moms") }}</span><span>{{ commercial.vat_amount or 0 }}</span></div>
-                <div><span>{{ t("offer.summary.rot") }}</span><span>{{ project.rot_amount or 0 }}</span></div>
-                <div><strong>{{ t("offer.summary.total") }}</strong><strong>{{ commercial.price_inc_vat or 0 }}</strong></div>
-            </div>
-                <div class="offer-section">
+        <div class="offer-summary" style="margin-top: 8px;">
+            <div><span>{{ t("offer.summary.work_sum") }}</span><span>{{ commercial.summary.subtotal_ex_vat or commercial.price_ex_vat or 0 }}</span></div>
+            <div><span>{{ t("offer.summary.moms") }}</span><span>{{ commercial.summary.vat_amount or commercial.vat_amount or 0 }}</span></div>
+            <div><span>{{ t("offer.summary.rot") }}</span><span>{{ commercial.summary.rot_ready_base or project.rot_amount or 0 }}</span></div>
+            <div><strong>{{ t("offer.summary.total") }}</strong><strong>{{ commercial.summary.total_inc_vat or commercial.price_inc_vat or 0 }}</strong></div>
+        </div>
+        <div class="offer-section">
             <h2>{{ terms_title or "Terms / Villkor" }}</h2>
             <pre style="white-space: pre-wrap;">{{ terms_body }}</pre>
         </div>
@@ -87,10 +107,7 @@
 <script>
 function finalizeOffer(form) {
     const btn = form.querySelector('.js-finalize-btn');
-    if (btn) {
-        btn.disabled = true;
-        btn.textContent = 'Finalizing...';
-    }
+    if (btn) { btn.disabled = true; btn.textContent = 'Finalizing...'; }
 }
 </script>
 {% endblock %}
