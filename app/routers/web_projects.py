@@ -43,6 +43,7 @@ from app.services.buffer_audit import log_buffer_audit
 from app.services.quality import evaluate_project_quality
 from app.services.completeness import compute_completeness
 from app.services.geometry import aggregate_project_geometry
+from app.services.project_estimator import build_project_estimate_summary
 from app.services.pricing import (
     LOW_MARGIN_WARN_PCT,
     WARNING_LOW_MARGIN,
@@ -376,6 +377,7 @@ async def project_detail(
     request: Request,
     db: Session = Depends(get_db),
     lang: str = Depends(get_current_lang),
+    room_ids: list[int] = Query(default=[]),
 ):
     project = (
         db.query(Project)
@@ -405,6 +407,16 @@ async def project_detail(
         project.invoices, key=lambda inv: inv.issue_date or inv.created_at or date.min, reverse=True
     )[:2]
     geometry_summary = aggregate_project_geometry(db, project.id)
+    pricing = get_or_create_project_pricing(db, project.id)
+    estimator_mode_map = {"HOURLY": "hourly", "PER_M2": "sqm", "FIXED_TOTAL": "fixed"}
+    estimator_summary = build_project_estimate_summary(
+        project=project,
+        room_ids=room_ids,
+        pricing_mode=estimator_mode_map.get((pricing.mode or "HOURLY").upper(), "hourly"),
+        hourly_rate=Decimal(str(pricing.hourly_rate_override or settings.hourly_rate_company or 0)),
+        sqm_rate=Decimal(str(pricing.rate_per_m2 or 0)),
+        fixed_price=Decimal(str(pricing.fixed_total_price or 0)),
+    )
     context = build_project_context(
         db,
         request,
@@ -422,8 +434,32 @@ async def project_detail(
         total_labor_hours=calculate_project_total_hours(db, project.id),
         pricing_totals=calculate_project_pricing_totals(project),
         settings_obj=settings,
+        estimator_summary=estimator_summary,
+        estimator_selected_room_ids=room_ids,
+        project_pricing=pricing,
     )
     return templates.TemplateResponse(request, "projects/detail.html", context)
+
+
+@router.post("/{project_id}/estimator-pricing-mode")
+async def update_estimator_pricing_mode(
+    project_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    form = await request.form()
+    mode = (form.get("project_pricing_mode") or "").lower()
+    mode_map = {"hourly": "HOURLY", "sqm": "PER_M2", "fixed": "FIXED_TOTAL"}
+    if mode not in mode_map:
+        raise HTTPException(status_code=400, detail="Unknown pricing mode")
+    pricing = get_or_create_project_pricing(db, project_id)
+    pricing.mode = mode_map[mode]
+    db.add(pricing)
+    db.commit()
+    return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.get("/{project_id}/edit")
