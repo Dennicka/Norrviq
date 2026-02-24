@@ -263,7 +263,8 @@ def _parse_csv_decimal(value: str | None) -> Decimal | None:
 
 
 def _parse_pricing_form(form) -> dict:
-    mode = (form.get("pricing_mode") or "hourly").lower()
+    mode_raw = (form.get("pricing_mode") or "hourly").lower()
+    mode = "sqm" if mode_raw == "area" else mode_raw
     data = {"pricing_mode": mode, "hourly_rate_sek": None, "area_rate_sek": None, "fixed_price_sek": None}
 
     def _to_decimal(key: str):
@@ -272,17 +273,29 @@ def _parse_pricing_form(form) -> dict:
             return None
         return Decimal(str(raw))
 
-    if mode == "hourly":
-        data["hourly_rate_sek"] = _to_decimal("hourly_rate_sek")
-    elif mode == "area":
-        data["area_rate_sek"] = _to_decimal("area_rate_sek")
-    elif mode == "fixed":
-        data["fixed_price_sek"] = _to_decimal("fixed_price_sek")
-    else:
-        data["pricing_mode"] = "hourly"
-        data["hourly_rate_sek"] = _to_decimal("hourly_rate_sek")
+    data["hourly_rate_sek"] = _to_decimal("hourly_rate_sek")
+    data["area_rate_sek"] = _to_decimal("area_rate_sek")
+    data["fixed_price_sek"] = _to_decimal("fixed_price_sek")
+
 
     return data
+
+
+def _validate_pricing_form(pricing_data: dict, *, quantity: Decimal, has_area: bool) -> str | None:
+    mode = pricing_data["pricing_mode"]
+    if mode not in {"hourly", "sqm", "fixed"}:
+        return "Invalid pricing mode"
+    if mode == "fixed" and pricing_data["fixed_price_sek"] is None:
+        return "Fixed mode requires fixed price"
+    if mode == "hourly":
+        if quantity <= 0:
+            return "Hourly mode requires quantity/hours"
+    if mode == "sqm":
+        if pricing_data["area_rate_sek"] is None:
+            return "SQM mode requires m² rate"
+        if quantity <= 0 and not has_area:
+            return "SQM mode requires area"
+    return None
 
 def _read_csv_rows(file_bytes: bytes) -> tuple[list[str], list[dict[str, str]]]:
     text = file_bytes.decode("utf-8-sig")
@@ -417,6 +430,7 @@ async def project_detail(
         hourly_rate=Decimal(str(pricing.hourly_rate_override or settings.hourly_rate_company or 0)),
         sqm_rate=Decimal(str(pricing.rate_per_m2 or 0)),
         fixed_price=Decimal(str(pricing.fixed_total_price or 0)),
+        vat_rate_percent=Decimal(str(settings.moms_percent or 0)),
     )
     context = build_project_context(
         db,
@@ -980,6 +994,12 @@ async def add_work_item(
 
     project_room_ids = {room.id for room in project.rooms}
 
+    pricing_error = _validate_pricing_form(pricing_data, quantity=Decimal(form.get("quantity") or "1"), has_area=bool(project_room_ids))
+    if pricing_error:
+        add_flash_message(request, pricing_error, "error")
+        db.rollback()
+        return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
+
     if scope_mode in {"all_rooms", "selected_rooms"}:
         if not project_room_ids:
             add_flash_message(request, translator("projects.work_items.no_rooms"), "error")
@@ -1040,11 +1060,18 @@ async def add_work_item(
     if room and room.project_id != project.id:
         raise HTTPException(status_code=400, detail="Room is not part of project")
 
+    quantity = (Decimal(form.get("quantity") or "0") * layers).quantize(Decimal("0.01"))
+    single_pricing_error = _validate_pricing_form(pricing_data, quantity=quantity, has_area=room is not None)
+    if single_pricing_error:
+        add_flash_message(request, single_pricing_error, "error")
+        db.rollback()
+        return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
+
     item = ProjectWorkItem(
         project_id=project.id,
         work_type_id=work_type.id,
         room_id=room.id if room else None,
-        quantity=(Decimal(form.get("quantity") or "0") * layers).quantize(Decimal("0.01")),
+        quantity=quantity,
         difficulty_factor=difficulty_factor,
         pricing_mode=pricing_data["pricing_mode"],
         hourly_rate_sek=pricing_data["hourly_rate_sek"],
@@ -1131,6 +1158,10 @@ async def update_work_item(
     item.quantity = Decimal(form.get("quantity") or "0")
     item.difficulty_factor = Decimal(form.get("difficulty_factor") or "1")
     pricing_data = _parse_pricing_form(form)
+    update_pricing_error = _validate_pricing_form(pricing_data, quantity=item.quantity, has_area=room is not None)
+    if update_pricing_error:
+        add_flash_message(request, update_pricing_error, "error")
+        return RedirectResponse(url=f"/projects/{item.project_id}/items/{item.id}/edit", status_code=status.HTTP_303_SEE_OTHER)
     item.pricing_mode = pricing_data["pricing_mode"]
     item.hourly_rate_sek = pricing_data["hourly_rate_sek"]
     item.area_rate_sek = pricing_data["area_rate_sek"]

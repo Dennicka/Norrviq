@@ -36,7 +36,7 @@
         <label>{{ t("projects.work_items.pricing_mode") }}</label>
         <select name="pricing_mode" data-pricing-mode>
             <option value="hourly" {% if item.pricing_mode == 'hourly' %}selected{% endif %}>{{ t("projects.work_items.pricing_mode.hourly") }}</option>
-            <option value="area" {% if item.pricing_mode == 'area' %}selected{% endif %}>{{ t("projects.work_items.pricing_mode.area") }}</option>
+            <option value="sqm" {% if item.pricing_mode in ['area', 'sqm'] %}selected{% endif %}>{{ t("projects.work_items.pricing_mode.area") }}</option>
             <option value="fixed" {% if item.pricing_mode == 'fixed' %}selected{% endif %}>{{ t("projects.work_items.pricing_mode.fixed") }}</option>
         </select>
     </div>
@@ -44,7 +44,7 @@
         <label>{{ t("projects.work_items.hourly_rate") }}</label>
         <input type="number" step="0.01" name="hourly_rate_sek" value="{{ item.hourly_rate_sek or '' }}">
     </div>
-    <div data-pricing-field="area">
+    <div data-pricing-field="sqm">
         <label>{{ t("projects.work_items.area_rate") }}</label>
         <input type="number" step="0.01" name="area_rate_sek" value="{{ item.area_rate_sek or '' }}">
     </div>

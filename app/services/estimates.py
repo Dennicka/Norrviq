@@ -30,7 +30,7 @@ class BulkEstimateResult(BaseModel):
 
 class WorkItemPricingMode(str, Enum):
     HOURLY = "hourly"
-    AREA = "area"
+    SQM = "sqm"
     FIXED = "fixed"
 
 
@@ -48,8 +48,11 @@ def _scaled(value: Decimal | None, layers: Decimal) -> Decimal:
 
 
 def _norm_mode(value: str | None) -> WorkItemPricingMode:
+    normalized = (value or WorkItemPricingMode.HOURLY.value).lower()
+    if normalized == "area":
+        normalized = "sqm"
     try:
-        return WorkItemPricingMode((value or WorkItemPricingMode.HOURLY.value).lower())
+        return WorkItemPricingMode(normalized)
     except ValueError:
         return WorkItemPricingMode.HOURLY
 
@@ -181,7 +184,7 @@ def calculate_work_item(
         rate = Decimal(str(item.hourly_rate_sek if item.hourly_rate_sek is not None else hourly_rate_company))
         item.hourly_rate_sek = rate.quantize(Decimal("0.01"))
         price_sek = (labor_hours * rate).quantize(Decimal("0.01"))
-    elif mode is WorkItemPricingMode.AREA:
+    elif mode is WorkItemPricingMode.SQM:
         area_rate = Decimal(str(item.area_rate_sek or 0)).quantize(Decimal("0.01"))
         billable_area = resolve_billable_area_m2(item, work_type)
         item.billable_area_m2 = billable_area

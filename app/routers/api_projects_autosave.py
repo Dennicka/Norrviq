@@ -123,7 +123,9 @@ async def patch_work_item(project_id: int, item_id: int, request: Request, db: S
 
     if "pricing_mode" in payload:
         mode = str(payload.get("pricing_mode") or "hourly").lower()
-        if mode not in {"hourly", "area", "fixed"}:
+        if mode == "area":
+            mode = "sqm"
+        if mode not in {"hourly", "sqm", "fixed"}:
             fields["pricing_mode"] = "Invalid mode"
         else:
             item.pricing_mode = mode
@@ -138,8 +140,8 @@ async def patch_work_item(project_id: int, item_id: int, request: Request, db: S
     mode = (item.pricing_mode or "hourly").lower()
     if mode == "hourly" and item.hourly_rate_sek in (None, 0):
         fields["hourly_rate_sek"] = "Required for hourly mode"
-    if mode == "area" and item.area_rate_sek in (None, 0):
-        fields["area_rate_sek"] = "Required for area mode"
+    if mode == "sqm" and item.area_rate_sek in (None, 0):
+        fields["area_rate_sek"] = "Required for sqm mode"
     if mode == "fixed" and item.fixed_price_sek in (None, 0):
         fields["fixed_price_sek"] = "Required for fixed mode"
 
