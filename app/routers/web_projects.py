@@ -5,7 +5,6 @@ import logging
 from decimal import Decimal, InvalidOperation
 
 from datetime import date, datetime, timezone
-from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
@@ -33,10 +32,7 @@ from app.services.estimates import (
     calculate_project_total_hours,
     calculate_project_totals,
     calculate_project_pricing_totals,
-    estimate_project_work_bulk,
     recalculate_project_work_items,
-    resolve_project_quantity,
-    SCOPE_MODE_PROJECT,
     SCOPE_MODE_ROOM,
 )
 from app.services.offer_commercial import compute_offer_commercial, deserialize_offer_commercial, is_offer_snapshot_stale
@@ -49,6 +45,7 @@ from app.services.completeness import compute_completeness
 from app.services.geometry import aggregate_project_geometry
 from app.services.project_estimator import build_project_estimate_summary
 from app.services.project_pricing import build_project_pricing_summary
+from app.services.work_scope_apply import apply_work_item_to_scope
 from app.services.pricing import (
     LOW_MARGIN_WARN_PCT,
     WARNING_LOW_MARGIN,
@@ -1051,11 +1048,13 @@ async def add_work_item(
 
     difficulty_factor = Decimal(form.get("difficulty_factor") or "1")
     comment = form.get("comment")
-    scope_mode = ((form.get("scope_mode") or form.get("apply_to") or SCOPE_MODE_ROOM).strip().lower())
-    if scope_mode in {"selected_room", "single_room"}:
-        scope_mode = SCOPE_MODE_ROOM
-    if scope_mode not in {SCOPE_MODE_ROOM, SCOPE_MODE_PROJECT, "all_rooms", "selected_rooms"}:
-        scope_mode = SCOPE_MODE_ROOM
+    scope_apply_mode = (form.get("scope_apply_mode") or form.get("scope_mode") or form.get("apply_to") or "single_room").strip().lower()
+    if scope_apply_mode in {"selected_room", "single_room", "room"}:
+        scope_apply_mode = "single_room"
+    elif scope_apply_mode in {"project", "project_aggregate"}:
+        scope_apply_mode = "project_aggregate"
+    elif scope_apply_mode not in {"all_rooms", "selected_rooms"}:
+        scope_apply_mode = "single_room"
 
     layers = Decimal(form.get("layers") or "1")
     pricing_data = _parse_pricing_form(form)
@@ -1071,93 +1070,57 @@ async def add_work_item(
         db.rollback()
         return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
 
-    if scope_mode in {"all_rooms", "selected_rooms"}:
-        project_room_ids = {room.id for room in project_rooms}
-        if not project_room_ids:
-            add_flash_message(request, translator("projects.work_items.no_rooms"), "error")
+    if scope_apply_mode in {"all_rooms", "selected_rooms", "project_aggregate"}:
+        selected_room_ids = form.getlist("selected_room_ids") or form.getlist("room_ids")
+        result = apply_work_item_to_scope(
+            project.id,
+            {
+                "work_type_id": work_type.id,
+                "scope_apply_mode": scope_apply_mode,
+                "selected_room_ids": selected_room_ids,
+                "layers": layers,
+                "difficulty_factor": difficulty_factor,
+                "comment": comment,
+                "pricing_mode": pricing_data["pricing_mode"],
+                "hourly_rate_sek": pricing_data["hourly_rate_sek"],
+                "area_rate_sek": pricing_data["area_rate_sek"],
+                "fixed_price_sek": pricing_data["fixed_price_sek"],
+                "duplicate_mode": form.get("duplicate_mode") or "append",
+            },
+            db,
+        )
+        if scope_apply_mode == "selected_rooms" and not selected_room_ids:
+            add_flash_message(request, translator("projects.work_items.empty_selected_rooms"), "error")
             db.rollback()
             return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
-
-        selected_room_ids: list[int] | None = None
-        if scope_mode == "selected_rooms":
-            selected_raw = form.getlist("selected_room_ids") or form.getlist("room_ids")
-            selected_room_ids = sorted({int(raw) for raw in selected_raw if str(raw).strip().isdigit()})
-            if not selected_room_ids:
-                add_flash_message(request, translator("projects.work_items.empty_selected_rooms"), "error")
-                db.rollback()
-                return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
-            selected_room_ids = [room_id for room_id in selected_room_ids if room_id in project_room_ids]
-            if not selected_room_ids:
-                add_flash_message(request, translator("projects.work_items.empty_selected_rooms"), "error")
-                db.rollback()
-                return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
-
-        source_group_ref = f"generated:project_scope:{uuid4()}"
-        result = estimate_project_work_bulk(
-            db,
-            project=project,
-            work_type=work_type,
-            difficulty_factor=difficulty_factor,
-            comment=comment,
-            pricing_mode=pricing_data["pricing_mode"],
-            hourly_rate_sek=pricing_data["hourly_rate_sek"],
-            area_rate_sek=pricing_data["area_rate_sek"],
-            fixed_price_sek=pricing_data["fixed_price_sek"],
-            room_ids=selected_room_ids,
-            layers=layers,
-            source_group_ref=source_group_ref,
-        )
-        if result.skipped_rooms:
-            names = ", ".join(result.skipped_rooms[:5])
-            if len(result.skipped_rooms) > 5:
+        missing_geometry_rooms = [warning.split(":", 1)[1] for warning in result.warnings if warning.startswith("missing_geometry:")]
+        if missing_geometry_rooms:
+            names = ", ".join(missing_geometry_rooms[:5])
+            if len(missing_geometry_rooms) > 5:
                 names = f"{names}, …"
             add_flash_message(
                 request,
                 translator("projects.work_items.bulk_skipped_geometry").format(
-                    count=len(result.skipped_rooms),
+                    count=len(missing_geometry_rooms),
                     rooms=names,
                 ),
                 "warning",
             )
+        duplicate_rooms = [warning.split(":", 1)[1] for warning in result.warnings if warning.startswith("duplicate_skipped:")]
+        if duplicate_rooms:
+            names = ", ".join(duplicate_rooms[:5])
+            add_flash_message(request, f"{translator('projects.work_items.duplicate_mode.skip')}: {names}", "warning")
         if not result.created_item_ids:
             add_flash_message(request, translator("projects.work_items.bulk_no_valid_rooms"), "error")
             db.rollback()
             return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
-
         recalculate_project_work_items(db, project)
         calculate_project_totals(db, project)
-        add_flash_message(request, translator("projects.work_items.bulk_applied"), "success")
-        return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
-
-    if scope_mode == SCOPE_MODE_PROJECT:
-        if not project_rooms:
-            add_flash_message(request, translator("projects.work_items.no_rooms"), "error")
-            db.rollback()
-            return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
-
-        quantity = resolve_project_quantity(project_rooms, work_type, layers=layers)
-        if quantity is None or quantity <= 0:
-            add_flash_message(request, translator("projects.work_items.bulk_no_valid_rooms"), "error")
-            db.rollback()
-            return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
-
-        item = ProjectWorkItem(
-            project_id=project.id,
-            work_type_id=work_type.id,
-            scope_mode=SCOPE_MODE_PROJECT,
-            room_id=None,
-            quantity=quantity.quantize(Decimal("0.01")),
-            difficulty_factor=difficulty_factor,
-            pricing_mode=pricing_data["pricing_mode"],
-            hourly_rate_sek=pricing_data["hourly_rate_sek"],
-            area_rate_sek=pricing_data["area_rate_sek"],
-            fixed_price_sek=pricing_data["fixed_price_sek"],
-            comment=comment,
+        add_flash_message(
+            request,
+            translator("projects.work_items.bulk_result").format(created=result.created_count, skipped=result.skipped_count),
+            "success",
         )
-        db.add(item)
-        db.flush()
-        recalculate_project_work_items(db, project)
-        calculate_project_totals(db, project)
         db.commit()
         return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
 
