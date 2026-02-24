@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from app.config import get_settings
 from app.db import SessionLocal
 from app.main import app
-from app.models import Invoice, Project, ProjectWorkItem, Room, WorkType
+from app.models import Invoice, Project, ProjectPricing, ProjectWorkItem, Room, WorkType
 
 client = TestClient(app)
 settings = get_settings()
@@ -470,5 +470,92 @@ def test_project_page_displays_aggregated_hours_summary():
 
     response = client.get(f"/projects/{project_id}")
     assert response.status_code == 200
-    assert "Часы всего" in response.text
-    assert "Позиций" in response.text
+    assert "Общие часы" in response.text
+
+
+def test_project_pricing_mode_form_saves_mode_and_values():
+    login()
+    db = SessionLocal()
+    try:
+        project = Project(name=f"Pricing Settings {uuid4().hex[:8]}")
+        pricing = ProjectPricing(project=project)
+        db.add_all([project, pricing])
+        db.commit()
+        project_id = project.id
+    finally:
+        db.close()
+
+    response = client.post(
+        f"/projects/{project_id}/estimator-pricing-mode",
+        data={
+            "project_pricing_mode": "per_m2",
+            "sqm_rate": "195",
+            "sqm_basis": "walls_ceilings",
+            "include_materials_in_sell_price": "1",
+            "currency": "SEK",
+            "rounding_mode": "none",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+
+    db = SessionLocal()
+    try:
+        pricing = db.query(ProjectPricing).filter(ProjectPricing.project_id == project_id).first()
+        assert pricing is not None
+        assert pricing.pricing_mode == "per_m2"
+        assert Decimal(str(pricing.sqm_rate)) == Decimal("195.00")
+        assert pricing.sqm_basis == "walls_ceilings"
+    finally:
+        db.close()
+
+
+def test_project_page_shows_pricing_summary_block():
+    login()
+    db = SessionLocal()
+    try:
+        project = Project(name=f"Pricing Summary {uuid4().hex[:8]}")
+        room = Room(project=project, name="A", floor_area_m2=Decimal("10"), wall_perimeter_m=Decimal("12"), wall_height_m=Decimal("2.5"))
+        worktype = WorkType(code=f"WT-SUM-{uuid4().hex[:8]}", category="paint", unit="m2", name_ru="Тест", name_sv="Test", hours_per_unit=Decimal("1.00"), base_difficulty_factor=Decimal("1.0"), is_active=True)
+        item = ProjectWorkItem(project=project, room=room, work_type=worktype, quantity=Decimal("2"), difficulty_factor=Decimal("1"), calculated_hours=Decimal("2"))
+        pricing = ProjectPricing(project=project, pricing_mode="per_m2", sqm_rate=Decimal("195"), sqm_basis="walls_ceilings")
+        db.add_all([project, room, worktype, item, pricing])
+        db.commit()
+        project_id = project.id
+    finally:
+        db.close()
+
+    response = client.get(f"/projects/{project_id}")
+    assert response.status_code == 200
+    assert "Режим ценообразования" in response.text
+    assert "Hourly preview" in response.text
+    assert "Per m² preview" in response.text
+    assert "Fixed preview" in response.text
+
+
+def test_project_pricing_mode_form_validation_rejects_invalid_payload():
+    login()
+    db = SessionLocal()
+    try:
+        project = Project(name=f"Pricing Validation {uuid4().hex[:8]}")
+        pricing = ProjectPricing(project=project)
+        db.add_all([project, pricing])
+        db.commit()
+        project_id = project.id
+    finally:
+        db.close()
+
+    response = client.post(
+        f"/projects/{project_id}/estimator-pricing-mode",
+        data={"project_pricing_mode": "fixed", "fixed_price_amount": "-10"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+
+    db = SessionLocal()
+    try:
+        pricing = db.query(ProjectPricing).filter(ProjectPricing.project_id == project_id).first()
+        assert pricing is not None
+        assert (pricing.pricing_mode or "hourly") != "fixed"
+    finally:
+        db.close()

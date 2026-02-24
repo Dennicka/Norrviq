@@ -52,14 +52,18 @@ def test_project_estimator_page_and_mode_switch_affects_offer():
     detail = client.get(f"/projects/{project_id}")
     assert detail.status_code == 200
     assert "Сводка сметы" in detail.text
-    assert "Режим расчёта" in detail.text
-    assert "Часы всего" in detail.text
+    assert "Режим ценообразования" in detail.text
+    assert "Общие часы" in detail.text
     assert "Работы" in detail.text
     assert "Материалы" in detail.text
     assert "Итого" in detail.text
     assert "По помещениям" in detail.text
 
-    switch = client.post(f"/projects/{project_id}/estimator-pricing-mode", data={"project_pricing_mode": "fixed"}, follow_redirects=False)
+    switch = client.post(
+        f"/projects/{project_id}/estimator-pricing-mode",
+        data={"project_pricing_mode": "fixed", "fixed_price_amount": "9000"},
+        follow_redirects=False,
+    )
     assert switch.status_code == 303
 
     offer = client.get(f"/projects/{project_id}/offer")

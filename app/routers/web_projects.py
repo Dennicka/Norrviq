@@ -48,6 +48,7 @@ from app.services.quality import evaluate_project_quality
 from app.services.completeness import compute_completeness
 from app.services.geometry import aggregate_project_geometry
 from app.services.project_estimator import build_project_estimate_summary
+from app.services.project_pricing import build_project_pricing_summary
 from app.services.pricing import (
     LOW_MARGIN_WARN_PCT,
     WARNING_LOW_MARGIN,
@@ -240,6 +241,18 @@ def _parse_conversion_decimal(value: str | None):
     if decimal_value <= 0:
         return None
     return decimal_value.quantize(Decimal("0.01"))
+
+
+def _parse_local_decimal(raw: str | None) -> Decimal | None:
+    if raw is None:
+        return None
+    cleaned = str(raw).strip().replace(" ", "").replace(",", ".")
+    if not cleaned:
+        return None
+    try:
+        return Decimal(cleaned)
+    except (InvalidOperation, TypeError):
+        return None
 
 
 def _parse_date(value: str | None):
@@ -444,6 +457,7 @@ async def project_detail(
         estimator_summary.totals.vat_amount = estimator_summary.totals.subtotal * Decimal(str(settings.moms_percent or 0)) / Decimal("100")
         estimator_summary.totals.total_inc_vat = estimator_summary.totals.subtotal + estimator_summary.totals.vat_amount
     material_rows, material_totals = calculate_material_needs_for_project(db, project.id)
+    pricing_summary = build_project_pricing_summary(project, db)
     context = build_project_context(
         db,
         request,
@@ -464,6 +478,7 @@ async def project_detail(
         estimator_summary=estimator_summary,
         estimator_selected_room_ids=room_ids,
         project_pricing=pricing,
+        project_pricing_summary=pricing_summary,
         materials_calc_rows=material_rows,
         materials_calc_totals=material_totals,
     )
@@ -481,11 +496,45 @@ async def update_estimator_pricing_mode(
         raise HTTPException(status_code=404, detail="Project not found")
     form = await request.form()
     mode = (form.get("project_pricing_mode") or "").lower()
-    mode_map = {"hourly": "HOURLY", "sqm": "PER_M2", "fixed": "FIXED_TOTAL"}
+    mode_map = {"hourly": "HOURLY", "per_m2": "PER_M2", "fixed": "FIXED_TOTAL"}
     if mode not in mode_map:
         raise HTTPException(status_code=400, detail="Unknown pricing mode")
     pricing = get_or_create_project_pricing(db, project_id)
+    errors: list[str] = []
+    hourly_rate = _parse_local_decimal(form.get("hourly_rate"))
+    sqm_rate = _parse_local_decimal(form.get("sqm_rate"))
+    fixed_price_amount = _parse_local_decimal(form.get("fixed_price_amount"))
+    sqm_basis = (form.get("sqm_basis") or "walls_ceilings").lower()
+    sqm_custom_value = _parse_local_decimal(form.get("sqm_custom_value"))
+    if mode == "hourly" and (hourly_rate is None or hourly_rate < 0):
+        errors.append("pricing.validation.hourly_rate_required")
+    if mode == "per_m2":
+        if sqm_rate is None or sqm_rate < 0:
+            errors.append("pricing.validation.sqm_rate_required")
+        if sqm_basis == "custom" and (sqm_custom_value is None or sqm_custom_value < 0):
+            errors.append("pricing.validation.sqm_custom_required")
+    if mode == "fixed" and (fixed_price_amount is None or fixed_price_amount < 0):
+        errors.append("pricing.validation.fixed_price_required")
+    if errors:
+        for code in errors:
+            add_flash_message(request, code, "error")
+        return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
+
     pricing.mode = mode_map[mode]
+    pricing.pricing_mode = mode
+    pricing.hourly_rate = hourly_rate if hourly_rate is not None else Decimal("0")
+    pricing.sqm_rate = sqm_rate if sqm_rate is not None else Decimal("0")
+    pricing.sqm_basis = sqm_basis
+    pricing.sqm_custom_value = sqm_custom_value
+    pricing.fixed_price_amount = fixed_price_amount if fixed_price_amount is not None else Decimal("0")
+    pricing.currency = (form.get("currency") or "SEK")[:3]
+    pricing.include_materials_in_sell_price = parse_checkbox(form.get("include_materials_in_sell_price"))
+    pricing.markup_percent = _parse_local_decimal(form.get("markup_percent")) or Decimal("0")
+    pricing.rounding_mode = (form.get("rounding_mode") or "none").lower()
+    pricing.hourly_rate_override = pricing.hourly_rate
+    pricing.rate_per_m2 = pricing.sqm_rate
+    pricing.fixed_total_price = pricing.fixed_price_amount
+    pricing.include_materials = pricing.include_materials_in_sell_price
     db.add(pricing)
     db.commit()
     return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
