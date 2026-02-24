@@ -9,6 +9,7 @@ from app.i18n import make_t
 from app.models.client import Client
 from app.models.project import Project
 from app.web_utils import clean_str, parse_checkbox, safe_commit
+from app.services.form_utils import get_str
 
 router = APIRouter(prefix="/clients", tags=["clients"])
 
@@ -19,12 +20,12 @@ def _parse_client_form(form_data: dict) -> dict:
         segment = "B2C"
 
     return {
-        "name": clean_str(form_data.get("name")) or "",
-        "contact_person": clean_str(form_data.get("contact_person")),
-        "phone": clean_str(form_data.get("phone")),
-        "email": clean_str(form_data.get("email")),
-        "address": clean_str(form_data.get("address")),
-        "comment": clean_str(form_data.get("comment")),
+        "name": clean_str(get_str(form_data, "name")) or "",
+        "contact_person": clean_str(get_str(form_data, "contact_person")),
+        "phone": clean_str(get_str(form_data, "phone")),
+        "email": clean_str(get_str(form_data, "email")),
+        "address": clean_str(get_str(form_data, "address")),
+        "comment": clean_str(get_str(form_data, "comment")),
         "is_private_person": parse_checkbox(form_data.get("is_private_person")),
         "is_rot_eligible": parse_checkbox(form_data.get("is_rot_eligible")),
         "client_segment": segment,

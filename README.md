@@ -106,10 +106,24 @@ If you see a startup error about outdated DB, run `python scripts/db_upgrade.py`
 
 Detailed policy: `docs/DB_MIGRATIONS.md`.
 
+## Local startup (macOS/dev)
+
+1. `brew install python@3.11`
+2. `python3.11 -m venv .venv && source .venv/bin/activate`
+3. `pip install -r requirements.txt`
+4. `make bootstrap-local`
+5. `make migrate`
+6. `make seed-dev` (if needed)
+7. `make run-local`
+
+Before start, run `make doctor`.
+
+See also: `docs/READY_TO_WORK.md`.
+
 ## Run locally
 
 ```bash
-uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload
+make run-local
 ```
 
 Откройте http://127.0.0.1:8001 и переключайте язык через ссылки RU/SV в верхнем меню.
