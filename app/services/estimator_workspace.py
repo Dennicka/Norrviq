@@ -9,8 +9,7 @@ from app.models.material_consumption_override import MaterialConsumptionOverride
 from app.models.project import Project, ProjectWorkItem
 from app.services.completeness import compute_completeness
 from app.services.estimator_engine import build_project_estimate
-from app.services.estimates import calculate_project_total_hours, calculate_project_totals, recalculate_project_work_items
-from app.services.geometry import aggregate_project_geometry
+from app.services.estimates import calculate_project_totals, recalculate_project_work_items
 from app.services.materials_bom import compute_project_bom
 from app.models.pricing_policy import get_or_create_pricing_policy
 from app.services.pricing import WARNING_LOW_MARGIN, compute_pricing_scenarios, evaluate_floor, get_or_create_project_pricing
@@ -48,7 +47,6 @@ def build_estimator_workspace(db: Session, project_id: int, lang: str = "ru") ->
     calculate_project_totals(db, project)
     estimate = build_project_estimate(db, project_id)
 
-    geometry = aggregate_project_geometry(db, project_id)
     rooms = list(project.rooms)
     room_missing_geometry = [r.name for r in rooms if _d(r.floor_area_m2) <= 0 or _d(r.wall_area_m2) <= 0 or _d(r.ceiling_area_m2) <= 0]
 
