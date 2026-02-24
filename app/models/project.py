@@ -109,6 +109,7 @@ class ProjectWorkItem(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    scope_mode = Column(String(16), nullable=False, default="room", server_default="room")
     room_id = Column(Integer, ForeignKey("rooms.id"), nullable=True)
     work_type_id = Column(Integer, ForeignKey("work_types.id"), nullable=False)
     quantity = Column(Numeric(10, 2), nullable=False)

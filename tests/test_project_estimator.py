@@ -15,9 +15,9 @@ def _room(room_id: int, name: str, floor: str, perimeter: str, height: str) -> R
     return Room(id=room_id, name=name, floor_area_m2=Decimal(floor), wall_perimeter_m=Decimal(perimeter), wall_height_m=Decimal(height))
 
 
-def _item(room_id: int, category: str, hours: str) -> ProjectWorkItem:
+def _item(room_id: int | None, category: str, hours: str, scope_mode: str = "room") -> ProjectWorkItem:
     wt = WorkType(code=f"WT{room_id}{category}", category=category, unit="m2", name_ru="x", name_sv="x", hours_per_unit=Decimal("1"))
-    return ProjectWorkItem(room_id=room_id, calculated_hours=Decimal(hours), work_type=wt)
+    return ProjectWorkItem(room_id=room_id, scope_mode=scope_mode, calculated_hours=Decimal(hours), work_type=wt)
 
 
 def test_aggregate_two_rooms_sums_geometry():
@@ -150,3 +150,29 @@ def test_calculate_project_totals_mixed_modes():
     assert totals.subtotal == Decimal("6000.00")
     assert totals.vat_amount == Decimal("1500.00")
     assert totals.total_inc_vat == Decimal("7500.00")
+
+
+def test_project_scope_item_hours_are_included_for_all_rooms_scope():
+    project = Project(name="P")
+    project.rooms = [_room(1, "A", "10", "14", "2.5"), _room(2, "B", "20", "18", "2.5")]
+    scope = build_scope(project, room_ids=None, all_rooms=True)
+    operations = [
+        _item(None, "paint", "5", scope_mode="project"),
+        _item(1, "prep", "2", scope_mode="room"),
+    ]
+
+    labour = calculate_labour_totals(scope, operations, Decimal("500"))
+
+    assert labour.total_hours == Decimal("7.00")
+    assert labour.by_category["paint"] == Decimal("5.00")
+
+
+def test_project_scope_item_excluded_from_single_room_scope():
+    project = Project(name="P")
+    project.rooms = [_room(1, "A", "10", "14", "2.5"), _room(2, "B", "20", "18", "2.5")]
+    scope = build_scope(project, room_ids=[1], all_rooms=False)
+    operations = [_item(None, "paint", "5", scope_mode="project")]
+
+    labour = calculate_labour_totals(scope, operations, Decimal("500"))
+
+    assert labour.total_hours == Decimal("0.00")
