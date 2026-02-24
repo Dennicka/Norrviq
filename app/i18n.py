@@ -1726,3 +1726,19 @@ TRANSLATIONS_EN.update({
     "menu.diagnostics": "Diagnostics",
     "admin.diagnostics.title": "System diagnostics",
 })
+
+TRANSLATIONS_RU.update({
+    "invoice.pdf_fallback_mode": "Активирован резервный режим PDF-движка",
+    "invoice.print_view": "Версия для печати",
+    "common.print": "Печать",
+})
+TRANSLATIONS_SV.update({
+    "invoice.pdf_fallback_mode": "PDF-motorns reservläge är aktivt",
+    "invoice.print_view": "Utskriftsvy",
+    "common.print": "Skriv ut",
+})
+TRANSLATIONS_EN.update({
+    "invoice.pdf_fallback_mode": "PDF engine fallback mode active",
+    "invoice.print_view": "Print view",
+    "common.print": "Print",
+})

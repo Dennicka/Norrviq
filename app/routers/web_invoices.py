@@ -20,6 +20,7 @@ from app.security import ADMIN_ROLE, OPERATOR_ROLE, require_role
 from app.services.finance import compute_project_finance
 from app.services.invoice_commercial import compute_invoice_commercial
 from app.services.commercial_snapshot import DOC_TYPE_INVOICE as SNAP_INVOICE, read_commercial_snapshot
+from app.services.pdf_renderer import invoice_pdf_capability
 from app.services.invoice_lines import (
     MERGE_APPEND,
     MERGE_REPLACE_ALL,
@@ -235,7 +236,15 @@ async def invoice_document(
             commercial.vat_amount = Decimal(str(snap["totals"].get("vat_amount") or invoice.vat_total))
             commercial.price_inc_vat = Decimal(str(snap["totals"].get("price_inc_vat") or invoice.total_inc_vat))
     context = template_context(request, lang)
-    context.update({"project": invoice.project, "invoice": invoice, "company_profile": company_profile, "terms_title": terms_title, "terms_body": terms_body, "commercial": commercial})
+    context.update({
+        "project": invoice.project,
+        "invoice": invoice,
+        "company_profile": company_profile,
+        "terms_title": terms_title,
+        "terms_body": terms_body,
+        "commercial": commercial,
+        "pdf_capability": invoice_pdf_capability(),
+    })
     return templates.TemplateResponse(request, "invoices/document.html", context)
 
 

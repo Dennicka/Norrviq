@@ -28,6 +28,7 @@ from app.services.document_numbering import (
     finalize_offer,
 )
 from app.services.pdf_export import render_pdf_from_html
+from app.services.pdf_renderer import invoice_pdf_capability, render_invoice_pdf
 from app.services.completeness import compute_completeness
 from app.services.quality import evaluate_project_quality
 from app.services.terms_templates import DOC_TYPE_INVOICE, DOC_TYPE_OFFER, resolve_terms_template
@@ -292,10 +293,16 @@ async def invoice_pdf(
         }
     )
     html = templates.get_template("pdf/invoice_pdf.html").render(context)
-    try:
-        pdf_bytes = render_pdf_from_html(html=html, base_url=PROJECT_ROOT, stylesheet_path=PDF_STYLESHEET)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    pdf_bytes = render_invoice_pdf(
+        invoice.id,
+        lang,
+        html=html,
+        base_url=PROJECT_ROOT,
+        stylesheet_path=PDF_STYLESHEET,
+    )
+    if pdf_bytes is None:
+        add_flash_message(request, make_t(lang)("invoice.pdf_fallback_mode"), "warning")
+        return RedirectResponse(url=f"/invoices/{invoice.id}/print", status_code=status.HTTP_303_SEE_OTHER)
     _audit_pdf_download(
         db,
         request=request,
@@ -312,6 +319,58 @@ async def invoice_pdf(
             REQUEST_ID_HEADER: getattr(request.state, "request_id", ""),
         },
     )
+
+
+@router.get("/invoices/{invoice_id}/print")
+async def invoice_print_view(
+    invoice_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    lang: str = Depends(get_current_lang),
+    _role: str = Depends(require_role("admin", "operator", "viewer")),
+):
+    invoice = (
+        db.query(Invoice)
+        .options(selectinload(Invoice.project).selectinload(Project.client), selectinload(Invoice.lines))
+        .filter(Invoice.id == invoice_id)
+        .first()
+    )
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+    profile = get_or_create_company_profile(db)
+    if invoice.status == "issued":
+        terms_title = invoice.invoice_terms_snapshot_title or ""
+        terms_body = invoice.invoice_terms_snapshot_body or ""
+    else:
+        template = resolve_terms_template(db, profile=profile, client=invoice.project.client, doc_type=DOC_TYPE_INVOICE, lang=lang)
+        terms_title = template.title
+        terms_body = template.body_text
+
+    commercial = compute_invoice_commercial(db, invoice.project_id, invoice.id, lang=lang)
+    if invoice.status == "issued":
+        snap = read_commercial_snapshot(db, doc_type=SNAP_INVOICE, doc_id=invoice.id)
+        if snap:
+            commercial.mode = snap["mode"]
+            commercial.units = snap["units"]
+            commercial.rate = snap["rates"]
+            commercial.price_ex_vat = Decimal(str(snap["totals"].get("price_ex_vat") or invoice.subtotal_ex_vat))
+            commercial.vat_amount = Decimal(str(snap["totals"].get("vat_amount") or invoice.vat_total))
+            commercial.price_inc_vat = Decimal(str(snap["totals"].get("price_inc_vat") or invoice.total_inc_vat))
+
+    context = template_context(request, lang)
+    context.update(
+        {
+            "invoice": invoice,
+            "commercial": commercial,
+            "company_profile": profile,
+            "terms_title": terms_title,
+            "terms_body": terms_body,
+            "is_draft": invoice.status != "issued",
+            "pdf_capability": invoice_pdf_capability(),
+        }
+    )
+    return templates.TemplateResponse(request, "invoices/print.html", context)
 
 
 
