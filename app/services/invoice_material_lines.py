@@ -60,7 +60,9 @@ def _from_shopping(db: Session, project_id: int, pricing_mode: str, markup_pct: 
     lines: list[MaterialLineDraft] = []
     for item in report.items:
         pack_size = Decimal(str(item.pack_size or 0))
+        warning_tags: list[str] = []
         if pack_size <= 0:
+            warning_tags.append("UNRESOLVED_PACK_SIZE")
             pack_size = Decimal("1")
         sell_pack_price = _q(Decimal(str(item.pack_price_ex_vat)))
         if pricing_mode == PRICING_COST_PLUS:
@@ -68,21 +70,33 @@ def _from_shopping(db: Session, project_id: int, pricing_mode: str, markup_pct: 
         if invoice_material_unit == UNIT_PACKS:
             qty = Decimal(str(item.packs_count or 0))
             if qty <= 0:
+                warning_tags.append("UNRESOLVED_PACK_COUNT")
                 qty = Decimal("1")
             unit = "pack"
             unit_price = sell_pack_price
             desc = f"{item.material_name} ({pack_size}{item.unit})"
         else:
             qty = _q(Decimal(str(item.qty_final_unit or 0)))
+            if qty <= 0:
+                warning_tags.append("UNRESOLVED_REQUIRED_QTY")
+                qty = Decimal("1.00")
             unit = item.unit
             if pricing_mode == PRICING_SELL:
-                unit_price = _q(sell_pack_price / pack_size)
+                unit_price = _q(sell_pack_price / pack_size) if pack_size > 0 else sell_pack_price
             else:
-                unit_price = _cost_plus(_q(Decimal(str(item.pack_price_ex_vat)) / pack_size), markup_pct)
+                base_cost = _q(Decimal(str(item.pack_price_ex_vat)) / pack_size) if pack_size > 0 else _q(Decimal(str(item.pack_price_ex_vat)))
+                unit_price = _cost_plus(base_cost, markup_pct)
             desc = item.material_name
         if item.sku:
             desc = f"{desc} [{item.sku}]"
+        if item.notes:
+            warning_tags.append(item.notes)
+        if warning_tags:
+            desc = f"{desc} [warning:{'|'.join(sorted(set(warning_tags)))}]"
         lines.append(MaterialLineDraft(item.material_id, desc, qty, unit, unit_price, _q(item.vat_rate_pct), SOURCE_SHOPPING, report.source_hash))
+
+    if not lines:
+        lines, _ = _from_bom(db, project_id, pricing_mode, markup_pct, invoice_material_unit, round_to_packs=True)
     return lines, report.source_hash
 
 

@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
-from app.dependencies import get_current_lang, get_db, template_context, templates
+from app.dependencies import add_flash_message, get_current_lang, get_db, template_context, templates
+from app.models.material_catalog_item import MaterialCatalogItem
 from app.models.material import Material
 from app.models.material_norm import MaterialConsumptionNorm
 
@@ -12,6 +13,7 @@ router = APIRouter(prefix="/materials", tags=["materials"])
 
 VALID_BASIS_TYPES = {"floor_area", "ceiling_area", "wall_area", "opening_area", "perimeter", "manual_quantity"}
 VALID_WORK_KINDS = {"painting_ceiling", "painting_walls", "putty_walls", "primer_walls", "floor_covering"}
+VALID_UNITS = {"l", "kg", "m2", "pcs", "roll", "bucket"}
 
 
 def _to_decimal(raw: str | None, *, field: str, allow_empty: bool = False) -> Decimal | None:
@@ -80,6 +82,48 @@ def _render_rules_form(request: Request, lang: str, norm: MaterialConsumptionNor
     context = template_context(request, lang)
     context.update({"norm": norm, "errors": errors, "form_data": form_data or {}})
     return templates.TemplateResponse(request, "materials/norms_form.html", context, status_code=status_code)
+
+
+def _parse_catalog_form(form) -> tuple[dict, list[str]]:
+    payload = {
+        "material_code": (form.get("material_code") or "").strip().lower(),
+        "name": (form.get("name") or "").strip(),
+        "unit": (form.get("unit") or "").strip().lower(),
+        "package_size": form.get("package_size"),
+        "package_unit": (form.get("package_unit") or "").strip().lower(),
+        "price_ex_vat": form.get("price_ex_vat"),
+        "vat_rate_pct": form.get("vat_rate_pct") or "25",
+        "supplier_name": (form.get("supplier_name") or "").strip() or None,
+        "is_active": form.get("is_active") in ("on", "true", "1", True, 1),
+        "is_default_for_material": form.get("is_default_for_material") in ("on", "true", "1", True, 1),
+    }
+    errors: list[str] = []
+    for field in ("material_code", "name"):
+        if not payload[field]:
+            errors.append(field)
+    if payload["unit"] not in VALID_UNITS:
+        errors.append("unit")
+    if payload["package_unit"] not in VALID_UNITS:
+        errors.append("package_unit")
+    try:
+        payload["package_size"] = _to_decimal(payload["package_size"], field="package_size")
+        if payload["package_size"] <= 0:
+            errors.append("package_size")
+    except ValueError:
+        errors.append("package_size")
+    try:
+        payload["price_ex_vat"] = _to_decimal(payload["price_ex_vat"], field="price_ex_vat")
+        if payload["price_ex_vat"] < 0:
+            errors.append("price_ex_vat")
+    except ValueError:
+        errors.append("price_ex_vat")
+    try:
+        payload["vat_rate_pct"] = _to_decimal(payload["vat_rate_pct"], field="vat_rate_pct")
+        if payload["vat_rate_pct"] < 0 or payload["vat_rate_pct"] > 100:
+            errors.append("vat_rate_pct")
+    except ValueError:
+        errors.append("vat_rate_pct")
+    return payload, errors
 
 
 @router.get("/rules")
@@ -225,3 +269,63 @@ async def delete_material(material_id: int, db: Session = Depends(get_db)):
     db.delete(material)
     db.commit()
     return RedirectResponse(url="/materials/", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.get("/catalog")
+async def catalog_list(request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang)):
+    items = db.query(MaterialCatalogItem).order_by(MaterialCatalogItem.material_code.asc(), MaterialCatalogItem.id.asc()).all()
+    context = template_context(request, lang)
+    context.update({"items": items})
+    return templates.TemplateResponse(request, "materials/catalog_list.html", context)
+
+
+@router.get("/catalog/new")
+async def catalog_new_form(request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang)):
+    context = template_context(request, lang)
+    context.update({"item": None, "errors": []})
+    return templates.TemplateResponse(request, "materials/catalog_form.html", context)
+
+
+@router.post("/catalog/new")
+async def catalog_new(request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang)):
+    form = await request.form()
+    payload, errors = _parse_catalog_form(form)
+    if errors:
+        add_flash_message(request, f"Validation error: {', '.join(sorted(set(errors)))}", "error")
+        context = template_context(request, lang)
+        context.update({"item": None, "errors": errors, "form_data": dict(form)})
+        return templates.TemplateResponse(request, "materials/catalog_form.html", context, status_code=422)
+    db.add(MaterialCatalogItem(**payload))
+    db.commit()
+    add_flash_message(request, "Catalog item created", "success")
+    return RedirectResponse(url="/materials/catalog", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.get("/catalog/{item_id}/edit")
+async def catalog_edit_form(item_id: int, request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang)):
+    item = db.get(MaterialCatalogItem, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Catalog item not found")
+    context = template_context(request, lang)
+    context.update({"item": item, "errors": []})
+    return templates.TemplateResponse(request, "materials/catalog_form.html", context)
+
+
+@router.post("/catalog/{item_id}/edit")
+async def catalog_edit(item_id: int, request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang)):
+    item = db.get(MaterialCatalogItem, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Catalog item not found")
+    form = await request.form()
+    payload, errors = _parse_catalog_form(form)
+    if errors:
+        add_flash_message(request, f"Validation error: {', '.join(sorted(set(errors)))}", "error")
+        context = template_context(request, lang)
+        context.update({"item": item, "errors": errors, "form_data": dict(form)})
+        return templates.TemplateResponse(request, "materials/catalog_form.html", context, status_code=422)
+    for key, value in payload.items():
+        setattr(item, key, value)
+    db.add(item)
+    db.commit()
+    add_flash_message(request, "Catalog item updated", "success")
+    return RedirectResponse(url="/materials/catalog", status_code=status.HTTP_303_SEE_OTHER)

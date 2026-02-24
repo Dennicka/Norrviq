@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ 'Edit catalog item' if item else 'New catalog item' }}</h1>
+<form method="post" action="{{ '/materials/catalog/' ~ item.id ~ '/edit' if item else '/materials/catalog/new' }}">
+{{ csrf_input(request) }}
+<input name="material_code" placeholder="material_code" value="{{ form_data.material_code if form_data else (item.material_code if item else '') }}" required>
+<input name="name" placeholder="name" value="{{ form_data.name if form_data else (item.name if item else '') }}" required>
+<input name="unit" placeholder="unit" value="{{ form_data.unit if form_data else (item.unit if item else '') }}" required>
+<input name="package_size" placeholder="package_size" value="{{ form_data.package_size if form_data else (item.package_size if item else '') }}" required>
+<input name="package_unit" placeholder="package_unit" value="{{ form_data.package_unit if form_data else (item.package_unit if item else '') }}" required>
+<input name="price_ex_vat" placeholder="price_ex_vat" value="{{ form_data.price_ex_vat if form_data else (item.price_ex_vat if item else '') }}" required>
+<input name="vat_rate_pct" placeholder="vat_rate_pct" value="{{ form_data.vat_rate_pct if form_data else (item.vat_rate_pct if item else '25') }}" required>
+<input name="supplier_name" placeholder="supplier" value="{{ form_data.supplier_name if form_data else (item.supplier_name if item else '') }}">
+<label><input type="checkbox" name="is_active" {% if (form_data and form_data.get('is_active')) or (not form_data and (item is none or item.is_active)) %}checked{% endif %}>active</label>
+<label><input type="checkbox" name="is_default_for_material" {% if (form_data and form_data.get('is_default_for_material')) or (not form_data and item and item.is_default_for_material) %}checked{% endif %}>default</label>
+<button type="submit">Save</button>
+</form>
+{% if errors %}<p>Errors: {{ errors|join(', ') }}</p>{% endif %}
+{% endblock %}

@@ -76,6 +76,7 @@ from app.services.materials_bom import (
     get_or_create_project_paint_settings,
 )
 from app.services.materials_consumption import calculate_material_needs_for_project
+from app.services.material_costing import cost_project_materials
 from app.services.pdf_export import render_pdf_from_html
 from app.services.shopping_list import (
     apply_shopping_list_to_invoice_material_lines,
@@ -433,6 +434,12 @@ async def project_detail(
         fixed_price=Decimal(str(pricing.fixed_total_price or 0)),
         vat_rate_percent=Decimal(str(settings.moms_percent or 0)),
     )
+    material_cost_report = cost_project_materials(db, project.id)
+    if estimator_summary.totals:
+        estimator_summary.totals.subtotal_materials = material_cost_report.total_ex_vat
+        estimator_summary.totals.subtotal = estimator_summary.totals.subtotal_labour + material_cost_report.total_ex_vat
+        estimator_summary.totals.vat_amount = estimator_summary.totals.subtotal * Decimal(str(settings.moms_percent or 0)) / Decimal("100")
+        estimator_summary.totals.total_inc_vat = estimator_summary.totals.subtotal + estimator_summary.totals.vat_amount
     material_rows, material_totals = calculate_material_needs_for_project(db, project.id)
     context = build_project_context(
         db,

@@ -11,6 +11,7 @@ from app.models.invoice_line import InvoiceLine
 from app.models.project_procurement_settings import ProjectProcurementSettings
 from app.models.supplier_material_price import SupplierMaterialPrice
 from app.services.invoice_lines import recalculate_invoice_totals
+from app.services.material_costing import cost_project_materials
 from app.services.materials_bom import compute_project_bom
 
 MONEY_Q = Decimal("0.01")
@@ -58,18 +59,56 @@ def get_or_create_procurement_settings(db: Session, project_id: int) -> ProjectP
     return settings
 
 
-def _select_price(prices: list[SupplierMaterialPrice], preferred_supplier_id: int | None, auto_select_cheapest: bool):
+def _select_price(prices: list[SupplierMaterialPrice], preferred_supplier_id: int | None, auto_select_cheapest: bool) -> SupplierMaterialPrice | None:
+    if not prices:
+        return None
     if preferred_supplier_id:
-        for p in prices:
-            if p.supplier_id == preferred_supplier_id:
-                return p
-    if auto_select_cheapest and prices:
-        return min(prices, key=lambda p: Decimal(str(p.pack_price_ex_vat or 0)))
-    return prices[0] if prices else None
+        for price in prices:
+            if price.supplier_id == preferred_supplier_id:
+                return price
+    if auto_select_cheapest:
+        return min(prices, key=lambda p: (Decimal(str(p.pack_price_ex_vat or 0)), p.id))
+    return min(prices, key=lambda p: (Decimal(str(p.pack_price_ex_vat or 0)), p.id))
 
 
 def compute_project_shopping_list(db: Session, project_id: int) -> ShoppingListReport:
     bom = compute_project_bom(db, project_id)
+    catalog_report = cost_project_materials(db, project_id)
+    if not bom.items:
+        items = [
+            ShoppingListItem(
+                material_id=idx,
+                material_name=row.material_name,
+                sku=None,
+                unit=row.required_unit,
+                qty_final_unit=row.required_quantity,
+                supplier_name=None,
+                pack_size=row.package_size,
+                packs_count=row.packages_to_buy,
+                pack_price_ex_vat=row.unit_price_ex_vat,
+                total_ex_vat=row.total_ex_vat,
+                vat_rate_pct=Decimal("25.00") if row.total_ex_vat == 0 else _qm(row.total_vat / row.total_ex_vat * Decimal("100")),
+                estimated_cost_inc_vat=row.total_inc_vat,
+                notes=", ".join(row.warnings) if row.warnings else None,
+            )
+            for idx, row in enumerate(catalog_report.rows, start=1)
+        ]
+        warning_codes = [f"material:{i.material_id}:{i.notes}" for i in items if i.notes]
+        payload = {
+            "project_id": project_id,
+            "items": [{**asdict(item), "qty_final_unit": str(item.qty_final_unit)} for item in items],
+            "totals": {"ex": str(catalog_report.total_ex_vat), "inc": str(catalog_report.total_inc_vat)},
+        }
+        source_hash = hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+        return ShoppingListReport(
+            project_id=project_id,
+            source_hash=source_hash,
+            items=items,
+            total_ex_vat=catalog_report.total_ex_vat,
+            total_inc_vat=catalog_report.total_inc_vat,
+            warnings=warning_codes,
+        )
+
     settings = get_or_create_procurement_settings(db, project_id)
     warnings: list[str] = []
     items: list[ShoppingListItem] = []
@@ -83,21 +122,23 @@ def compute_project_shopping_list(db: Session, project_id: int) -> ShoppingListR
             unit_price = Decimal(str((bom_item.cost_ex_vat / bom_item.qty_final_unit) if bom_item.qty_final_unit > 0 else 0))
             total_ex = _qm(unit_price * bom_item.qty_final_unit)
             warnings.append(f"material:{bom_item.material_id}:NO_SUPPLIER_PRICE")
-            items.append(ShoppingListItem(
-                material_id=bom_item.material_id,
-                material_name=bom_item.name,
-                sku=None,
-                unit=bom_item.unit,
-                qty_final_unit=bom_item.qty_final_unit,
-                supplier_name=None,
-                pack_size=None,
-                packs_count=0,
-                pack_price_ex_vat=unit_price,
-                total_ex_vat=total_ex,
-                vat_rate_pct=vat_rate,
-                estimated_cost_inc_vat=_qm(total_ex * (Decimal("1") + vat_rate / Decimal("100"))),
-                notes="fallback_default_cost_per_unit",
-            ))
+            items.append(
+                ShoppingListItem(
+                    material_id=bom_item.material_id,
+                    material_name=bom_item.name,
+                    sku=None,
+                    unit=bom_item.unit,
+                    qty_final_unit=bom_item.qty_final_unit,
+                    supplier_name=None,
+                    pack_size=None,
+                    packs_count=0,
+                    pack_price_ex_vat=unit_price,
+                    total_ex_vat=total_ex,
+                    vat_rate_pct=vat_rate,
+                    estimated_cost_inc_vat=_qm(total_ex * (Decimal("1") + vat_rate / Decimal("100"))),
+                    notes="fallback_default_cost_per_unit",
+                )
+            )
             continue
 
         pack_size = Decimal(str(price.pack_size or 0))
@@ -113,21 +154,26 @@ def compute_project_shopping_list(db: Session, project_id: int) -> ShoppingListR
         total_ex = _qm(Decimal(packs_count) * pack_price)
         material = price.material
         vat_rate = Decimal(str(material.vat_rate_pct or 25))
-        items.append(ShoppingListItem(
-            material_id=bom_item.material_id,
-            material_name=bom_item.name,
-            sku=material.sku,
-            unit=bom_item.unit,
-            qty_final_unit=bom_item.qty_final_unit,
-            supplier_name=price.supplier.name,
-            pack_size=pack_size,
-            packs_count=packs_count,
-            pack_price_ex_vat=pack_price,
-            total_ex_vat=total_ex,
-            vat_rate_pct=vat_rate,
-            estimated_cost_inc_vat=_qm(total_ex * (Decimal("1") + vat_rate / Decimal("100"))),
-            notes=None,
-        ))
+        items.append(
+            ShoppingListItem(
+                material_id=bom_item.material_id,
+                material_name=bom_item.name,
+                sku=material.sku,
+                unit=bom_item.unit,
+                qty_final_unit=bom_item.qty_final_unit,
+                supplier_name=price.supplier.name,
+                pack_size=pack_size,
+                packs_count=packs_count,
+                pack_price_ex_vat=pack_price,
+                total_ex_vat=total_ex,
+                vat_rate_pct=vat_rate,
+                estimated_cost_inc_vat=_qm(total_ex * (Decimal("1") + vat_rate / Decimal("100"))),
+                notes=None,
+            )
+        )
+
+    for unresolved in catalog_report.unresolved_rows:
+        warnings.append(f"material:{unresolved.material_code}:UNRESOLVED_PRICING")
 
     total_ex = _qm(sum((i.total_ex_vat for i in items), start=Decimal("0")))
     total_inc = _qm(sum((i.estimated_cost_inc_vat for i in items), start=Decimal("0")))
@@ -159,17 +205,19 @@ def apply_shopping_list_to_project_cost_items(db: Session, project_id: int, repo
         db.add(category)
         db.flush()
     for item in report.items:
-        db.add(ProjectCostItem(
-            project_id=project_id,
-            cost_category_id=category.id,
-            material_id=item.material_id,
-            title=f"Shopping: {item.material_name}",
-            amount=item.total_ex_vat,
-            is_material=True,
-            source_type="SHOPPING_LIST",
-            source_hash=report.source_hash,
-            comment=f"packs={item.packs_count}",
-        ))
+        db.add(
+            ProjectCostItem(
+                project_id=project_id,
+                cost_category_id=category.id,
+                material_id=item.material_id,
+                title=f"Shopping: {item.material_name}",
+                amount=item.total_ex_vat,
+                is_material=True,
+                source_type="SHOPPING_LIST",
+                source_hash=report.source_hash,
+                comment=f"packs={item.packs_count}",
+            )
+        )
     db.commit()
     return len(report.items)
 

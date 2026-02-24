@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Material Catalog</h1>
+<p><a href="/materials/catalog/new">Add catalog item</a></p>
+<table>
+<tr><th>Code</th><th>Name</th><th>Pack</th><th>Price ex VAT</th><th>VAT %</th><th>Active</th><th>Default</th><th></th></tr>
+{% for i in items %}
+<tr>
+<td>{{ i.material_code }}</td><td>{{ i.name }}</td><td>{{ i.package_size }} {{ i.package_unit }}</td><td>{{ i.price_ex_vat }}</td><td>{{ i.vat_rate_pct }}</td>
+<td>{{ 'Yes' if i.is_active else 'No' }}</td><td>{{ 'Yes' if i.is_default_for_material else 'No' }}</td><td><a href="/materials/catalog/{{ i.id }}/edit">Edit</a></td>
+</tr>
+{% else %}<tr><td colspan="8">—</td></tr>{% endfor %}
+</table>
+{% endblock %}
