@@ -245,10 +245,11 @@
             <div id="worktype-info" class="muted"></div>
         </div>
         <div>
-            <label>{{ t("projects.work_items.apply_to") }}</label>
-            <select name="apply_to" id="apply-to-select">
-                <option value="selected_room" selected>{{ t("projects.work_items.apply_to.selected_room") }}</option>
-                <option value="all_rooms">{{ t("projects.work_items.apply_to.all_rooms") }}</option>
+            <label>{{ t("projects.work_items.scope_mode") }}</label>
+            <select name="scope_mode" id="scope-mode-select">
+                <option value="single_room" selected>{{ t("projects.work_items.scope.single_room") }}</option>
+                <option value="selected_rooms">{{ t("projects.work_items.scope.selected_rooms") }}</option>
+                <option value="all_rooms">{{ t("projects.work_items.scope.all_rooms") }}</option>
             </select>
         </div>
         <div id="room-select-wrapper">
@@ -277,10 +278,21 @@
             </div>
             {% endif %}
         </div>
+        <div id="rooms-multiselect-wrapper" style="display:none;">
+            <label>{{ t("projects.work_items.scope.selected_rooms") }}</label>
+            {% for room in rooms %}
+            <label style="display:block;"><input type="checkbox" name="selected_room_ids" value="{{ room.id }}"> {{ room.name }}</label>
+            {% endfor %}
+        </div>
         <div>
             <label>{{ t("label.quantity") }}</label>
             <input type="number" step="0.01" name="quantity" required>
         </div>
+        <div>
+            <label>{{ t("projects.work_items.layers") }}</label>
+            <input type="number" step="1" min="1" name="layers" value="1">
+        </div>
+        <div id="scope-preview" class="muted"></div>
         <div>
             <label>{{ t("label.difficulty") }}</label>
             <input type="number" step="0.01" name="difficulty_factor" value="1.0">
@@ -657,6 +669,9 @@
 const unitTemplate = "{{ t('worktypes.info.unit_prefix') }}";
 const normTemplate = "{{ t('worktypes.info.base_norm') }}";
 const difficultyTemplate = "{{ t('worktypes.info.base_difficulty') }}";
+const previewRoomsTemplate = "{{ t('projects.work_items.preview.rooms') }}";
+const previewAreaTemplate = "{{ t('projects.work_items.preview.area') }}";
+const previewHoursTemplate = "{{ t('projects.work_items.preview.hours') }}";
 
 function updateRoomInfo() {
   const select = document.getElementById("room-select");
@@ -743,28 +758,93 @@ document.addEventListener("click", function (event) {
   }
 });
 
+function parseDecimal(value) {
+  const num = parseFloat(value || "0");
+  return Number.isFinite(num) ? num : 0;
+}
+
+function detectBasis(option) {
+  const unit = (option?.getAttribute("data-unit") || "").toLowerCase();
+  const text = (option?.textContent || "").toLowerCase();
+  if (unit === "m2") {
+    if (text.includes("потол") || text.includes("ceiling") || text.includes("tak")) return "ceiling";
+    if (text.includes("стен") || text.includes("wall") || text.includes("vägg")) return "wall";
+    return "floor";
+  }
+  if (unit === "m") return "baseboard";
+  return "custom";
+}
+
+function selectedRoomOptions(mode) {
+  const roomSelect = document.getElementById("room-select");
+  if (mode === "single_room") {
+    return roomSelect && roomSelect.selectedIndex > 0 ? [roomSelect.options[roomSelect.selectedIndex]] : [];
+  }
+  if (mode === "selected_rooms") {
+    const selected = [];
+    document.querySelectorAll('input[name="selected_room_ids"]:checked').forEach((input) => {
+      const option = document.querySelector(`#room-select option[value="${input.value}"]`);
+      if (option) selected.push(option);
+    });
+    return selected;
+  }
+  return Array.from(document.querySelectorAll('#room-select option[value]'));
+}
+
+function updateScopePreview() {
+  const mode = document.getElementById("scope-mode-select")?.value || "single_room";
+  const preview = document.getElementById("scope-preview");
+  const wtOption = document.getElementById("work-type-select")?.selectedOptions?.[0];
+  const layers = parseDecimal(document.querySelector('input[name="layers"]')?.value || "1") || 1;
+  const hpu = parseDecimal(wtOption?.getAttribute("data-hours-per-unit"));
+  const basis = detectBasis(wtOption);
+  const options = selectedRoomOptions(mode);
+  let totalArea = 0;
+  options.forEach((option) => {
+    if (basis === "wall") totalArea += parseDecimal(option.getAttribute("data-wall-area"));
+    else if (basis === "ceiling") totalArea += parseDecimal(option.getAttribute("data-ceiling-area"));
+    else if (basis === "floor") totalArea += parseDecimal(option.getAttribute("data-floor-area"));
+    else if (basis === "baseboard") totalArea += parseDecimal(option.getAttribute("data-baseboard-length"));
+  });
+  totalArea *= layers;
+  const hours = totalArea * hpu;
+  if (preview) {
+    preview.textContent = `${previewRoomsTemplate}: ${options.length}. ${previewAreaTemplate}: ${totalArea.toFixed(2)}. ${previewHoursTemplate}: ${hours.toFixed(2)}`;
+  }
+}
+
 function updateApplyToState() {
-  const applyTo = document.getElementById("apply-to-select");
+  const mode = document.getElementById("scope-mode-select")?.value || "single_room";
   const roomWrapper = document.getElementById("room-select-wrapper");
   const roomSelect = document.getElementById("room-select");
-  const isAllRooms = applyTo && applyTo.value === "all_rooms";
+  const selectedRoomsWrapper = document.getElementById("rooms-multiselect-wrapper");
+
   if (roomWrapper) {
-    roomWrapper.style.display = isAllRooms ? "none" : "block";
+    roomWrapper.style.display = mode === "single_room" ? "block" : "none";
+  }
+  if (selectedRoomsWrapper) {
+    selectedRoomsWrapper.style.display = mode === "selected_rooms" ? "block" : "none";
   }
   if (roomSelect) {
-    roomSelect.disabled = !!isAllRooms;
+    roomSelect.disabled = mode !== "single_room";
   }
+  updateScopePreview();
 }
 
 document.addEventListener("change", function (event) {
   if (event.target && event.target.id === "room-select") {
     updateRoomInfo();
+    updateScopePreview();
   }
   if (event.target && event.target.id === "work-type-select") {
     updateWorktypeInfo();
+    updateScopePreview();
   }
-  if (event.target && event.target.id === "apply-to-select") {
+  if (event.target && event.target.id === "scope-mode-select") {
     updateApplyToState();
+  }
+  if (event.target && (event.target.name === "selected_room_ids" || event.target.name === "layers")) {
+    updateScopePreview();
   }
 });
 
@@ -772,6 +852,7 @@ document.addEventListener("DOMContentLoaded", function () {
   updateRoomInfo();
   updateWorktypeInfo();
   updateApplyToState();
+  updateScopePreview();
 });
 </script>
 <script>

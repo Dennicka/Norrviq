@@ -22,6 +22,10 @@ class ProjectTotals(BaseModel):
 class BulkEstimateResult(BaseModel):
     created_item_ids: list[int]
     skipped_rooms: list[str]
+    used_rooms_count: int
+    total_quantity: Decimal
+    total_hours: Decimal
+    source_group_ref: str | None = None
 
 
 class WorkItemPricingMode(str, Enum):
@@ -36,6 +40,11 @@ class ProjectPricingTotals(BaseModel):
     total_cost_sek: Decimal
     total_margin_sek: Decimal
     total_margin_pct: Decimal
+
+
+def _scaled(value: Decimal | None, layers: Decimal) -> Decimal:
+    base = Decimal(str(value or 0))
+    return (base * layers).quantize(Decimal("0.01"))
 
 
 def _norm_mode(value: str | None) -> WorkItemPricingMode:
@@ -69,25 +78,26 @@ def calculate_project_total_hours(db: Session, project_id: int) -> Decimal:
     return Decimal(str(total or 0)).quantize(Decimal("0.01"))
 
 
-def _resolve_bulk_quantity_for_room(room: Room, work_type: WorkType) -> Decimal | None:
+def _resolve_bulk_quantity_for_room(room: Room, work_type: WorkType, *, layers: Decimal = Decimal("1.00")) -> Decimal | None:
     geometry = compute_room_geometry_from_model(room)
     unit = (work_type.unit or "").lower()
     category = (work_type.category or "").lower()
 
     if unit == "room":
-        return Decimal("1.00")
+        base_quantity = Decimal("1.00")
+        return (base_quantity * layers).quantize(Decimal("0.01"))
     if unit == "m":
-        return geometry.baseboard_lm
+        return _scaled(geometry.baseboard_lm, layers)
     if unit != "m2":
         return None
 
     if any(marker in category for marker in ("wall", "стен", "vägg")):
-        return geometry.wall_area_net_m2
+        return _scaled(geometry.wall_area_net_m2, layers)
     if any(marker in category for marker in ("ceiling", "потол", "tak")):
-        return geometry.ceiling_area_m2
+        return _scaled(geometry.ceiling_area_m2, layers)
     if any(marker in category for marker in ("floor", "пол", "golv")):
-        return geometry.floor_area_m2
-    return geometry.floor_area_m2
+        return _scaled(geometry.floor_area_m2, layers)
+    return _scaled(geometry.floor_area_m2, layers)
 
 
 def estimate_project_work_bulk(
@@ -101,13 +111,21 @@ def estimate_project_work_bulk(
     hourly_rate_sek: Decimal | None = None,
     area_rate_sek: Decimal | None = None,
     fixed_price_sek: Decimal | None = None,
+    room_ids: list[int] | None = None,
+    layers: Decimal = Decimal("1.00"),
+    source_group_ref: str | None = None,
 ) -> BulkEstimateResult:
     created_item_ids: list[int] = []
     skipped_rooms: list[str] = []
-    rooms = db.query(Room).filter(Room.project_id == project.id).all()
+    total_quantity = Decimal("0.00")
+    total_hours = Decimal("0.00")
+    query = db.query(Room).filter(Room.project_id == project.id)
+    if room_ids is not None:
+        query = query.filter(Room.id.in_(room_ids))
+    rooms = query.all()
 
     for room in rooms:
-        quantity = _resolve_bulk_quantity_for_room(room, work_type)
+        quantity = _resolve_bulk_quantity_for_room(room, work_type, layers=layers)
         if quantity is None or quantity <= 0:
             skipped_rooms.append(room.name)
             continue
@@ -122,13 +140,23 @@ def estimate_project_work_bulk(
             hourly_rate_sek=hourly_rate_sek,
             area_rate_sek=area_rate_sek,
             fixed_price_sek=fixed_price_sek,
+            source_group_ref=source_group_ref,
             comment=comment,
         )
         db.add(item)
         db.flush()
         created_item_ids.append(item.id)
+        total_quantity += Decimal(str(item.quantity or 0))
+        total_hours += (Decimal(str(item.quantity or 0)) * Decimal(str(work_type.hours_per_unit or 0)) * difficulty_factor)
 
-    return BulkEstimateResult(created_item_ids=created_item_ids, skipped_rooms=skipped_rooms)
+    return BulkEstimateResult(
+        created_item_ids=created_item_ids,
+        skipped_rooms=skipped_rooms,
+        used_rooms_count=len(created_item_ids),
+        total_quantity=total_quantity.quantize(Decimal("0.01")),
+        total_hours=total_hours.quantize(Decimal("0.01")),
+        source_group_ref=source_group_ref,
+    )
 
 
 def calculate_work_item(

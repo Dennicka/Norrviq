@@ -5,6 +5,7 @@ import logging
 from decimal import Decimal, InvalidOperation
 
 from datetime import date, datetime, timezone
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
@@ -970,11 +971,34 @@ async def add_work_item(
 
     difficulty_factor = Decimal(form.get("difficulty_factor") or "1")
     comment = form.get("comment")
-    apply_to = form.get("apply_to") or "selected_room"
+    scope_mode = (form.get("scope_mode") or form.get("apply_to") or "room").strip()
+    if scope_mode == "selected_room":
+        scope_mode = "room"
+    layers = Decimal(form.get("layers") or "1")
 
     pricing_data = _parse_pricing_form(form)
 
-    if apply_to == "all_rooms":
+    project_room_ids = {room.id for room in project.rooms}
+
+    if scope_mode in {"all_rooms", "selected_rooms"}:
+        if not project_room_ids:
+            add_flash_message(request, translator("projects.work_items.no_rooms"), "error")
+            db.rollback()
+            return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
+        selected_room_ids: list[int] | None = None
+        if scope_mode == "selected_rooms":
+            selected_raw = form.getlist("selected_room_ids") or form.getlist("room_ids")
+            selected_room_ids = sorted({int(raw) for raw in selected_raw if str(raw).strip().isdigit()})
+            if not selected_room_ids:
+                add_flash_message(request, translator("projects.work_items.empty_selected_rooms"), "error")
+                db.rollback()
+                return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
+            selected_room_ids = [room_id for room_id in selected_room_ids if room_id in project_room_ids]
+            if not selected_room_ids:
+                add_flash_message(request, translator("projects.work_items.empty_selected_rooms"), "error")
+                db.rollback()
+                return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
+        source_group_ref = f"generated:project_scope:{uuid4()}"
         result = estimate_project_work_bulk(
             db,
             project=project,
@@ -985,6 +1009,9 @@ async def add_work_item(
             hourly_rate_sek=pricing_data["hourly_rate_sek"],
             area_rate_sek=pricing_data["area_rate_sek"],
             fixed_price_sek=pricing_data["fixed_price_sek"],
+            room_ids=selected_room_ids,
+            layers=layers,
+            source_group_ref=source_group_ref,
         )
         if result.skipped_rooms:
             names = ", ".join(result.skipped_rooms[:5])
@@ -1017,7 +1044,7 @@ async def add_work_item(
         project_id=project.id,
         work_type_id=work_type.id,
         room_id=room.id if room else None,
-        quantity=Decimal(form.get("quantity") or "0"),
+        quantity=(Decimal(form.get("quantity") or "0") * layers).quantize(Decimal("0.01")),
         difficulty_factor=difficulty_factor,
         pricing_mode=pricing_data["pricing_mode"],
         hourly_rate_sek=pricing_data["hourly_rate_sek"],

@@ -108,6 +108,58 @@ def test_project_add_work_item_form_post():
         db.close()
 
 
+def test_project_add_work_item_legacy_apply_to_selected_room_without_room_keeps_backward_compat():
+    login()
+    db = SessionLocal()
+    try:
+        project = Project(name=f"Legacy Work Item Project {uuid4().hex[:8]}")
+        worktype = WorkType(
+            code=f"WT-LEGACY-{uuid4().hex[:8]}",
+            category="test",
+            unit="m2",
+            name_ru="Тест",
+            name_sv="Test",
+            description_ru="",
+            description_sv="",
+            hours_per_unit=Decimal("1.00"),
+            base_difficulty_factor=Decimal("1.0"),
+            is_active=True,
+        )
+        db.add_all([project, worktype])
+        db.commit()
+        db.refresh(project)
+        db.refresh(worktype)
+        project_id = project.id
+        worktype_id = worktype.id
+    finally:
+        db.close()
+
+    response = client.post(
+        f"/projects/{project_id}/add-work-item",
+        data={
+            "work_type_id": str(worktype_id),
+            "apply_to": "selected_room",
+            "quantity": "7",
+            "difficulty_factor": "1.00",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+
+    db = SessionLocal()
+    try:
+        item = (
+            db.query(ProjectWorkItem)
+            .filter(ProjectWorkItem.project_id == project_id)
+            .order_by(ProjectWorkItem.id.desc())
+            .first()
+        )
+        assert item is not None
+        assert Decimal(str(item.quantity)) == Decimal("7.00")
+    finally:
+        db.close()
+
+
 def test_worktype_create_form_post():
     login()
     code = f"WT-NEW-{uuid4().hex[:8]}"

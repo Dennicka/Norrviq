@@ -10,7 +10,7 @@ from app.main import app
 from app.models.project import Project, ProjectWorkItem
 from app.models.room import Room
 from app.models.worktype import WorkType
-from app.services.estimates import calculate_project_total_hours
+from app.services.geometry import compute_room_geometry_from_model
 
 client = TestClient(app)
 settings = get_settings()
@@ -23,16 +23,16 @@ def _login() -> None:
     )
 
 
-def _seed_project_with_rooms(*, include_invalid_room: bool = False) -> tuple[int, int]:
+def _seed_project_with_rooms(*, include_invalid_room: bool = False, category: str = "floor") -> tuple[int, int, int, int]:
     db = SessionLocal()
     try:
         project = Project(name=f"Bulk Project {uuid4().hex[:8]}")
         work_type = WorkType(
             code=f"WT-BULK-{uuid4().hex[:8]}",
-            category="floor",
+            category=category,
             unit="m2",
-            name_ru="Защита пола",
-            name_sv="Golvskydd",
+            name_ru="Тестовая работа",
+            name_sv="Testarbete",
             hours_per_unit=Decimal("1.50"),
             base_difficulty_factor=Decimal("1.00"),
             is_active=True,
@@ -45,18 +45,20 @@ def _seed_project_with_rooms(*, include_invalid_room: bool = False) -> tuple[int
         db.commit()
         db.refresh(project)
         db.refresh(work_type)
-        return project.id, work_type.id
+        db.refresh(room_1)
+        db.refresh(room_2)
+        return project.id, work_type.id, room_1.id, room_2.id
     finally:
         db.close()
 
 
-def test_bulk_apply_creates_rows_for_all_valid_rooms():
+def test_all_rooms_creates_room_level_entries_for_every_room():
     _login()
-    project_id, work_type_id = _seed_project_with_rooms()
+    project_id, work_type_id, _, _ = _seed_project_with_rooms()
 
     response = client.post(
         f"/projects/{project_id}/add-work-item",
-        data={"work_type_id": str(work_type_id), "apply_to": "all_rooms", "difficulty_factor": "1.0", "comment": "bulk"},
+        data={"work_type_id": str(work_type_id), "scope_mode": "all_rooms", "difficulty_factor": "1.0", "layers": "1"},
         follow_redirects=False,
     )
     assert response.status_code == 303
@@ -65,75 +67,22 @@ def test_bulk_apply_creates_rows_for_all_valid_rooms():
     try:
         items = db.query(ProjectWorkItem).filter(ProjectWorkItem.project_id == project_id).all()
         assert len(items) == 2
-        quantities = sorted(Decimal(str(item.quantity)) for item in items)
-        assert quantities == [Decimal("10.00"), Decimal("20.00")]
+        assert all(item.room_id for item in items)
+        assert len({item.source_group_ref for item in items}) == 1
     finally:
         db.close()
 
 
-def test_total_hours_aggregation_returns_correct_sum():
+def test_selected_rooms_creates_entries_only_for_selected_rooms():
     _login()
-    project_id, work_type_id = _seed_project_with_rooms()
-
-    client.post(
-        f"/projects/{project_id}/add-work-item",
-        data={"work_type_id": str(work_type_id), "apply_to": "all_rooms", "difficulty_factor": "1.0"},
-        follow_redirects=False,
-    )
-
-    db = SessionLocal()
-    try:
-        total_hours = calculate_project_total_hours(db, project_id)
-        assert total_hours == Decimal("45.00")
-    finally:
-        db.close()
-
-
-def test_bulk_apply_skips_invalid_geometry_with_partial_success_warning():
-    _login()
-    project_id, work_type_id = _seed_project_with_rooms(include_invalid_room=True)
-
-    with patch("app.routers.web_projects.add_flash_message") as add_flash:
-        response = client.post(
-            f"/projects/{project_id}/add-work-item",
-            data={"work_type_id": str(work_type_id), "apply_to": "all_rooms", "difficulty_factor": "1.0"},
-            follow_redirects=False,
-        )
-
-    assert response.status_code == 303
-
-    db = SessionLocal()
-    try:
-        items = db.query(ProjectWorkItem).filter(ProjectWorkItem.project_id == project_id).all()
-        assert len(items) == 2
-    finally:
-        db.close()
-
-    flash_calls = [call.args for call in add_flash.call_args_list]
-    assert any("Invalid" in str(message) and level == "warning" for _, message, level in flash_calls)
-
-
-def test_single_room_mode_still_works():
-    _login()
-    project_id, work_type_id = _seed_project_with_rooms()
-
-    db = SessionLocal()
-    try:
-        room_id = (
-            db.query(Room.id)
-            .filter(Room.project_id == project_id, Room.name == "R1")
-            .scalar()
-        )
-    finally:
-        db.close()
+    project_id, work_type_id, room_1_id, _ = _seed_project_with_rooms()
 
     response = client.post(
         f"/projects/{project_id}/add-work-item",
         data={
             "work_type_id": str(work_type_id),
-            "apply_to": "selected_room",
-            "room_id": str(room_id),
-            "quantity": "5",
+            "scope_mode": "selected_rooms",
+            "selected_room_ids": [str(room_1_id)],
             "difficulty_factor": "1.0",
         },
         follow_redirects=False,
@@ -144,6 +93,91 @@ def test_single_room_mode_still_works():
     try:
         items = db.query(ProjectWorkItem).filter(ProjectWorkItem.project_id == project_id).all()
         assert len(items) == 1
-        assert Decimal(str(items[0].quantity)) == Decimal("5.00")
+        assert items[0].room_id == room_1_id
     finally:
         db.close()
+
+
+def test_geometry_basis_uses_matching_room_dimension():
+    _login()
+    project_id, _, room_1_id, _ = _seed_project_with_rooms(category="wall")
+
+    db = SessionLocal()
+    try:
+        work_type = WorkType(
+            code=f"WT-CEIL-{uuid4().hex[:8]}",
+            category="ceiling",
+            unit="m2",
+            name_ru="Потолок",
+            name_sv="Tak",
+            hours_per_unit=Decimal("1.00"),
+            base_difficulty_factor=Decimal("1.00"),
+            is_active=True,
+        )
+        db.add(work_type)
+        db.commit()
+        db.refresh(work_type)
+    finally:
+        db.close()
+
+    client.post(f"/projects/{project_id}/add-work-item", data={"work_type_id": str(work_type.id), "scope_mode": "selected_rooms", "selected_room_ids": [str(room_1_id)], "difficulty_factor": "1.0"}, follow_redirects=False)
+
+    db = SessionLocal()
+    try:
+        room = db.get(Room, room_1_id)
+        item = db.query(ProjectWorkItem).filter(ProjectWorkItem.project_id == project_id).first()
+        assert Decimal(str(item.quantity)) == compute_room_geometry_from_model(room).ceiling_area_m2.quantize(Decimal("0.01"))
+    finally:
+        db.close()
+
+
+def test_layers_multiplier_is_applied_to_quantity():
+    _login()
+    project_id, work_type_id, room_1_id, _ = _seed_project_with_rooms(category="ceiling")
+
+    client.post(
+        f"/projects/{project_id}/add-work-item",
+        data={"work_type_id": str(work_type_id), "scope_mode": "selected_rooms", "selected_room_ids": [str(room_1_id)], "difficulty_factor": "1.0", "layers": "2"},
+        follow_redirects=False,
+    )
+
+    db = SessionLocal()
+    try:
+        room = db.get(Room, room_1_id)
+        item = db.query(ProjectWorkItem).filter(ProjectWorkItem.project_id == project_id).first()
+        expected = (compute_room_geometry_from_model(room).ceiling_area_m2 * Decimal("2")).quantize(Decimal("0.01"))
+        assert Decimal(str(item.quantity)) == expected
+    finally:
+        db.close()
+
+
+def test_missing_geometry_does_not_crash_and_shows_warning():
+    _login()
+    project_id, work_type_id, _, _ = _seed_project_with_rooms(include_invalid_room=True)
+
+    with patch("app.routers.web_projects.add_flash_message") as add_flash:
+        response = client.post(
+            f"/projects/{project_id}/add-work-item",
+            data={"work_type_id": str(work_type_id), "scope_mode": "all_rooms", "difficulty_factor": "1.0"},
+            follow_redirects=False,
+        )
+
+    assert response.status_code == 303
+    flash_calls = [call.args for call in add_flash.call_args_list]
+    assert any("не хватает размеров" in str(message) and level == "warning" for _, message, level in flash_calls)
+
+
+def test_selected_rooms_validation_error_when_empty_selection():
+    _login()
+    project_id, work_type_id, _, _ = _seed_project_with_rooms()
+
+    with patch("app.routers.web_projects.add_flash_message") as add_flash:
+        response = client.post(
+            f"/projects/{project_id}/add-work-item",
+            data={"work_type_id": str(work_type_id), "scope_mode": "selected_rooms", "difficulty_factor": "1.0"},
+            follow_redirects=False,
+        )
+
+    assert response.status_code == 303
+    flash_calls = [call.args for call in add_flash.call_args_list]
+    assert any("Выберите хотя бы одно помещение" in str(message) and level == "error" for _, message, level in flash_calls)
