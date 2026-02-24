@@ -230,3 +230,81 @@ def test_add_work_item_hidden_pricing_fields_do_not_fail():
     )
 
     assert response.status_code == 303
+
+
+def test_add_work_item_invalid_pricing_mode_does_not_create_item():
+    login()
+    db = SessionLocal()
+    try:
+        project = Project(name=f"Invalid Pricing {uuid4().hex[:8]}")
+        worktype = WorkType(
+            code=f"WT-INVALID-{uuid4().hex[:8]}",
+            category="test",
+            unit="m2",
+            name_ru="Тест",
+            name_sv="Test",
+            hours_per_unit=Decimal("1.00"),
+            base_difficulty_factor=Decimal("1.0"),
+            is_active=True,
+        )
+        db.add_all([project, worktype])
+        db.commit()
+        db.refresh(project)
+        db.refresh(worktype)
+        project_id = project.id
+        worktype_id = worktype.id
+    finally:
+        db.close()
+
+    response = client.post(
+        f"/projects/{project_id}/add-work-item",
+        data={"work_type_id": str(worktype_id), "quantity": "5", "pricing_mode": "bad_mode"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+
+    db = SessionLocal()
+    try:
+        items_count = db.query(ProjectWorkItem).filter(ProjectWorkItem.project_id == project_id).count()
+        assert items_count == 0
+    finally:
+        db.close()
+
+
+def test_add_work_item_fixed_mode_requires_fixed_price():
+    login()
+    db = SessionLocal()
+    try:
+        project = Project(name=f"Fixed Pricing {uuid4().hex[:8]}")
+        worktype = WorkType(
+            code=f"WT-FIXED-{uuid4().hex[:8]}",
+            category="test",
+            unit="m2",
+            name_ru="Тест",
+            name_sv="Test",
+            hours_per_unit=Decimal("1.00"),
+            base_difficulty_factor=Decimal("1.0"),
+            is_active=True,
+        )
+        db.add_all([project, worktype])
+        db.commit()
+        db.refresh(project)
+        db.refresh(worktype)
+        project_id = project.id
+        worktype_id = worktype.id
+    finally:
+        db.close()
+
+    response = client.post(
+        f"/projects/{project_id}/add-work-item",
+        data={"work_type_id": str(worktype_id), "quantity": "5", "pricing_mode": "fixed"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+
+    db = SessionLocal()
+    try:
+        items_count = db.query(ProjectWorkItem).filter(ProjectWorkItem.project_id == project_id).count()
+        assert items_count == 0
+    finally:
+        db.close()

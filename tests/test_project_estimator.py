@@ -89,3 +89,64 @@ def test_pricing_modes_hourly_sqm_fixed():
     assert summary_sqm.total_price == Decimal("7000.00")
     assert summary_fixed.total_price == Decimal("7000.00")
     assert summary_fixed.labour.total_hours == Decimal("4.00")
+
+
+def test_calculate_work_item_totals_hourly():
+    project = Project(name="P")
+    room = _room(1, "A", "10", "14", "2.5")
+    project.rooms = [room]
+    scope = build_scope(project, room_ids=[1], all_rooms=False)
+    item = ProjectWorkItem(id=1, room_id=1, pricing_mode="hourly", calculated_hours=Decimal("3"), hourly_rate_sek=Decimal("500"))
+
+    from app.services.project_estimator import calculate_work_item_totals
+
+    line = calculate_work_item_totals(item=item, scope=scope)
+    assert line.line_total == Decimal("1500.00")
+    assert line.labour_hours == Decimal("3.00")
+
+
+def test_calculate_work_item_totals_sqm():
+    project = Project(name="P")
+    room = _room(1, "A", "10", "14", "2.5")
+    project.rooms = [room]
+    scope = build_scope(project, room_ids=[1], all_rooms=False)
+    item = ProjectWorkItem(id=1, room_id=1, pricing_mode="sqm", billable_area_m2=Decimal("35"), area_rate_sek=Decimal("200"))
+
+    from app.services.project_estimator import calculate_work_item_totals
+
+    line = calculate_work_item_totals(item=item, scope=scope)
+    assert line.line_total == Decimal("7000.00")
+    assert line.calculated_quantity == Decimal("35.00")
+
+
+def test_calculate_work_item_totals_fixed():
+    project = Project(name="P")
+    room = _room(1, "A", "10", "14", "2.5")
+    project.rooms = [room]
+    scope = build_scope(project, room_ids=[1], all_rooms=False)
+    item = ProjectWorkItem(id=1, room_id=1, pricing_mode="fixed", fixed_price_sek=Decimal("7200"), calculated_hours=Decimal("4"))
+
+    from app.services.project_estimator import calculate_work_item_totals
+
+    line = calculate_work_item_totals(item=item, scope=scope)
+    assert line.line_total == Decimal("7200.00")
+    assert line.labour_hours == Decimal("4.00")
+
+
+def test_calculate_project_totals_mixed_modes():
+    project = Project(name="P")
+    project.rooms = [_room(1, "A", "10", "14", "2.5")]
+    scope = build_scope(project, room_ids=[1], all_rooms=False)
+    items = [
+        ProjectWorkItem(id=1, room_id=1, pricing_mode="hourly", calculated_hours=Decimal("2"), hourly_rate_sek=Decimal("500")),
+        ProjectWorkItem(id=2, room_id=1, pricing_mode="sqm", billable_area_m2=Decimal("10"), area_rate_sek=Decimal("200"), calculated_hours=Decimal("1")),
+        ProjectWorkItem(id=3, room_id=1, pricing_mode="fixed", fixed_price_sek=Decimal("3000"), calculated_hours=Decimal("0.5")),
+    ]
+
+    from app.services.project_estimator import calculate_project_totals
+
+    totals = calculate_project_totals(scope=scope, work_items=items, vat_rate_percent=Decimal("25"))
+    assert totals.total_labour_hours == Decimal("3.50")
+    assert totals.subtotal == Decimal("6000.00")
+    assert totals.vat_amount == Decimal("1500.00")
+    assert totals.total_inc_vat == Decimal("7500.00")

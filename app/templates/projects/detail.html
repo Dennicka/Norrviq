@@ -301,7 +301,7 @@
             <label>{{ t("projects.work_items.pricing_mode") }}</label>
             <select name="pricing_mode" data-pricing-mode>
                 <option value="hourly">{{ t("projects.work_items.pricing_mode.hourly") }}</option>
-                <option value="area">{{ t("projects.work_items.pricing_mode.area") }}</option>
+                <option value="sqm">{{ t("projects.work_items.pricing_mode.area") }}</option>
                 <option value="fixed">{{ t("projects.work_items.pricing_mode.fixed") }}</option>
             </select>
         </div>
@@ -309,7 +309,7 @@
             <label>{{ t("projects.work_items.hourly_rate") }}</label>
             <input type="number" step="0.01" name="hourly_rate_sek" value="{{ settings_obj.hourly_rate_company }}">
         </div>
-        <div data-pricing-field="area" style="display:none;">
+        <div data-pricing-field="sqm" style="display:none;">
             <label>{{ t("projects.work_items.area_rate") }}</label>
             <input type="number" step="0.01" name="area_rate_sek">
         </div>
@@ -352,10 +352,12 @@
     {% if estimator_summary.has_missing_data %}
     <p><span class="badge badge-warning">Не хватает данных для полного расчёта</span></p>
     {% endif %}
-    <p><strong>Часы всего:</strong> {{ estimator_summary.labour.total_hours }}</p>
-    <p><strong>Работы:</strong> {{ estimator_summary.total_price }}</p>
-    <p><strong>Материалы:</strong> {{ estimator_summary.materials_cost }}</p>
-    <p><strong>Итого:</strong> {{ estimator_summary.estimate_total }}</p>
+    <p><strong>Часы всего:</strong> {{ estimator_summary.totals.total_labour_hours }}</p>
+    <p><strong>Подытог работы:</strong> {{ estimator_summary.totals.subtotal_labour }}</p>
+    <p><strong>Подытог материалы:</strong> {{ estimator_summary.totals.subtotal_materials }}</p>
+    <p><strong>Подытог:</strong> {{ estimator_summary.totals.subtotal }}</p>
+    <p><strong>VAT:</strong> {{ estimator_summary.totals.vat_amount }}</p>
+    <p><strong>Итого с VAT:</strong> {{ estimator_summary.totals.total_inc_vat }}</p>
 
     <details>
         <summary>По помещениям</summary>
@@ -402,7 +404,10 @@
                 <th>{{ t("label.quantity") }}</th>
                 <th>{{ t("label.difficulty") }}</th>
                 <th>{{ t("label.hours") }}</th>
-                <th>{{ t("label.cost_without_moms") }}</th>
+                <th>Pricing mode</th>
+                <th>Qty</th>
+                <th>Rate</th>
+                <th>Line total</th>
                 <th>{{ t("projects.work_items.total_cost") }}</th>
                 <th>{{ t("projects.work_items.margin") }}</th>
                 <th>{{ t("projects.work_items.margin_percent") }}</th>
@@ -410,14 +415,18 @@
             </tr>
         </thead>
         <tbody>
-            {% for item in estimator_summary.scoped_work_items %}
+            {% for pricing_line in estimator_summary.pricing_lines %}
+            {% set item = estimator_summary.scoped_work_items[loop.index0] %}
             <tr>
                 <td>{{ item.work_type.name_ru if lang == 'ru' else item.work_type.name_sv }}</td>
                 <td>{{ item.room.name if item.room else '' }}</td>
                 <td>{{ item.quantity }}</td>
                 <td>{{ item.difficulty_factor }}</td>
-                <td>{{ item.calculated_hours or '' }}</td>
-                <td>{{ item.calculated_cost_without_moms or '' }}</td>
+                <td>{{ pricing_line.labour_hours }}</td>
+                <td>{{ pricing_line.pricing_mode }}</td>
+                <td>{{ pricing_line.calculated_quantity }}</td>
+                <td>{{ pricing_line.unit_rate }}</td>
+                <td>{{ pricing_line.line_total }}</td>
                 <td>{{ item.total_cost_sek or '' }}</td>
                 <td>{{ item.margin_sek or '' }}</td>
                 <td>{{ item.margin_pct or '' }}</td>
@@ -430,7 +439,7 @@
                 </td>
             </tr>
             {% else %}
-            <tr><td colspan="10">—</td></tr>
+            <tr><td colspan="13">—</td></tr>
             {% endfor %}
         </tbody>
     </table>

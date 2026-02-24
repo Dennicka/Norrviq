@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from decimal import Decimal
+from typing import Literal
 
 from app.models.project import Project, ProjectWorkItem
 from app.models.room import Room
@@ -47,6 +48,8 @@ class ProjectEstimateSummary:
     pricing_mode: str
     room_rows: list["RoomEstimateRow"] = field(default_factory=list)
     scoped_work_items: list[ProjectWorkItem] = field(default_factory=list)
+    pricing_lines: list["WorkItemPricingLine"] = field(default_factory=list)
+    totals: "ProjectPricingSummary" | None = None
 
 
 @dataclass
@@ -63,6 +66,27 @@ class RoomEstimateRow:
     has_missing_geometry: bool = False
 
 
+@dataclass
+class WorkItemPricingLine:
+    work_item_id: int | None
+    pricing_mode: str
+    calculated_quantity: Decimal
+    unit_rate: Decimal
+    labour_hours: Decimal
+    line_total: Decimal
+    source: str
+
+
+@dataclass
+class ProjectPricingSummary:
+    total_labour_hours: Decimal
+    subtotal_labour: Decimal
+    subtotal_materials: Decimal
+    subtotal: Decimal
+    vat_amount: Decimal
+    total_inc_vat: Decimal
+
+
 def _q(value: Decimal) -> Decimal:
     return value.quantize(MONEY)
 
@@ -73,6 +97,15 @@ def _matches_scope(item: ProjectWorkItem, scope: ProjectScope) -> bool:
     if item.room_id is None:
         return scope.all_rooms_selected
     return item.room_id in scope.room_ids
+
+
+def _norm_mode(value: str | None) -> Literal["hourly", "sqm", "fixed"]:
+    normalized = (value or "hourly").strip().lower()
+    if normalized == "area":
+        return "sqm"
+    if normalized in {"hourly", "sqm", "fixed"}:
+        return normalized
+    return "hourly"
 
 
 def build_scope(project: Project, room_ids: list[int] | None = None, all_rooms: bool = True) -> ProjectScope:
@@ -143,7 +176,7 @@ def calculate_price_totals(
     sqm_rate: Decimal,
     fixed_price: Decimal,
 ) -> Decimal:
-    normalized = (pricing_mode or WorkItemPricingMode.HOURLY.value).lower()
+    normalized = _norm_mode(pricing_mode or WorkItemPricingMode.HOURLY.value)
     if normalized == "fixed":
         return _q(fixed_price)
     if normalized == "sqm":
@@ -156,6 +189,66 @@ def calculate_price_totals(
     return _q(scoped_sum * hourly_rate)
 
 
+def calculate_work_item_totals(*, item: ProjectWorkItem, scope: ProjectScope) -> WorkItemPricingLine:
+    mode = _norm_mode(item.pricing_mode)
+    labour_hours = _q(Decimal(str(item.calculated_hours or 0)))
+    if mode == "fixed":
+        unit_rate = _q(Decimal(str(item.fixed_price_sek or 0)))
+        return WorkItemPricingLine(
+            work_item_id=item.id,
+            pricing_mode=mode,
+            calculated_quantity=Decimal("1.00"),
+            unit_rate=unit_rate,
+            labour_hours=labour_hours,
+            line_total=unit_rate,
+            source="fixed_price_sek",
+        )
+
+    if mode == "sqm":
+        quantity = _q(Decimal(str(item.billable_area_m2 or item.quantity or 0)))
+        if item.room_id is None:
+            quantity = aggregate_geometry(scope).walls_m2
+        unit_rate = _q(Decimal(str(item.area_rate_sek or 0)))
+        return WorkItemPricingLine(
+            work_item_id=item.id,
+            pricing_mode=mode,
+            calculated_quantity=quantity,
+            unit_rate=unit_rate,
+            labour_hours=labour_hours,
+            line_total=_q(quantity * unit_rate),
+            source="billable_area_m2",
+        )
+
+    quantity = labour_hours
+    unit_rate = _q(Decimal(str(item.hourly_rate_sek or 0)))
+    return WorkItemPricingLine(
+        work_item_id=item.id,
+        pricing_mode=mode,
+        calculated_quantity=quantity,
+        unit_rate=unit_rate,
+        labour_hours=labour_hours,
+        line_total=_q(quantity * unit_rate),
+        source="calculated_hours",
+    )
+
+
+def calculate_project_totals(*, scope: ProjectScope, work_items: list[ProjectWorkItem], vat_rate_percent: Decimal = Decimal("0")) -> ProjectPricingSummary:
+    lines = [calculate_work_item_totals(item=item, scope=scope) for item in work_items if _matches_scope(item, scope)]
+    total_labour_hours = _q(sum((line.labour_hours for line in lines), Decimal("0")))
+    subtotal_labour = _q(sum((line.line_total for line in lines), Decimal("0")))
+    subtotal_materials = Decimal("0.00")
+    subtotal = _q(subtotal_labour + subtotal_materials)
+    vat_amount = _q(subtotal * (vat_rate_percent / Decimal("100")))
+    return ProjectPricingSummary(
+        total_labour_hours=total_labour_hours,
+        subtotal_labour=subtotal_labour,
+        subtotal_materials=subtotal_materials,
+        subtotal=subtotal,
+        vat_amount=vat_amount,
+        total_inc_vat=_q(subtotal + vat_amount),
+    )
+
+
 def build_project_estimate_summary(
     *,
     project: Project,
@@ -164,6 +257,7 @@ def build_project_estimate_summary(
     hourly_rate: Decimal,
     sqm_rate: Decimal,
     fixed_price: Decimal,
+    vat_rate_percent: Decimal = Decimal("0"),
 ) -> ProjectEstimateSummary:
     scope = build_scope(project, room_ids=room_ids, all_rooms=not room_ids)
     scoped_items = [item for item in project.work_items if _matches_scope(item, scope)]
@@ -220,6 +314,8 @@ def build_project_estimate_summary(
         )
     total_materials_cost = _q(sum((row.materials_cost for row in room_rows), Decimal("0")))
     estimate_total = _q(total_price + total_materials_cost)
+    pricing_lines = [calculate_work_item_totals(item=item, scope=scope) for item in scoped_items]
+    totals = calculate_project_totals(scope=scope, work_items=project.work_items, vat_rate_percent=vat_rate_percent)
     return ProjectEstimateSummary(
         scope=scope,
         geometry=geometry,
@@ -231,4 +327,6 @@ def build_project_estimate_summary(
         pricing_mode=(pricing_mode or "hourly").lower(),
         room_rows=room_rows,
         scoped_work_items=scoped_items,
+        pricing_lines=pricing_lines,
+        totals=totals,
     )
