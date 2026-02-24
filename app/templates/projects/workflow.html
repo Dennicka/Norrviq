@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ project.name }}</h1>
+<p>{{ t('label.client') }}: {{ project.client.name if project.client else '—' }} | {{ t('label.address') }}: {{ project.address or '—' }}</p>
+<p><strong>{{ t('workflow.status_label') }}:</strong> {{ t('workflow.status.' ~ workflow_status) }}</p>
+
+<section>
+  <h2>{{ t('workflow.stepper') }}</h2>
+  <ol>
+    {% for step in steps %}
+    <li>
+      <strong>
+        {% if step.status == 'done' %}✅{% elif step.status == 'warning' %}⚠️{% else %}⛔{% endif %}
+        {{ t(step.title_key) }}
+      </strong>
+      {% if step.messages %}
+      <ul>{% for msg in step.messages %}<li>{{ t(msg) }}</li>{% endfor %}</ul>
+      {% endif %}
+      {% if step.cta_url %}<a href="{{ step.cta_url }}">{{ t('workflow.open_step') }}</a>{% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+</section>
+
+<section>
+  <h2>{{ t('workflow.estimate_summary') }}</h2>
+  <p>{{ t('workflow.total_hours') }}: {{ pricing_summary.labour_hours_total }}</p>
+  <p>{{ t('workflow.labour_cost') }}: {{ pricing_summary.selected_sell_price }}</p>
+  <p>{{ t('workflow.materials_estimate') }}: {{ pricing_summary.materials_total }}</p>
+  <p>{{ t('workflow.total_estimate') }}: {{ pricing_summary.selected_total_with_materials }}</p>
+  <p>{{ t('workflow.completeness_score') }}: {{ completeness.score }}</p>
+  <p>{{ t('workflow.sanity_issues') }}: {{ quality_report.blocks_count + quality_report.warnings_count }}</p>
+</section>
+
+<section>
+  <h2>{{ t('workflow.pricing_mode') }}</h2>
+  <p>{{ t('workflow.current_mode') }}: {{ pricing_mode }}</p>
+  <table>
+    <tr><th>Mode</th><th>Price ex VAT</th></tr>
+    {% for scenario in pricing_scenarios %}
+    <tr><td>{{ scenario.mode }}</td><td>{{ scenario.price_ex_vat }}</td></tr>
+    {% endfor %}
+  </table>
+  <form method="post" action="/projects/{{ project.id }}/workflow/select-pricing-mode">
+    {{ csrf_input(request) }}
+    <select name="mode">
+      <option value="HOURLY">HOURLY</option><option value="FIXED_TOTAL">FIXED_TOTAL</option><option value="PER_M2">PER_M2</option><option value="PER_ROOM">PER_ROOM</option><option value="PIECEWORK">PIECEWORK</option>
+    </select>
+    <button type="submit">{{ t('workflow.action.select_pricing') }}</button>
+  </form>
+</section>
+
+<section>
+  <h2>{{ t('workflow.materials_summary') }}</h2>
+  <p>{{ t('workflow.materials_count') }}: {{ bom_report.line_items|length }}</p>
+  <p>{{ t('workflow.materials_estimate') }}: {{ bom_report.materials_cost_total }}</p>
+  <ul>
+    {% for item in materials_top %}
+    <li>{{ item.material_name }} — {{ item.purchase_qty }} {{ item.unit }}</li>
+    {% endfor %}
+  </ul>
+  <p><a href="/projects/{{ project.id }}/materials-plan">{{ t('workflow.open_materials_plan') }}</a> | <a href="/projects/{{ project.id }}/shopping-list">{{ t('workflow.shopping_list') }}</a> | <a href="/projects/{{ project.id }}/materials-actuals">{{ t('workflow.actual_consumption') }}</a></p>
+</section>
+
+<section>
+  <h2>{{ t('workflow.documents') }}</h2>
+  <p>{{ t('workflow.offer_status') }}: {{ offer_status }}</p>
+  <p>{{ t('workflow.invoice_status') }}: {{ invoice_status }}</p>
+  <form method="post" action="/projects/{{ project.id }}/workflow/create-offer-draft" style="display:inline">{{ csrf_input(request) }}<button type="submit">{{ t('workflow.action.create_offer_draft') }}</button></form>
+  <form method="post" action="/offers/{{ project.id }}/finalize" style="display:inline">{{ csrf_input(request) }}<button type="submit">{{ t('workflow.action.issue_offer') }}</button></form>
+  <form method="post" action="/projects/{{ project.id }}/workflow/create-invoice-draft" style="display:inline">{{ csrf_input(request) }}<button type="submit">{{ t('workflow.action.create_invoice_draft') }}</button></form>
+  {% if latest_invoice %}<a href="/projects/{{ project.id }}/invoices/{{ latest_invoice.id }}">{{ t('workflow.action.open_invoice') }}</a>{% endif %}
+  <p><a href="/projects/{{ project.id }}/offer/pdf">{{ t('workflow.action.export_offer_pdf') }}</a>{% if latest_invoice %} | <a href="/invoices/{{ latest_invoice.id }}/pdf">{{ t('workflow.action.export_invoice_pdf') }}</a>{% endif %}</p>
+</section>
+
+<section>
+  <h2>{{ t('workflow.actions') }}</h2>
+  <form method="post" action="/projects/{{ project.id }}/workflow/recalculate" style="display:inline">{{ csrf_input(request) }}<button type="submit">{{ t('workflow.action.recalculate') }}</button></form>
+  <a class="button" href="/projects/{{ project.id }}">{{ t('workflow.action.project_details') }}</a>
+</section>
+
+<section>
+  <h2>{{ t('workflow.timeline') }}</h2>
+  <ul>
+    {% for event in activity %}
+    <li>{{ event.created_at }} — {{ event.event_type }}</li>
+    {% else %}
+    <li>—</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endblock %}

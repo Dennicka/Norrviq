@@ -12,6 +12,8 @@
             <th>{{ t("label.status") }}</th>
             <th>{{ t('label.planned_start_date') }}</th>
             <th>{{ t('label.planned_end_date') }}</th>
+            <th>{{ t('workflow.status_label') }}</th>
+            <th>{{ t('workflow.last_updated') }}</th>
             <th>{{ t("label.client_pays_total") }}</th>
             <th>{{ t("label.actions") }}</th>
         </tr>
@@ -24,11 +26,14 @@
             <td>{{ project.status }}</td>
             <td>{{ project.planned_start_date or '' }}</td>
             <td>{{ project.planned_end_date or '' }}</td>
+            <td>{{ t('workflow.status.' ~ workflow_states[project.id].workflow_status) }}</td>
+            <td>{{ workflow_states[project.id].updated_at or '' }}</td>
             <td>{{ project.client_pays_total or '' }}</td>
             <td>
                 <a href="/projects/{{ project.id }}">{{ t("projects.detail") }}</a>
                 |
                 <a href="/projects/{{ project.id }}/edit">{{ t('projects.edit') }}</a>
+                | <a href="/projects/{{ project.id }}/workflow">{{ t('workflow.open') }}</a>
                 <form method="post" action="/projects/{{ project.id }}/delete" style="display:inline;">
                     {{ csrf_input(request) }}
                     <button type="submit" onclick="return confirm('{{ t("label.delete") }}?');">{{ t('label.delete') }}</button>

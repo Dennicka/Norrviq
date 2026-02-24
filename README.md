@@ -140,3 +140,8 @@ await fetch('/clients/new', {
 ```
 
 Для встроенного UI также доступен helper `window.appFetch(url, options)`, который автоматически добавляет `X-CSRF-Token`.
+
+## Recommended usage
+
+Use the **Project Workflow** page as the main estimator flow: `/projects/{project_id}/workflow`.
+It centralizes setup, readiness, pricing, offer and invoice actions with one-click orchestration.

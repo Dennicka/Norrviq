@@ -36,7 +36,7 @@ from app.services.estimates import (
     recalculate_project_work_items,
     SCOPE_MODE_ROOM,
 )
-from app.services.offer_commercial import compute_offer_commercial, deserialize_offer_commercial, is_offer_snapshot_stale
+from app.services.offer_commercial import compute_offer_commercial, deserialize_offer_commercial, is_offer_snapshot_stale, serialize_offer_commercial
 from app.services.commercial_snapshot import DOC_TYPE_OFFER as SNAP_OFFER, read_commercial_snapshot
 from app.services.finance import calculate_project_financials, compute_project_finance
 from app.services.terms_templates import DOC_TYPE_OFFER, resolve_terms_template
@@ -46,6 +46,7 @@ from app.services.completeness import compute_completeness
 from app.services.geometry import aggregate_project_geometry
 from app.services.project_estimator import build_project_estimate_summary
 from app.services.project_pricing import build_project_pricing_summary
+from app.services.workflow import build_project_workflow_state
 from app.services.work_scope_apply import apply_work_item_to_scope
 from app.services.estimator_workspace import build_estimator_workspace
 from app.services.pricing import (
@@ -82,6 +83,7 @@ from app.services.materials_consumption import calculate_material_needs_for_proj
 from app.services.material_norms import build_project_material_bom
 from app.services.material_costing import cost_project_materials
 from app.services.pdf_export import render_pdf_from_html
+from app.services.invoice_lines import MERGE_REPLACE_ALL, generate_invoice_lines_from_project
 from app.services.shopping_list import (
     apply_shopping_list_to_invoice_material_lines,
     apply_shopping_list_to_project_cost_items,
@@ -395,6 +397,13 @@ async def list_projects(
     projects = db.query(Project).options(selectinload(Project.client)).all()
     context = template_context(request, lang)
     context["projects"] = projects
+    workflow_states = {}
+    for project in projects:
+        try:
+            workflow_states[project.id] = build_project_workflow_state(db, project.id, lang=lang)
+        except Exception:
+            workflow_states[project.id] = {"workflow_status": "draft", "updated_at": None}
+    context["workflow_states"] = workflow_states
     return templates.TemplateResponse(request, "projects/list.html", context)
 
 
@@ -518,8 +527,129 @@ async def project_detail(
         materials_calc_rows=material_rows,
         materials_calc_totals=material_totals,
         materials_auto_bom=auto_bom,
+        workflow_state=build_project_workflow_state(db, project.id, lang=lang),
     )
     return templates.TemplateResponse(request, "projects/detail.html", context)
+
+
+@router.get("/{project_id}/workflow", response_class=HTMLResponse)
+async def project_workflow(
+    project_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    lang: str = Depends(get_current_lang),
+):
+    state = build_project_workflow_state(db, project_id, lang=lang)
+    context = template_context(request, lang)
+    context.update(state)
+    return templates.TemplateResponse(request, "projects/workflow.html", context)
+
+
+@router.post("/{project_id}/workflow/recalculate")
+async def workflow_recalculate(
+    project_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    lang: str = Depends(get_current_lang),
+):
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    recalculate_project_work_items(db, project)
+    add_flash_message(request, make_t(lang)("estimator.recalculated"), "success")
+    return RedirectResponse(url=f"/projects/{project_id}/workflow", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{project_id}/workflow/select-pricing-mode")
+async def workflow_select_pricing_mode(
+    project_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    lang: str = Depends(get_current_lang),
+):
+    form = await request.form()
+    mode = (form.get("mode") or "").strip().upper()
+    pricing = get_or_create_project_pricing(db, project_id)
+    try:
+        select_pricing_mode(db, pricing=pricing, mode=mode, user_id=request.session.get("user_email"))
+        add_flash_message(request, make_t(lang)("workflow.flash.pricing_selected"), "success")
+    except PricingValidationError:
+        add_flash_message(request, make_t(lang)("workflow.flash.pricing_select_error"), "error")
+    return RedirectResponse(url=f"/projects/{project_id}/workflow", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{project_id}/workflow/create-offer-draft")
+async def workflow_create_offer_draft(
+    project_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    lang: str = Depends(get_current_lang),
+):
+    state = build_project_workflow_state(db, project_id, lang=lang)
+    if not state["can_create_offer"]:
+        add_flash_message(request, make_t(lang)(state["blocking_reasons"][0] if state["blocking_reasons"] else "workflow.flash.offer_blocked"), "error")
+        return RedirectResponse(url=f"/projects/{project_id}/workflow", status_code=status.HTTP_303_SEE_OTHER)
+    project = state["project"]
+    if project.offer_status == "issued":
+        add_flash_message(request, make_t(lang)("workflow.flash.offer_already_issued"), "warning")
+        return RedirectResponse(url=f"/projects/{project_id}/offer", status_code=status.HTTP_303_SEE_OTHER)
+    offer_commercial = compute_offer_commercial(db, project.id, lang=lang)
+    project.offer_commercial_snapshot = serialize_offer_commercial(offer_commercial)
+    project.offer_status = "draft"
+    db.add(project)
+    db.commit()
+    add_flash_message(request, make_t(lang)("workflow.flash.offer_draft_ready"), "success")
+    return RedirectResponse(url=f"/projects/{project_id}/offer", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{project_id}/workflow/create-invoice-draft")
+async def workflow_create_invoice_draft(
+    project_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    lang: str = Depends(get_current_lang),
+):
+    state = build_project_workflow_state(db, project_id, lang=lang)
+    if not state["can_create_invoice"]:
+        add_flash_message(request, make_t(lang)(state["blocking_reasons"][0] if state["blocking_reasons"] else "workflow.flash.invoice_blocked"), "error")
+        return RedirectResponse(url=f"/projects/{project_id}/workflow", status_code=status.HTTP_303_SEE_OTHER)
+
+    invoice = (
+        db.query(Invoice)
+        .filter(Invoice.source_project_id == project_id, Invoice.status == "draft")
+        .order_by(Invoice.id.desc())
+        .first()
+    )
+    if invoice is None:
+        from datetime import date as dt_date
+
+        invoice = Invoice(
+            project_id=project_id,
+            source_project_id=project_id,
+            invoice_number=None,
+            issue_date=dt_date.today(),
+            due_date=None,
+            paid_date=None,
+            status="draft",
+            work_sum_without_moms=Decimal("0.00"),
+            moms_amount=Decimal("0.00"),
+            rot_amount=Decimal("0.00"),
+            client_pays_total=Decimal("0.00"),
+        )
+        db.add(invoice)
+        db.flush()
+    generate_invoice_lines_from_project(
+        db,
+        project_id=project_id,
+        invoice_id=invoice.id,
+        include_labor=True,
+        include_materials=True,
+        merge_strategy=MERGE_REPLACE_ALL,
+        user_id=request.session.get("user_email"),
+    )
+    db.commit()
+    add_flash_message(request, make_t(lang)("workflow.flash.invoice_draft_ready"), "success")
+    return RedirectResponse(url=f"/projects/{project_id}/invoices/{invoice.id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/{project_id}/estimator-pricing-mode")
