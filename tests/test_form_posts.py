@@ -635,3 +635,126 @@ def test_materials_included_in_pricing_summary_when_enabled():
     resp = client.get(f"/projects/{project_id}")
     assert resp.status_code == 200
     assert "projects.pricing.summary.materials" in resp.text or "Материалы" in resp.text
+
+def test_project_add_work_item_form_post_all_rooms_scope():
+    login()
+    db = SessionLocal()
+    try:
+        project = Project(name=f"All Rooms Project {uuid4().hex[:8]}")
+        worktype = WorkType(
+            code=f"WT-ALL-{uuid4().hex[:8]}",
+            category="wall",
+            unit="m2",
+            name_ru="Стены",
+            name_sv="Vägg",
+            hours_per_unit=Decimal("1.00"),
+            base_difficulty_factor=Decimal("1.0"),
+            is_active=True,
+        )
+        r1 = Room(project=project, name="A", floor_area_m2=Decimal("10"), wall_perimeter_m=Decimal("10"), wall_height_m=Decimal("2.5"))
+        r2 = Room(project=project, name="B", floor_area_m2=Decimal("12"), wall_perimeter_m=Decimal("8"), wall_height_m=Decimal("2.5"))
+        db.add_all([project, worktype, r1, r2])
+        db.commit()
+        db.refresh(project)
+        db.refresh(worktype)
+    finally:
+        db.close()
+
+    response = client.post(
+        f"/projects/{project.id}/add-work-item",
+        data={"work_type_id": str(worktype.id), "scope_apply_mode": "all_rooms", "difficulty_factor": "1"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+
+    db = SessionLocal()
+    try:
+        count = db.query(ProjectWorkItem).filter(ProjectWorkItem.project_id == project.id).count()
+        assert count == 2
+    finally:
+        db.close()
+
+
+def test_project_add_work_item_form_post_selected_rooms_scope():
+    login()
+    db = SessionLocal()
+    try:
+        project = Project(name=f"Selected Rooms Project {uuid4().hex[:8]}")
+        worktype = WorkType(
+            code=f"WT-SEL-{uuid4().hex[:8]}",
+            category="wall",
+            unit="m2",
+            name_ru="Стены",
+            name_sv="Vägg",
+            hours_per_unit=Decimal("1.00"),
+            base_difficulty_factor=Decimal("1.0"),
+            is_active=True,
+        )
+        r1 = Room(project=project, name="A", floor_area_m2=Decimal("10"), wall_perimeter_m=Decimal("10"), wall_height_m=Decimal("2.5"))
+        r2 = Room(project=project, name="B", floor_area_m2=Decimal("12"), wall_perimeter_m=Decimal("8"), wall_height_m=Decimal("2.5"))
+        db.add_all([project, worktype, r1, r2])
+        db.commit()
+        db.refresh(project)
+        db.refresh(worktype)
+        db.refresh(r1)
+    finally:
+        db.close()
+
+    response = client.post(
+        f"/projects/{project.id}/add-work-item",
+        data={
+            "work_type_id": str(worktype.id),
+            "scope_apply_mode": "selected_rooms",
+            "selected_room_ids": [str(r1.id)],
+            "difficulty_factor": "1",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+
+    db = SessionLocal()
+    try:
+        items = db.query(ProjectWorkItem).filter(ProjectWorkItem.project_id == project.id).all()
+        assert len(items) == 1
+        assert items[0].room_id == r1.id
+    finally:
+        db.close()
+
+
+def test_bulk_apply_updates_project_estimator_totals():
+    login()
+    db = SessionLocal()
+    try:
+        project = Project(name=f"Estimator Totals {uuid4().hex[:8]}")
+        worktype = WorkType(
+            code=f"WT-EST-{uuid4().hex[:8]}",
+            category="wall",
+            unit="m2",
+            name_ru="Стены",
+            name_sv="Vägg",
+            hours_per_unit=Decimal("1.00"),
+            base_difficulty_factor=Decimal("1.0"),
+            is_active=True,
+        )
+        room = Room(project=project, name="A", floor_area_m2=Decimal("10"), wall_perimeter_m=Decimal("10"), wall_height_m=Decimal("2.5"))
+        db.add_all([project, worktype, room])
+        db.commit()
+        db.refresh(project)
+        db.refresh(worktype)
+        project_id = project.id
+    finally:
+        db.close()
+
+    response = client.post(
+        f"/projects/{project_id}/add-work-item",
+        data={"work_type_id": str(worktype.id), "scope_apply_mode": "all_rooms", "difficulty_factor": "1"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+
+    db = SessionLocal()
+    try:
+        refreshed = db.get(Project, project_id)
+        assert Decimal(str(refreshed.work_sum_without_moms or 0)) > Decimal("0")
+    finally:
+        db.close()

@@ -246,9 +246,11 @@
         </div>
         <div>
             <label>{{ t("projects.work_items.scope_mode") }}</label>
-            <select name="scope_mode" id="scope-mode-select">
-                <option value="room" selected>{{ t("projects.work_items.scope.single_room") }}</option>
-                <option value="project">{{ t("projects.work_items.scope.all_rooms") }}</option>
+            <select name="scope_apply_mode" id="scope-mode-select">
+                <option value="single_room" selected>{{ t("projects.work_items.scope.single_room") }}</option>
+                <option value="selected_rooms">{{ t("projects.work_items.scope.selected_rooms") }}</option>
+                <option value="all_rooms">{{ t("projects.work_items.scope.all_rooms") }}</option>
+                <option value="project_aggregate">{{ t("projects.work_items.scope.project_aggregate") }}</option>
             </select>
         </div>
         <div id="room-select-wrapper">
@@ -276,6 +278,29 @@
                 <button type="button" data-fill-target="quantity" data-room-value="baseboardLength">{{ t("rooms.autofill.from_baseboard") }}</button>
             </div>
             {% endif %}
+        </div>
+        <div id="room-multiselect-wrapper" style="display:none;">
+            <label>{{ t("projects.work_items.scope.selected_rooms") }}</label>
+            <select name="selected_room_ids" id="room-multi-select" multiple size="5">
+                {% for room in rooms %}
+                <option
+                    value="{{ room.id }}"
+                    data-wall-area="{{ room.wall_area_m2 }}"
+                    data-ceiling-area="{{ room.ceiling_area_m2 }}"
+                    data-floor-area="{{ room.floor_area_m2 }}"
+                    data-baseboard-length="{{ room.baseboard_length_m }}"
+                >
+                    {{ room.name }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label>{{ t("projects.work_items.duplicate_mode") }}</label>
+            <select name="duplicate_mode">
+                <option value="append" selected>{{ t("projects.work_items.duplicate_mode.append") }}</option>
+                <option value="skip_same_work_in_room">{{ t("projects.work_items.duplicate_mode.skip") }}</option>
+            </select>
         </div>
         <div>
             <label>{{ t("label.quantity") }}</label>
@@ -766,7 +791,9 @@ const unitTemplate = "{{ t('worktypes.info.unit_prefix') }}";
 const normTemplate = "{{ t('worktypes.info.base_norm') }}";
 const difficultyTemplate = "{{ t('worktypes.info.base_difficulty') }}";
 const previewRoomsTemplate = "{{ t('projects.work_items.preview.rooms') }}";
-const previewAreaTemplate = "{{ t('projects.work_items.preview.area') }}";
+const previewAreaTemplate = "{{ t('projects.work_items.preview.floor') }}";
+const previewWallTemplate = "{{ t('projects.work_items.preview.walls') }}";
+const previewCeilingTemplate = "{{ t('projects.work_items.preview.ceilings') }}";
 const previewHoursTemplate = "{{ t('projects.work_items.preview.hours') }}";
 
 function updateRoomInfo() {
@@ -873,10 +900,17 @@ function detectBasis(option) {
 
 function selectedRoomOptions(mode) {
   const roomSelect = document.getElementById("room-select");
-  if (mode === "room") {
+  const roomMultiSelect = document.getElementById("room-multi-select");
+  if (mode === "single_room") {
     return roomSelect && roomSelect.selectedIndex > 0 ? [roomSelect.options[roomSelect.selectedIndex]] : [];
   }
-  return mode === "project" ? Array.from(document.querySelectorAll('#room-select option[value]')) : (roomSelect && roomSelect.selectedIndex > 0 ? [roomSelect.options[roomSelect.selectedIndex]] : []);
+  if (mode === "selected_rooms") {
+    return roomMultiSelect ? Array.from(roomMultiSelect.selectedOptions) : [];
+  }
+  if (mode === "all_rooms" || mode === "project_aggregate") {
+    return Array.from(document.querySelectorAll('#room-select option[value]'));
+  }
+  return [];
 }
 
 function updateScopePreview() {
@@ -887,8 +921,14 @@ function updateScopePreview() {
   const hpu = parseDecimal(wtOption?.getAttribute("data-hours-per-unit"));
   const basis = detectBasis(wtOption);
   const options = selectedRoomOptions(mode);
+  let totalFloor = 0;
+  let totalWall = 0;
+  let totalCeiling = 0;
   let totalArea = 0;
   options.forEach((option) => {
+    totalFloor += parseDecimal(option.getAttribute("data-floor-area"));
+    totalWall += parseDecimal(option.getAttribute("data-wall-area"));
+    totalCeiling += parseDecimal(option.getAttribute("data-ceiling-area"));
     if (basis === "wall") totalArea += parseDecimal(option.getAttribute("data-wall-area"));
     else if (basis === "ceiling") totalArea += parseDecimal(option.getAttribute("data-ceiling-area"));
     else if (basis === "floor") totalArea += parseDecimal(option.getAttribute("data-floor-area"));
@@ -897,19 +937,27 @@ function updateScopePreview() {
   totalArea *= layers;
   const hours = totalArea * hpu;
   if (preview) {
-    preview.textContent = `${previewRoomsTemplate}: ${options.length}. ${previewAreaTemplate}: ${totalArea.toFixed(2)}. ${previewHoursTemplate}: ${hours.toFixed(2)}`;
+    preview.textContent = `${previewRoomsTemplate}: ${options.length}. ${previewAreaTemplate}: ${totalFloor.toFixed(2)}. ${previewWallTemplate}: ${totalWall.toFixed(2)}. ${previewCeilingTemplate}: ${totalCeiling.toFixed(2)}. ${previewHoursTemplate}: ${hours.toFixed(2)}`;
   }
 }
 
 function updateApplyToState() {
   const mode = document.getElementById("scope-mode-select")?.value || "room";
   const roomWrapper = document.getElementById("room-select-wrapper");
+  const roomMultiWrapper = document.getElementById("room-multiselect-wrapper");
   const roomSelect = document.getElementById("room-select");
+  const roomMultiSelect = document.getElementById("room-multi-select");
   if (roomWrapper) {
-    roomWrapper.style.display = mode === "room" ? "block" : "none";
+    roomWrapper.style.display = mode === "single_room" ? "block" : "none";
+  }
+  if (roomMultiWrapper) {
+    roomMultiWrapper.style.display = mode === "selected_rooms" ? "block" : "none";
   }
   if (roomSelect) {
-    roomSelect.disabled = mode !== "room";
+    roomSelect.disabled = mode !== "single_room";
+  }
+  if (roomMultiSelect) {
+    roomMultiSelect.disabled = mode !== "selected_rooms";
   }
   updateScopePreview();
 }
