@@ -8,7 +8,6 @@ from app.services.project_estimator import (
     build_project_estimate_summary,
     build_scope,
     calculate_labour_totals,
-    calculate_price_totals,
 )
 
 
