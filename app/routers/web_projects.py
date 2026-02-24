@@ -84,6 +84,7 @@ from app.services.material_norms import build_project_material_bom
 from app.services.material_costing import cost_project_materials
 from app.services.pdf_export import render_pdf_from_html
 from app.services.invoice_lines import MERGE_REPLACE_ALL, generate_invoice_lines_from_project
+from app.services.correctness_lock import validate_estimate_invariants, validate_offer_invariants, validate_pricing_invariants, validate_invoice_invariants
 from app.services.shopping_list import (
     apply_shopping_list_to_invoice_material_lines,
     apply_shopping_list_to_project_cost_items,
@@ -556,6 +557,18 @@ async def workflow_recalculate(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     recalculate_project_work_items(db, project)
+    lock = validate_estimate_invariants(project)
+    if not lock.ok:
+        logger.error(
+            "correctness_lock_failed action=workflow_recalculate route=%s project_id=%s request_id=%s user_email=%s errors=%s",
+            request.url.path,
+            project_id,
+            getattr(request.state, "request_id", None),
+            request.session.get("user_email"),
+            lock.errors,
+        )
+        add_flash_message(request, make_t(lang)("correctness.lock_failed"), "error")
+        return RedirectResponse(url=f"/projects/{project_id}/workflow", status_code=status.HTTP_303_SEE_OTHER)
     add_flash_message(request, make_t(lang)("estimator.recalculated"), "success")
     return RedirectResponse(url=f"/projects/{project_id}/workflow", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -572,6 +585,19 @@ async def workflow_select_pricing_mode(
     pricing = get_or_create_project_pricing(db, project_id)
     try:
         select_pricing_mode(db, pricing=pricing, mode=mode, user_id=request.session.get("user_email"))
+        project = db.get(Project, project_id)
+        lock = validate_pricing_invariants(db, project)
+        if not lock.ok:
+            logger.error(
+                "correctness_lock_failed action=workflow_select_pricing_mode route=%s project_id=%s request_id=%s user_email=%s errors=%s",
+                request.url.path,
+                project_id,
+                getattr(request.state, "request_id", None),
+                request.session.get("user_email"),
+                lock.errors,
+            )
+            add_flash_message(request, make_t(lang)("correctness.lock_failed"), "error")
+            return RedirectResponse(url=f"/projects/{project_id}/workflow", status_code=status.HTTP_303_SEE_OTHER)
         add_flash_message(request, make_t(lang)("workflow.flash.pricing_selected"), "success")
     except PricingValidationError:
         add_flash_message(request, make_t(lang)("workflow.flash.pricing_select_error"), "error")
@@ -596,6 +622,18 @@ async def workflow_create_offer_draft(
     offer_commercial = compute_offer_commercial(db, project.id, lang=lang)
     project.offer_commercial_snapshot = serialize_offer_commercial(offer_commercial)
     project.offer_status = "draft"
+    lock = validate_offer_invariants(db, project)
+    if not lock.ok:
+        logger.error(
+            "correctness_lock_failed action=workflow_create_offer_draft route=%s project_id=%s request_id=%s user_email=%s errors=%s",
+            request.url.path,
+            project_id,
+            getattr(request.state, "request_id", None),
+            request.session.get("user_email"),
+            lock.errors,
+        )
+        add_flash_message(request, make_t(lang)("correctness.lock_failed"), "error")
+        return RedirectResponse(url=f"/projects/{project_id}/workflow", status_code=status.HTTP_303_SEE_OTHER)
     db.add(project)
     db.commit()
     add_flash_message(request, make_t(lang)("workflow.flash.offer_draft_ready"), "success")
@@ -648,6 +686,19 @@ async def workflow_create_invoice_draft(
         user_id=request.session.get("user_email"),
     )
     db.commit()
+    db.refresh(invoice)
+    lock = validate_invoice_invariants(db, invoice)
+    if not lock.ok:
+        logger.error(
+            "correctness_lock_failed action=workflow_create_invoice_draft route=%s project_id=%s invoice_id=%s request_id=%s user_email=%s errors=%s",
+            request.url.path,
+            project_id,
+            invoice.id,
+            getattr(request.state, "request_id", None),
+            request.session.get("user_email"),
+            lock.errors,
+        )
+        add_flash_message(request, make_t(lang)("correctness.lock_failed"), "warning")
     add_flash_message(request, make_t(lang)("workflow.flash.invoice_draft_ready"), "success")
     return RedirectResponse(url=f"/projects/{project_id}/invoices/{invoice.id}", status_code=status.HTTP_303_SEE_OTHER)
 

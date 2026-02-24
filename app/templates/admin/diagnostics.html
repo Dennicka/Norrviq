@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t("admin.diagnostics.title") }}</h1>
+<ul>
+  <li>Version: {{ diag.version }}</li>
+  <li>Python: {{ diag.python }}</li>
+  <li>Env: {{ diag.env }}</li>
+  <li>DB: {{ diag.db_path }}</li>
+  <li>Migration: {{ diag.migration }}</li>
+  <li>Company profile: {{ "yes" if diag.company_configured else "no" }}</li>
+  <li>Pricing policy: {{ "yes" if diag.pricing_configured else "no" }}</li>
+  <li>Backup dir writable: {{ "yes" if diag.backup_writable else "no" }}</li>
+  <li>Health ready: {{ "yes" if diag.ready else "no" }}</li>
+</ul>
+{% endblock %}

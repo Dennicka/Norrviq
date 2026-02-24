@@ -5,59 +5,50 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
 echo "[doctor] repo: $ROOT_DIR"
-
-if ! command -v python >/dev/null 2>&1; then
-  echo "[doctor] python is required" >&2
-  exit 1
-fi
-
-if ! command -v alembic >/dev/null 2>&1; then
-  echo "[doctor] alembic is required" >&2
-  exit 1
-fi
-
 python - <<'PY'
-import os
-import pathlib
-import sys
+import os, pathlib, sys
 from urllib.parse import urlparse
 
-errors = []
-py = sys.version_info
-if py < (3, 10):
-    errors.append(f"Python 3.10+ required, found {py.major}.{py.minor}.{py.micro}")
-else:
-    print(f"[doctor] python={py.major}.{py.minor}.{py.micro}")
+errors=[]
+warn=[]
+py=sys.version_info
+print(f"[doctor] python={py.major}.{py.minor}.{py.micro}")
+if py < (3,11):
+    errors.append("Python 3.11+ required")
 
-env_path = pathlib.Path('.env')
-if not env_path.exists():
-    errors.append("Missing .env file (minimum local config: APP_ENV=local, DATABASE_URL=sqlite:///./norrviq.db)")
+venv=os.getenv('VIRTUAL_ENV')
+if not venv:
+    warn.append("virtualenv not active. Run: python3.11 -m venv .venv && source .venv/bin/activate")
 else:
-    print(f"[doctor] .env={env_path.resolve()}")
+    print(f"[doctor] venv={venv}")
 
-database_url = os.getenv('DATABASE_URL', 'sqlite:///./norrviq.db')
-parsed = urlparse(database_url)
-if not parsed.scheme:
-    errors.append(f"DATABASE_URL is not parseable: {database_url}")
-else:
-    print(f"[doctor] database_scheme={parsed.scheme}")
+if not pathlib.Path('.env').exists():
+    errors.append('.env missing. Run: make bootstrap-local')
 
-backup_dir = pathlib.Path(os.getenv('BACKUP_DIR', './backups')).resolve()
-backup_dir.mkdir(parents=True, exist_ok=True)
-if not os.access(backup_dir, os.R_OK | os.W_OK | os.X_OK):
-    errors.append(f"BACKUP_DIR is not writable: {backup_dir}")
-else:
-    print(f"[doctor] backup_dir={backup_dir}")
+req_ok=pathlib.Path('requirements.txt').exists()
+print(f"[doctor] requirements.txt={'ok' if req_ok else 'missing'}")
 
+secret=os.getenv('SESSION_SECRET','')
+if len(secret) < 32:
+    warn.append('SESSION_SECRET length < 32 in current shell env; ensure .env is loaded')
+
+db_url=os.getenv('DATABASE_URL','sqlite:///./norrviq.db')
+parsed=urlparse(db_url)
+if parsed.scheme.startswith('sqlite'):
+    db_path = pathlib.Path((parsed.path or './norrviq.db').lstrip('/')).resolve()
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    if not os.access(db_path.parent, os.W_OK):
+        errors.append(f'DB directory not writable: {db_path.parent}')
+    else:
+        print(f"[doctor] db_path={db_path}")
+
+if warn:
+    print('[doctor] warnings:')
+    [print(f'  - {w}') for w in warn]
 if errors:
-    print("[doctor] issues found:", file=sys.stderr)
-    for issue in errors:
-        print(f"  - {issue}", file=sys.stderr)
-    sys.exit(1)
+    print('[doctor] errors:')
+    [print(f'  - {e}') for e in errors]
+    print('[doctor] next: make bootstrap-local && make migrate && make run-local')
+    raise SystemExit(1)
+print('[doctor] next: make migrate && make run-local')
 PY
-
-echo "[doctor] migration status"
-alembic current
-alembic heads
-
-echo "[doctor] ok"

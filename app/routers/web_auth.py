@@ -10,6 +10,7 @@ from app.audit import log_event
 from app.security import get_current_user_email
 from app.services.auth import authenticate_user
 from app.web_utils import clean_str, safe_commit
+from app.services.form_utils import get_str
 
 router = APIRouter(tags=["auth"])
 
@@ -29,9 +30,9 @@ async def login_page(request: Request, lang: str = Depends(get_current_lang), ne
 @router.post("/login")
 async def login(request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang)):
     form = await request.form()
-    email = clean_str(form.get("email") or form.get("username")) or ""
-    password = form.get("password") or ""
-    next_path = clean_str(form.get("next")) or "/"
+    email = clean_str(get_str(form, "email") or get_str(form, "username")) or ""
+    password = get_str(form, "password")
+    next_path = clean_str(get_str(form, "next")) or "/"
 
     user = authenticate_user(db, email=email, password=password)
     if user:

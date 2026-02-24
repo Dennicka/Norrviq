@@ -1710,3 +1710,19 @@ TRANSLATIONS_RU.update({
 })
 TRANSLATIONS_SV.update({k: v for k, v in TRANSLATIONS_RU.items() if k.startswith("workflow.")})
 TRANSLATIONS_EN.update({k: v for k, v in TRANSLATIONS_RU.items() if k.startswith("workflow.")})
+
+TRANSLATIONS_RU.update({
+    "correctness.lock_failed": "Проверка корректности не пройдена. Исправьте данные и повторите.",
+    "menu.diagnostics": "Диагностика",
+    "admin.diagnostics.title": "Диагностика системы",
+})
+TRANSLATIONS_SV.update({
+    "correctness.lock_failed": "Korrekthetskontrollen misslyckades. Korrigera data och försök igen.",
+    "menu.diagnostics": "Diagnostik",
+    "admin.diagnostics.title": "Systemdiagnostik",
+})
+TRANSLATIONS_EN.update({
+    "correctness.lock_failed": "Correctness checks failed. Fix data and try again.",
+    "menu.diagnostics": "Diagnostics",
+    "admin.diagnostics.title": "System diagnostics",
+})

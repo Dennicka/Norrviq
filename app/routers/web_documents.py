@@ -31,6 +31,7 @@ from app.services.pdf_export import render_pdf_from_html
 from app.services.completeness import compute_completeness
 from app.services.quality import evaluate_project_quality
 from app.services.terms_templates import DOC_TYPE_INVOICE, DOC_TYPE_OFFER, resolve_terms_template
+from app.services.correctness_lock import validate_offer_invariants, validate_invoice_invariants
 from app.dependencies import template_context, templates
 from app.i18n import make_t
 
@@ -360,7 +361,12 @@ async def finalize_offer_action(
     if quality_report.warnings_count > 0:
         add_flash_message(request, make_t(_lang)("documents.quality_warnings"), "warning")
     try:
-        finalize_offer(db, project_id=project_id, user_id=user_id, profile=profile, lang=terms_lang)
+        project = finalize_offer(db, project_id=project_id, user_id=user_id, profile=profile, lang=terms_lang)
+        lock = validate_offer_invariants(db, project)
+        if not lock.ok:
+            logger.error("correctness_lock_failed action=finalize_offer route=%s project_id=%s request_id=%s user_email=%s errors=%s", request.url.path, project_id, getattr(request.state, "request_id", None), user_id, lock.errors)
+            add_flash_message(request, make_t(_lang)("correctness.lock_failed"), "error")
+            return RedirectResponse(url=f"/projects/{project_id}/offer", status_code=status.HTTP_303_SEE_OTHER)
         add_flash_message(request, make_t(_lang)("documents.offer_finalized"), "success")
     except NumberingConflictError:
         req_id = getattr(request.state, "request_id", "-")
@@ -415,7 +421,12 @@ async def finalize_invoice_action(
         add_flash_message(request, make_t(_lang)("documents.quality_warnings"), "warning")
 
     try:
-        finalize_invoice(db, invoice_id=invoice_id, user_id=user_id, profile=profile, lang=terms_lang)
+        invoice = finalize_invoice(db, invoice_id=invoice_id, user_id=user_id, profile=profile, lang=terms_lang)
+        lock = validate_invoice_invariants(db, invoice)
+        if not lock.ok:
+            logger.error("correctness_lock_failed action=finalize_invoice route=%s project_id=%s invoice_id=%s request_id=%s user_email=%s errors=%s", request.url.path, invoice.project_id, invoice_id, getattr(request.state, "request_id", None), user_id, lock.errors)
+            add_flash_message(request, make_t(_lang)("correctness.lock_failed"), "error")
+            return RedirectResponse(url=f"/projects/{invoice.project_id}/invoices/{invoice_id}", status_code=status.HTTP_303_SEE_OTHER)
         add_flash_message(request, make_t(_lang)("documents.invoice_finalized"), "success")
     except NumberingConflictError:
         req_id = getattr(request.state, "request_id", "-")
