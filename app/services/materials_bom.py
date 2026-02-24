@@ -6,7 +6,9 @@ from sqlalchemy.orm import Session, joinedload
 from app.models.cost import CostCategory, ProjectCostItem
 from app.models.invoice import Invoice
 from app.models.invoice_line import InvoiceLine
+from app.models.material import Material
 from app.models.material_norm import MaterialConsumptionNorm
+from app.models.material_consumption_override import MaterialConsumptionOverride
 from app.models.material_recipe import MaterialRecipe
 from app.models.paint_system import PaintSystemSurface, ProjectPaintSettings, RoomPaintSettings
 from app.models.project import Project, ProjectWorkItem
@@ -105,6 +107,105 @@ def get_or_create_room_paint_settings(db: Session, room_id: int) -> RoomPaintSet
     db.commit()
     db.refresh(settings)
     return settings
+
+
+@dataclass
+class ResolvedMaterialNorm:
+    quantity_per_unit: Decimal
+    base_unit_size: Decimal
+    unit_basis: str
+    surface_kind: str
+    waste_percent: Decimal
+    source: str
+
+
+def _normalize_surface_kind(surface: str | None) -> str:
+    raw = (surface or "").strip().lower()
+    if raw in {"wall", "walls"}:
+        return "walls"
+    if raw in {"ceiling", "ceilings"}:
+        return "ceiling"
+    if raw in {"floor", "floors"}:
+        return "floor"
+    if raw in {"combined", "paintable", "custom"}:
+        return "combined"
+    if raw in {"piece", "pieces"}:
+        return "pieces"
+    return "combined"
+
+
+def _rule_from_norm(norm: MaterialConsumptionNorm) -> ResolvedMaterialNorm:
+    consumption_value = Decimal(str(norm.consumption_value or 0))
+    if (norm.consumption_unit or "").lower() == "per_10_m2":
+        base_unit_size = Decimal("10")
+    else:
+        base_unit_size = Decimal("1")
+    return ResolvedMaterialNorm(
+        quantity_per_unit=consumption_value,
+        base_unit_size=base_unit_size,
+        unit_basis="m2",
+        surface_kind=_normalize_surface_kind(norm.surface_type),
+        waste_percent=Decimal(str(norm.waste_percent if norm.waste_percent is not None else 10)),
+        source="default",
+    )
+
+
+def resolve_material_norm(db: Session, project_id: int, room_id: int | None, work_type_id: int, material_id: int | None, surface_kind: str, default_norm: MaterialConsumptionNorm) -> ResolvedMaterialNorm:
+    if material_id is not None:
+        normalized_surface = _normalize_surface_kind(surface_kind)
+        room_override = db.query(MaterialConsumptionOverride).filter(
+            MaterialConsumptionOverride.project_id == project_id,
+            MaterialConsumptionOverride.room_id == room_id,
+            MaterialConsumptionOverride.work_type_id == work_type_id,
+            MaterialConsumptionOverride.material_id == material_id,
+            MaterialConsumptionOverride.surface_kind == normalized_surface,
+            MaterialConsumptionOverride.is_active.is_(True),
+        ).first()
+        if room_override:
+            return ResolvedMaterialNorm(
+                quantity_per_unit=Decimal(str(room_override.quantity_per_unit)),
+                base_unit_size=Decimal(str(room_override.base_unit_size or 1)),
+                unit_basis=(room_override.unit_basis or "m2").lower(),
+                surface_kind=normalized_surface,
+                waste_percent=Decimal(str(room_override.waste_factor_percent if room_override.waste_factor_percent is not None else (default_norm.waste_percent if default_norm.waste_percent is not None else 10))),
+                source="room_override",
+            )
+        project_override = db.query(MaterialConsumptionOverride).filter(
+            MaterialConsumptionOverride.project_id == project_id,
+            MaterialConsumptionOverride.room_id.is_(None),
+            MaterialConsumptionOverride.work_type_id == work_type_id,
+            MaterialConsumptionOverride.material_id == material_id,
+            MaterialConsumptionOverride.surface_kind == normalized_surface,
+            MaterialConsumptionOverride.is_active.is_(True),
+        ).first()
+        if project_override:
+            return ResolvedMaterialNorm(
+                quantity_per_unit=Decimal(str(project_override.quantity_per_unit)),
+                base_unit_size=Decimal(str(project_override.base_unit_size or 1)),
+                unit_basis=(project_override.unit_basis or "m2").lower(),
+                surface_kind=normalized_surface,
+                waste_percent=Decimal(str(project_override.waste_factor_percent if project_override.waste_factor_percent is not None else (default_norm.waste_percent if default_norm.waste_percent is not None else 10))),
+                source="project_override",
+            )
+    return _rule_from_norm(default_norm)
+
+
+def _resolve_area_for_surface(room: Room, surface_kind: str) -> tuple[Decimal, bool]:
+    floor = Decimal(str(room.floor_area_m2 or 0))
+    wall = Decimal(str(room.wall_area_m2 or 0))
+    if wall <= 0 and room.wall_perimeter_m is not None and room.wall_height_m is not None:
+        wall = Decimal(str(room.wall_perimeter_m or 0)) * Decimal(str(room.wall_height_m or 0))
+    ceiling = Decimal(str(room.ceiling_area_m2 or 0))
+    if surface_kind == "walls":
+        return wall, wall > 0
+    if surface_kind == "ceiling":
+        return ceiling, ceiling > 0
+    if surface_kind == "floor":
+        return floor, floor > 0
+    if surface_kind == "combined":
+        total = wall + ceiling
+        return total, total > 0
+    return Decimal("0"), False
 def _resolve_surface_area(room: Room, surface_type: str) -> Decimal:
     floor = Decimal(str(room.floor_area_m2 or 0))
     wall = Decimal(str(room.wall_area_m2 or 0))
@@ -139,81 +240,98 @@ def _compute_bom_from_norms(db: Session, project: Project, warnings: list[str]) 
     norms = db.query(MaterialConsumptionNorm).filter(MaterialConsumptionNorm.active.is_(True)).all()
     if not norms:
         return []
-    norm_by_work = {(n.applies_to_work_type or "").strip().lower(): n for n in norms}
+    norms_by_work: dict[str, list[MaterialConsumptionNorm]] = {}
+    for norm in norms:
+        norms_by_work.setdefault((norm.applies_to_work_type or "").strip().lower(), []).append(norm)
     rooms = {r.id: r for r in db.query(Room).filter(Room.project_id == project.id).all()}
     if not rooms:
         return []
+    materials = {m.id: m for m in db.query(Material).filter(Material.is_active.is_(True)).all()}
+    materials_by_name = {m.name_sv.lower(): m for m in materials.values()}
 
     grouped: dict[str, dict] = {}
     for item in project.work_items:
         work_code = (item.work_type.code or "").strip().lower()
-        norm = norm_by_work.get(work_code)
-        if norm is None:
+        matched_norms = norms_by_work.get(work_code, [])
+        if not matched_norms:
             warnings.append(f"work:{work_code}:MISSING_NORM")
             continue
 
         target_rooms = [rooms[item.room_id]] if item.room_id in rooms else list(rooms.values())
-        surface = norm.surface_type or _infer_surface_for_work(item)
-        area = sum((_resolve_surface_area(room, surface) for room in target_rooms), start=Decimal("0"))
-        if area <= 0:
-            continue
+        for norm in matched_norms:
+            default_surface = _normalize_surface_kind(norm.surface_type or _infer_surface_for_work(item))
+            material = materials_by_name.get((norm.material_name or "").strip().lower())
+            material_id = material.id if material else None
+            resolved = resolve_material_norm(db, project.id, item.room_id, item.work_type_id, material_id, default_surface, norm)
 
-        consumption_value = Decimal(str(norm.consumption_value or 0))
-        if norm.consumption_unit == "per_10_m2":
-            qty = (area / Decimal("10")) * consumption_value
-            norm_label = f"{consumption_value} / 10 m2"
-        else:
-            qty = area * consumption_value
-            norm_label = f"{consumption_value} / 1 m2"
+            base_area = Decimal("0")
+            for room in target_rooms:
+                if resolved.unit_basis == "piece":
+                    continue
+                area, ok = _resolve_area_for_surface(room, resolved.surface_kind)
+                if not ok:
+                    warnings.append(f"room:{room.id}:MISSING_GEOMETRY:{resolved.surface_kind}")
+                    continue
+                base_area += area
 
-        coats = Decimal("1")
-        if norm.coats_multiplier_mode == "use_work_coats":
-            coats = Decimal(str(item.quantity or 1)) if Decimal(str(item.quantity or 0)) > 0 else Decimal("1")
-        qty = qty * coats
+            if resolved.unit_basis == "piece":
+                measure = Decimal(str(item.quantity or 0))
+            elif resolved.unit_basis == "room":
+                measure = Decimal(len(target_rooms))
+            else:
+                measure = base_area
 
-        waste_percent = Decimal(str(norm.waste_percent if norm.waste_percent is not None else 10))
-        qty = qty * (Decimal("1") + waste_percent / Decimal("100"))
-        qty = _q(qty)
+            if measure <= 0:
+                continue
+            qty = (measure / (resolved.base_unit_size if resolved.base_unit_size > 0 else Decimal("1"))) * resolved.quantity_per_unit
 
-        pack_size = Decimal(str(norm.package_size)) if norm.package_size is not None else None
-        packs_count = None
-        qty_final = qty
-        if pack_size is not None and pack_size > 0:
-            packs_count = int((qty / pack_size).to_integral_value(rounding="ROUND_CEILING"))
-    
-        unit_price = Decimal(str(norm.default_unit_price_sek or 0))
-        cost = _qm((Decimal(packs_count) * unit_price) if packs_count is not None else (qty_final * unit_price))
+            coats = Decimal("1")
+            if norm.coats_multiplier_mode == "use_work_coats":
+                coats = Decimal(str(item.quantity or 1)) if Decimal(str(item.quantity or 0)) > 0 else Decimal("1")
+            qty = _q(qty * coats)
+            qty = _q(qty * (Decimal("1") + resolved.waste_percent / Decimal("100")))
 
-        key = f"{norm.material_name}|{norm.material_unit}"
-        bucket = grouped.setdefault(
-            key,
-            {
-                "area": Decimal("0"),
-                "qty_required": Decimal("0"),
-                "qty_final": Decimal("0"),
-                "cost": Decimal("0"),
-                "packs": 0,
-                "has_packs": False,
-                "pack_size": pack_size,
-                "work_codes": set(),
-                "surface": surface,
-                "coats": coats,
-                "norm": norm_label,
-                "waste": waste_percent,
-                "unit": norm.material_unit,
-                "material_name": norm.material_name,
-                "details": [],
-            },
-        )
-        bucket["area"] += area
-        bucket["qty_required"] += qty
-        bucket["qty_final"] += qty_final
-        bucket["cost"] += cost
-        bucket["work_codes"].add(work_code)
-        bucket["details"].append(BOMDetail(source="WORK_NORM", room_id=item.room_id, room_name=item.room.name if item.room else None, area_m2_used=_q(area), system_id=None, system_name=None, step_id=None, step_order=None, recipe_id=0))
-        if packs_count is not None:
-            bucket["has_packs"] = True
-            bucket["packs"] += packs_count
+            pack_size = Decimal(str(norm.package_size)) if norm.package_size is not None else None
+            packs_count = None
+            qty_final = qty
+            if pack_size is not None and pack_size > 0:
+                packs_count = int((qty / pack_size).to_integral_value(rounding="ROUND_CEILING"))
+
+            unit_price = Decimal(str(norm.default_unit_price_sek or 0))
+            cost = _qm((Decimal(packs_count) * unit_price) if packs_count is not None else (qty_final * unit_price))
+            basis_label = {"m2": "m2", "piece": "pcs", "room": "room"}.get(resolved.unit_basis, resolved.unit_basis)
+            norm_label = f"{resolved.quantity_per_unit} / {resolved.base_unit_size} {basis_label}"
+
+            key = f"{norm.material_name}|{norm.material_unit}"
+            bucket = grouped.setdefault(
+                key,
+                {
+                    "area": Decimal("0"),
+                    "qty_required": Decimal("0"),
+                    "qty_final": Decimal("0"),
+                    "cost": Decimal("0"),
+                    "packs": 0,
+                    "has_packs": False,
+                    "pack_size": pack_size,
+                    "work_codes": set(),
+                    "surface": resolved.surface_kind,
+                    "coats": coats,
+                    "norm": norm_label,
+                    "waste": resolved.waste_percent,
+                    "unit": norm.material_unit,
+                    "material_name": norm.material_name,
+                    "details": [],
+                },
+            )
+            bucket["area"] += base_area
+            bucket["qty_required"] += qty
+            bucket["qty_final"] += qty_final
+            bucket["cost"] += cost
+            bucket["work_codes"].add(work_code)
+            bucket["details"].append(BOMDetail(source="WORK_NORM", room_id=item.room_id, room_name=item.room.name if item.room else None, area_m2_used=_q(base_area), system_id=None, system_name=None, step_id=None, step_order=None, recipe_id=0))
+            if packs_count is not None:
+                bucket["has_packs"] = True
+                bucket["packs"] += packs_count
 
     items: list[BOMItem] = []
     for idx, bucket in enumerate(grouped.values(), start=1):

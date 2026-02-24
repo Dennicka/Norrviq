@@ -37,6 +37,7 @@ from .material_actuals import MaterialPurchase, MaterialPurchaseLine, ProjectMat
 from .material_norm import MaterialConsumptionNorm
 from .material_actual_entry import ProjectMaterialActualEntry
 from .material_catalog_item import MaterialCatalogItem
+from .material_consumption_override import MaterialConsumptionOverride
 
 __all__ = [
     "Client",
@@ -89,4 +90,5 @@ __all__ = [
     "MaterialConsumptionNorm",
     "ProjectMaterialActualEntry",
     "MaterialCatalogItem",
+    "MaterialConsumptionOverride",
 ]
