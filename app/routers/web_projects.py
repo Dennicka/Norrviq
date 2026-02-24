@@ -75,6 +75,7 @@ from app.services.materials_bom import (
     get_or_create_project_material_settings,
     get_or_create_project_paint_settings,
 )
+from app.services.materials_consumption import calculate_material_needs_for_project
 from app.services.pdf_export import render_pdf_from_html
 from app.services.shopping_list import (
     apply_shopping_list_to_invoice_material_lines,
@@ -432,6 +433,7 @@ async def project_detail(
         fixed_price=Decimal(str(pricing.fixed_total_price or 0)),
         vat_rate_percent=Decimal(str(settings.moms_percent or 0)),
     )
+    material_rows, material_totals = calculate_material_needs_for_project(db, project.id)
     context = build_project_context(
         db,
         request,
@@ -452,6 +454,8 @@ async def project_detail(
         estimator_summary=estimator_summary,
         estimator_selected_room_ids=room_ids,
         project_pricing=pricing,
+        materials_calc_rows=material_rows,
+        materials_calc_totals=material_totals,
     )
     return templates.TemplateResponse(request, "projects/detail.html", context)
 
