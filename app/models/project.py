@@ -125,6 +125,7 @@ class ProjectWorkItem(Base):
     total_cost_sek = Column(Numeric(12, 2), nullable=True)
     margin_sek = Column(Numeric(12, 2), nullable=True)
     margin_pct = Column(Numeric(6, 2), nullable=True)
+    source_group_ref = Column(String(128), nullable=True)
     comment = Column(Text, nullable=True)
 
     project = relationship("Project", back_populates="work_items")
