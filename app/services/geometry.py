@@ -155,3 +155,28 @@ def aggregate_project_geometry(db: Session, project_id: int) -> GeometrySummary:
     summary.total_perimeter_m = _q(summary.total_perimeter_m) or Decimal("0.00")
     summary.total_openings_area_m2 = _q(summary.total_openings_area_m2) or Decimal("0.00")
     return summary
+
+
+def build_project_scope_metrics(rooms: list[Room]) -> GeometrySummary:
+    summary = GeometrySummary(rooms_count=len(rooms))
+    for room in rooms:
+        try:
+            geometry = compute_room_geometry_from_model(room)
+        except GeometryValidationError as exc:
+            summary.warnings.append(f"Комната '{room.name}': {exc}")
+            continue
+
+        summary.total_floor_area_m2 += geometry.floor_area_m2 or Decimal("0")
+        summary.total_ceiling_area_m2 += geometry.ceiling_area_m2 or Decimal("0")
+        summary.total_wall_area_net_m2 += geometry.wall_area_net_m2 or Decimal("0")
+        summary.total_wall_area_gross_m2 += geometry.wall_area_gross_m2 or Decimal("0")
+        summary.total_perimeter_m += geometry.perimeter_m or Decimal("0")
+        summary.total_openings_area_m2 += geometry.openings_area_m2 or Decimal("0")
+
+    summary.total_floor_area_m2 = _q(summary.total_floor_area_m2) or Decimal("0.00")
+    summary.total_ceiling_area_m2 = _q(summary.total_ceiling_area_m2) or Decimal("0.00")
+    summary.total_wall_area_net_m2 = _q(summary.total_wall_area_net_m2) or Decimal("0.00")
+    summary.total_wall_area_gross_m2 = _q(summary.total_wall_area_gross_m2) or Decimal("0.00")
+    summary.total_perimeter_m = _q(summary.total_perimeter_m) or Decimal("0.00")
+    summary.total_openings_area_m2 = _q(summary.total_openings_area_m2) or Decimal("0.00")
+    return summary

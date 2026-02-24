@@ -94,8 +94,11 @@ def _q(value: Decimal) -> Decimal:
 def _matches_scope(item: ProjectWorkItem, scope: ProjectScope) -> bool:
     if not scope.room_ids:
         return False
-    if item.room_id is None:
+    scope_mode = (getattr(item, "scope_mode", None) or "room").lower()
+    if scope_mode == "project":
         return scope.all_rooms_selected
+    if item.room_id is None:
+        return False
     return item.room_id in scope.room_ids
 
 

@@ -35,6 +35,9 @@ from app.services.estimates import (
     calculate_project_pricing_totals,
     estimate_project_work_bulk,
     recalculate_project_work_items,
+    resolve_project_quantity,
+    SCOPE_MODE_PROJECT,
+    SCOPE_MODE_ROOM,
 )
 from app.services.offer_commercial import compute_offer_commercial, deserialize_offer_commercial, is_offer_snapshot_stale
 from app.services.commercial_snapshot import DOC_TYPE_OFFER as SNAP_OFFER, read_commercial_snapshot
@@ -996,26 +999,33 @@ async def add_work_item(
 
     difficulty_factor = Decimal(form.get("difficulty_factor") or "1")
     comment = form.get("comment")
-    scope_mode = (form.get("scope_mode") or form.get("apply_to") or "room").strip()
-    if scope_mode == "selected_room":
-        scope_mode = "room"
+    scope_mode = ((form.get("scope_mode") or form.get("apply_to") or SCOPE_MODE_ROOM).strip().lower())
+    if scope_mode in {"selected_room", "single_room"}:
+        scope_mode = SCOPE_MODE_ROOM
+    if scope_mode not in {SCOPE_MODE_ROOM, SCOPE_MODE_PROJECT, "all_rooms", "selected_rooms"}:
+        scope_mode = SCOPE_MODE_ROOM
+
     layers = Decimal(form.get("layers") or "1")
-
     pricing_data = _parse_pricing_form(form)
+    project_rooms = list(project.rooms)
 
-    project_room_ids = {room.id for room in project.rooms}
-
-    pricing_error = _validate_pricing_form(pricing_data, quantity=Decimal(form.get("quantity") or "1"), has_area=bool(project_room_ids))
+    pricing_error = _validate_pricing_form(
+        pricing_data,
+        quantity=Decimal(form.get("quantity") or "1"),
+        has_area=bool(project_rooms),
+    )
     if pricing_error:
         add_flash_message(request, pricing_error, "error")
         db.rollback()
         return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
 
     if scope_mode in {"all_rooms", "selected_rooms"}:
+        project_room_ids = {room.id for room in project_rooms}
         if not project_room_ids:
             add_flash_message(request, translator("projects.work_items.no_rooms"), "error")
             db.rollback()
             return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
+
         selected_room_ids: list[int] | None = None
         if scope_mode == "selected_rooms":
             selected_raw = form.getlist("selected_room_ids") or form.getlist("room_ids")
@@ -1029,6 +1039,7 @@ async def add_work_item(
                 add_flash_message(request, translator("projects.work_items.empty_selected_rooms"), "error")
                 db.rollback()
                 return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
+
         source_group_ref = f"generated:project_scope:{uuid4()}"
         result = estimate_project_work_bulk(
             db,
@@ -1066,13 +1077,50 @@ async def add_work_item(
         add_flash_message(request, translator("projects.work_items.bulk_applied"), "success")
         return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
 
+    if scope_mode == SCOPE_MODE_PROJECT:
+        if not project_rooms:
+            add_flash_message(request, translator("projects.work_items.no_rooms"), "error")
+            db.rollback()
+            return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
+
+        quantity = resolve_project_quantity(project_rooms, work_type, layers=layers)
+        if quantity is None or quantity <= 0:
+            add_flash_message(request, translator("projects.work_items.bulk_no_valid_rooms"), "error")
+            db.rollback()
+            return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
+
+        item = ProjectWorkItem(
+            project_id=project.id,
+            work_type_id=work_type.id,
+            scope_mode=SCOPE_MODE_PROJECT,
+            room_id=None,
+            quantity=quantity.quantize(Decimal("0.01")),
+            difficulty_factor=difficulty_factor,
+            pricing_mode=pricing_data["pricing_mode"],
+            hourly_rate_sek=pricing_data["hourly_rate_sek"],
+            area_rate_sek=pricing_data["area_rate_sek"],
+            fixed_price_sek=pricing_data["fixed_price_sek"],
+            comment=comment,
+        )
+        db.add(item)
+        db.flush()
+        recalculate_project_work_items(db, project)
+        calculate_project_totals(db, project)
+        db.commit()
+        return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
+
     room_id = form.get("room_id")
     room = db.get(Room, int(room_id)) if room_id else None
-    if room and room.project_id != project.id:
+    if room is None:
+        add_flash_message(request, translator("projects.work_items.room_required"), "error")
+        db.rollback()
+        return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
+
+    if room.project_id != project.id:
         raise HTTPException(status_code=400, detail="Room is not part of project")
 
     quantity = (Decimal(form.get("quantity") or "0") * layers).quantize(Decimal("0.01"))
-    single_pricing_error = _validate_pricing_form(pricing_data, quantity=quantity, has_area=room is not None)
+    single_pricing_error = _validate_pricing_form(pricing_data, quantity=quantity, has_area=True)
     if single_pricing_error:
         add_flash_message(request, single_pricing_error, "error")
         db.rollback()
@@ -1081,7 +1129,8 @@ async def add_work_item(
     item = ProjectWorkItem(
         project_id=project.id,
         work_type_id=work_type.id,
-        room_id=room.id if room else None,
+        scope_mode=SCOPE_MODE_ROOM,
+        room_id=room.id,
         quantity=quantity,
         difficulty_factor=difficulty_factor,
         pricing_mode=pricing_data["pricing_mode"],

@@ -11,6 +11,9 @@ from app.models.settings import get_or_create_settings
 from app.models.worktype import WorkType
 from app.services.geometry import compute_room_geometry_from_model
 
+SCOPE_MODE_ROOM = "room"
+SCOPE_MODE_PROJECT = "project"
+
 
 class ProjectTotals(BaseModel):
     work_sum_without_moms: Decimal
@@ -57,8 +60,15 @@ def _norm_mode(value: str | None) -> WorkItemPricingMode:
         return WorkItemPricingMode.HOURLY
 
 
+def _resolve_scope_mode(item: ProjectWorkItem) -> str:
+    return (getattr(item, "scope_mode", None) or SCOPE_MODE_ROOM).strip().lower()
+
+
 def resolve_billable_area_m2(item: ProjectWorkItem, work_type: WorkType) -> Decimal:
     room = item.room
+    if room is None and item.project and _resolve_scope_mode(item) == SCOPE_MODE_PROJECT:
+        quantity = resolve_project_quantity(item.project.rooms, work_type, layers=Decimal("1.00"))
+        return Decimal(str(quantity or 0)).quantize(Decimal("0.01"))
     if room is None:
         return Decimal("0.00")
 
@@ -101,6 +111,36 @@ def _resolve_bulk_quantity_for_room(room: Room, work_type: WorkType, *, layers: 
     if any(marker in category for marker in ("floor", "пол", "golv")):
         return _scaled(geometry.floor_area_m2, layers)
     return _scaled(geometry.floor_area_m2, layers)
+
+
+def resolve_project_quantity(rooms: list[Room], work_type: WorkType, *, layers: Decimal = Decimal("1.00")) -> Decimal | None:
+    if not rooms:
+        return None
+
+    unit = (work_type.unit or "").lower()
+    category = (work_type.category or "").lower()
+
+    if unit == "room":
+        return (Decimal(len(rooms)) * layers).quantize(Decimal("0.01"))
+
+    room_geometries = [compute_room_geometry_from_model(room) for room in rooms]
+
+    if unit == "m":
+        total = sum(((geometry.baseboard_lm or Decimal("0")) for geometry in room_geometries), Decimal("0"))
+        return _scaled(total, layers)
+
+    if unit != "m2":
+        return None
+
+    if any(marker in category for marker in ("wall", "стен", "vägg")):
+        total = sum(((geometry.wall_area_net_m2 or Decimal("0")) for geometry in room_geometries), Decimal("0"))
+        return _scaled(total, layers)
+    if any(marker in category for marker in ("ceiling", "потол", "tak")):
+        total = sum(((geometry.ceiling_area_m2 or Decimal("0")) for geometry in room_geometries), Decimal("0"))
+        return _scaled(total, layers)
+
+    total = sum(((geometry.floor_area_m2 or Decimal("0")) for geometry in room_geometries), Decimal("0"))
+    return _scaled(total, layers)
 
 
 def estimate_project_work_bulk(
