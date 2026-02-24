@@ -430,8 +430,25 @@
 </section>
 
 <section>
-    <h2>Materials (calculated)</h2>
-    {% if materials_calc_totals %}
+    <h2>Материалы (авторасчёт)</h2>
+    {% if materials_auto_bom and materials_auto_bom.line_items %}
+    <table>
+        <thead><tr><th>Work</th><th>Material</th><th>Theoretical</th><th>Purchase</th><th>Cost</th></tr></thead>
+        <tbody>
+            {% for line in materials_auto_bom.line_items %}
+            <tr>
+                <td>{{ line.work_type_code }}</td>
+                <td>{{ line.material_name }}</td>
+                <td>{{ line.theoretical_qty }} {{ line.unit }}</td>
+                <td>{% if line.purchase_pack_count is not none %}{{ line.purchase_pack_count }} packs ({{ line.purchase_qty }} {{ line.unit }}){% else %}{{ line.purchase_qty }} {{ line.unit }}{% endif %}</td>
+                <td>{{ line.cost_total }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <p><strong>Материалы всего:</strong> {{ materials_auto_bom.materials_cost_total }} SEK</p>
+    {% if materials_auto_bom.warnings %}<ul>{% for w in materials_auto_bom.warnings %}<li>{{ w }}</li>{% endfor %}</ul>{% endif %}
+    {% elif materials_calc_totals %}
     <table>
         <thead><tr><th>Material</th><th>Qty</th><th>Unit</th></tr></thead>
         <tbody>

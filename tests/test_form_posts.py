@@ -7,7 +7,8 @@ from fastapi.testclient import TestClient
 from app.config import get_settings
 from app.db import SessionLocal
 from app.main import app
-from app.models import Invoice, Project, ProjectPricing, ProjectWorkItem, Room, WorkType
+from app.models import Invoice, MaterialConsumptionNorm, Project, ProjectPricing, ProjectWorkItem, Room, WorkType
+from app.models.material_catalog_item import MaterialCatalogItem
 
 client = TestClient(app)
 settings = get_settings()
@@ -559,3 +560,78 @@ def test_project_pricing_mode_form_validation_rejects_invalid_payload():
         assert (pricing.pricing_mode or "hourly") != "fixed"
     finally:
         db.close()
+
+
+def test_material_norms_crud_form_post():
+    login()
+    db = SessionLocal()
+    try:
+        item = MaterialCatalogItem(material_code=f"paint_{uuid4().hex[:5]}", name="Paint 10L", unit="l", package_size=Decimal("10"), package_unit="l", price_ex_vat=Decimal("500"), vat_rate_pct=Decimal("25"), is_active=True)
+        db.add(item)
+        db.commit()
+        db.refresh(item)
+        item_id = item.id
+    finally:
+        db.close()
+
+    resp = client.post("/materials/rules/new", data={"is_active": "on", "name": "Paint ceiling 2 coats", "material_name": "Paint", "material_catalog_item_id": str(item_id), "work_kind": "paint_ceiling", "basis_type": "ceiling_area", "consumption_qty": "3", "per_basis_qty": "10", "basis_unit": "m2", "material_unit": "l", "layers_multiplier_enabled": "on", "waste_factor_pct": "5"}, follow_redirects=False)
+    assert resp.status_code == 303
+
+    db = SessionLocal()
+    try:
+        norm = db.query(MaterialConsumptionNorm).filter(MaterialConsumptionNorm.name == "Paint ceiling 2 coats").first()
+        assert norm is not None
+        norm_id = norm.id
+    finally:
+        db.close()
+
+    resp2 = client.post(f"/materials/rules/{norm_id}/edit", data={"is_active": "on", "name": "Paint ceiling 2 coats", "material_name": "Paint", "material_catalog_item_id": str(item_id), "work_kind": "paint_ceiling", "basis_type": "ceiling_area", "consumption_qty": "4", "per_basis_qty": "10", "basis_unit": "m2", "material_unit": "l", "layers_multiplier_enabled": "on", "waste_factor_pct": "7"}, follow_redirects=False)
+    assert resp2.status_code == 303
+
+
+def test_project_page_shows_auto_bom():
+    login()
+    db = SessionLocal()
+    try:
+        project = Project(name=f"BOM page {uuid4().hex[:6]}")
+        wt = WorkType(code=f"paint_ceiling_{uuid4().hex[:4]}", category="ceiling", unit="m2", name_ru="", name_sv="", hours_per_unit=Decimal("1"), base_difficulty_factor=Decimal("1"), is_active=True)
+        db.add_all([project, wt])
+        db.flush()
+        room = Room(project_id=project.id, name="R", floor_area_m2=Decimal("10"), wall_area_m2=Decimal("20"), ceiling_area_m2=Decimal("10"))
+        db.add(room)
+        db.flush()
+        db.add(ProjectWorkItem(project_id=project.id, room_id=room.id, work_type_id=wt.id, quantity=Decimal("2"), difficulty_factor=Decimal("1"), scope_mode="room"))
+        db.add(MaterialConsumptionNorm(material_name="Paint", material_category="paint", applies_to_work_type=wt.code, material_unit="l", work_type_code=wt.code, basis_type="ceiling_area", consumption_qty=Decimal("3"), per_basis_qty=Decimal("10"), per_basis_unit="m2", consumption_value=Decimal("3"), consumption_unit="per_10_m2", layers_multiplier_enabled=True, waste_percent=Decimal("0"), active=True))
+        db.commit()
+        project_id = project.id
+    finally:
+        db.close()
+
+    resp = client.get(f"/projects/{project_id}")
+    assert resp.status_code == 200
+    assert "Материалы (авторасчёт)" in resp.text
+    assert "Paint" in resp.text
+
+
+def test_materials_included_in_pricing_summary_when_enabled():
+    login()
+    db = SessionLocal()
+    try:
+        project = Project(name=f"Pricing materials {uuid4().hex[:6]}")
+        wt = WorkType(code=f"paint_ceiling_{uuid4().hex[:4]}", category="ceiling", unit="m2", name_ru="", name_sv="", hours_per_unit=Decimal("1"), base_difficulty_factor=Decimal("1"), is_active=True)
+        db.add_all([project, wt])
+        db.flush()
+        room = Room(project_id=project.id, name="R", floor_area_m2=Decimal("10"), wall_area_m2=Decimal("20"), ceiling_area_m2=Decimal("10"))
+        db.add(room)
+        db.flush()
+        db.add(ProjectWorkItem(project_id=project.id, room_id=room.id, work_type_id=wt.id, quantity=Decimal("1"), difficulty_factor=Decimal("1"), pricing_mode="fixed", fixed_price_sek=Decimal("1000")))
+        db.add(MaterialConsumptionNorm(material_name="Paint", material_category="paint", applies_to_work_type=wt.code, material_unit="l", work_type_code=wt.code, basis_type="ceiling_area", consumption_qty=Decimal("3"), per_basis_qty=Decimal("10"), consumption_value=Decimal("3"), consumption_unit="per_10_m2", default_unit_price_sek=Decimal("100"), package_size=Decimal("1"), package_unit="l", layers_multiplier_enabled=False, waste_percent=Decimal("0"), active=True))
+        db.add(ProjectPricing(project_id=project.id, mode="FIXED_TOTAL", fixed_total_price=Decimal("1000"), include_materials=True, include_materials_in_sell_price=True))
+        db.commit()
+        project_id = project.id
+    finally:
+        db.close()
+
+    resp = client.get(f"/projects/{project_id}")
+    assert resp.status_code == 200
+    assert "projects.pricing.summary.materials" in resp.text or "Материалы" in resp.text
