@@ -1,6 +1,9 @@
 from decimal import Decimal
+from uuid import uuid4
 
+from app.db import SessionLocal
 from app.models.project import Project, ProjectWorkItem
+from app.models.project_pricing import ProjectPricing
 from app.models.room import Room
 from app.models.worktype import WorkType
 from app.services.project_estimator import (
@@ -9,6 +12,7 @@ from app.services.project_estimator import (
     build_scope,
     calculate_labour_totals,
 )
+from app.services.project_pricing import build_project_pricing_summary
 
 
 def _room(room_id: int, name: str, floor: str, perimeter: str, height: str) -> Room:
@@ -16,8 +20,8 @@ def _room(room_id: int, name: str, floor: str, perimeter: str, height: str) -> R
 
 
 def _item(room_id: int | None, category: str, hours: str, scope_mode: str = "room") -> ProjectWorkItem:
-    wt = WorkType(code=f"WT{room_id}{category}", category=category, unit="m2", name_ru="x", name_sv="x", hours_per_unit=Decimal("1"))
-    return ProjectWorkItem(room_id=room_id, scope_mode=scope_mode, calculated_hours=Decimal(hours), work_type=wt)
+    wt = WorkType(code=f"WT{room_id}{category}{uuid4().hex[:6]}", category=category, unit="m2", name_ru="x", name_sv="x", hours_per_unit=Decimal("1"))
+    return ProjectWorkItem(room_id=room_id, scope_mode=scope_mode, quantity=Decimal("1"), difficulty_factor=Decimal("1"), calculated_hours=Decimal(hours), work_type=wt)
 
 
 def test_aggregate_two_rooms_sums_geometry():
@@ -176,3 +180,62 @@ def test_project_scope_item_excluded_from_single_room_scope():
     labour = calculate_labour_totals(scope, operations, Decimal("500"))
 
     assert labour.total_hours == Decimal("0.00")
+
+
+def test_project_pricing_summary_hourly_mode():
+    db = SessionLocal()
+    try:
+        project = Project(name="Hourly")
+        project.rooms = [Room(name="A", floor_area_m2=Decimal("10"), wall_perimeter_m=Decimal("14"), wall_height_m=Decimal("2.5"))]
+        project.work_items = [_item(1, "paint", "4")]
+        project.pricing = ProjectPricing(pricing_mode="hourly", hourly_rate=Decimal("400"), include_materials_in_sell_price=False)
+        db.add(project)
+        db.commit()
+        db.refresh(project)
+        summary = build_project_pricing_summary(project, db)
+        assert summary.labour_price_hourly == Decimal("1600.00")
+        assert summary.selected_total_with_materials == Decimal("1600.00")
+    finally:
+        db.close()
+
+
+def test_project_pricing_summary_per_m2_walls_ceilings_and_custom_and_fixed():
+    db = SessionLocal()
+    try:
+        project = Project(name="PerM2")
+        project.rooms = [Room(name="A", floor_area_m2=Decimal("10"), wall_perimeter_m=Decimal("14"), wall_height_m=Decimal("2.5"))]
+        project.work_items = [_item(1, "paint", "2")]
+        project.pricing = ProjectPricing(pricing_mode="per_m2", sqm_rate=Decimal("100"), sqm_basis="walls_ceilings", include_materials_in_sell_price=False)
+        db.add(project)
+        db.commit()
+        db.refresh(project)
+        summary = build_project_pricing_summary(project, db)
+        assert summary.labour_price_per_m2 == Decimal("4500.00")
+
+        project.pricing.sqm_basis = "custom"
+        project.pricing.sqm_custom_value = Decimal("42")
+        summary_custom = build_project_pricing_summary(project, db)
+        assert summary_custom.labour_price_per_m2 == Decimal("4200.00")
+
+        project.pricing.pricing_mode = "fixed"
+        project.pricing.fixed_price_amount = Decimal("7777")
+        summary_fixed = build_project_pricing_summary(project, db)
+        assert summary_fixed.labour_price_fixed == Decimal("7777.00")
+        assert summary_fixed.selected_sell_price == Decimal("7777.00")
+    finally:
+        db.close()
+
+
+def test_project_pricing_summary_warnings_for_missing_values_and_geometry():
+    db = SessionLocal()
+    try:
+        project = Project(name="Warn")
+        project.pricing = ProjectPricing(pricing_mode="per_m2", sqm_rate=Decimal("0"), sqm_basis="walls", include_materials_in_sell_price=False)
+        db.add(project)
+        db.commit()
+        db.refresh(project)
+        summary = build_project_pricing_summary(project, db)
+        assert "pricing.validation.sqm_rate_required" in summary.warnings
+        assert "pricing.validation.geometry_required" in summary.warnings
+    finally:
+        db.close()

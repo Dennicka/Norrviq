@@ -335,24 +335,64 @@
     </form>
     <form method="post" action="/projects/{{ project.id }}/estimator-pricing-mode">
         {{ csrf_input(request) }}
-        <label>Режим расчёта</label>
-        <select name="project_pricing_mode" onchange="this.form.submit()">
+        <h3>{{ t("projects.pricing.mode_block") }}</h3>
+        <label>{{ t("projects.pricing.mode") }}</label>
+        <select name="project_pricing_mode">
             <option value="hourly" {% if project_pricing.mode == 'HOURLY' %}selected{% endif %}>{{ t("projects.estimator.pricing_mode.hourly") }}</option>
-            <option value="sqm" {% if project_pricing.mode == 'PER_M2' %}selected{% endif %}>{{ t("projects.estimator.pricing_mode.sqm") }}</option>
+            <option value="per_m2" {% if project_pricing.mode == 'PER_M2' %}selected{% endif %}>{{ t("projects.estimator.pricing_mode.sqm") }}</option>
             <option value="fixed" {% if project_pricing.mode == 'FIXED_TOTAL' %}selected{% endif %}>{{ t("projects.estimator.pricing_mode.fixed") }}</option>
         </select>
+        <h3>{{ t("projects.pricing.params_block") }}</h3>
+        <label>{{ t("projects.pricing.hourly_rate") }}</label>
+        <input type="text" name="hourly_rate" value="{{ project_pricing.hourly_rate or project_pricing.hourly_rate_override or 0 }}">
+        <label>{{ t("projects.pricing.sqm_rate") }}</label>
+        <input type="text" name="sqm_rate" value="{{ project_pricing.sqm_rate or project_pricing.rate_per_m2 or 0 }}">
+        <label>{{ t("projects.pricing.sqm_basis") }}</label>
+        {% set selected_basis = project_pricing.sqm_basis or 'walls_ceilings' %}
+        <select name="sqm_basis">
+            <option value="floor" {% if selected_basis == 'floor' %}selected{% endif %}>{{ t("projects.pricing.sqm_basis.floor") }}</option>
+            <option value="walls" {% if selected_basis == 'walls' %}selected{% endif %}>{{ t("projects.pricing.sqm_basis.walls") }}</option>
+            <option value="ceilings" {% if selected_basis == 'ceilings' %}selected{% endif %}>{{ t("projects.pricing.sqm_basis.ceilings") }}</option>
+            <option value="walls_ceilings" {% if selected_basis == 'walls_ceilings' %}selected{% endif %}>{{ t("projects.pricing.sqm_basis.walls_ceilings") }}</option>
+            <option value="custom" {% if selected_basis == 'custom' %}selected{% endif %}>{{ t("projects.pricing.sqm_basis.custom") }}</option>
+        </select>
+        <label>{{ t("projects.pricing.sqm_custom_value") }}</label>
+        <input type="text" name="sqm_custom_value" value="{{ project_pricing.sqm_custom_value or '' }}">
+        <label>{{ t("projects.pricing.fixed_price") }}</label>
+        <input type="text" name="fixed_price_amount" value="{{ project_pricing.fixed_price_amount or project_pricing.fixed_total_price or 0 }}">
+        <h3>{{ t("projects.pricing.common_block") }}</h3>
+        <label><input type="checkbox" name="include_materials_in_sell_price" value="1" {% if project_pricing.include_materials_in_sell_price or project_pricing.include_materials %}checked{% endif %}> {{ t("projects.pricing.include_materials") }}</label>
+        <label>{{ t("projects.pricing.currency") }}</label>
+        <input type="text" name="currency" value="{{ project_pricing.currency or 'SEK' }}">
+        <label>{{ t("projects.pricing.rounding_mode") }}</label>
+        <select name="rounding_mode">
+            {% set rounding = project_pricing.rounding_mode or 'none' %}
+            <option value="none" {% if rounding == 'none' %}selected{% endif %}>none</option>
+            <option value="to_1" {% if rounding == 'to_1' %}selected{% endif %}>to_1</option>
+            <option value="to_10" {% if rounding == 'to_10' %}selected{% endif %}>to_10</option>
+            <option value="to_100" {% if rounding == 'to_100' %}selected{% endif %}>to_100</option>
+        </select>
+        <button type="submit">{{ t("common.save") }}</button>
     </form>
     {% if estimator_summary.has_missing_data %}
     <p><span class="badge badge-warning">Не хватает данных для полного расчёта</span></p>
     {% endif %}
-    <p><strong>Часы всего:</strong> {{ estimator_summary.totals.total_labour_hours }}</p>
-    <p><strong>Позиций:</strong> {{ estimator_summary.scoped_work_items|length }}</p>
-    <p><strong>Подготовка / Шпаклёвка / Покраска / Прочее:</strong> {{ estimator_summary.labour.by_category["prep"] }} / {{ estimator_summary.labour.by_category["filler"] }} / {{ estimator_summary.labour.by_category["paint"] }} / {{ estimator_summary.labour.by_category["other"] }}</p>
-    <p><strong>Подытог работы:</strong> {{ estimator_summary.totals.subtotal_labour }}</p>
-    <p><strong>Подытог материалы:</strong> {{ estimator_summary.totals.subtotal_materials }}</p>
-    <p><strong>Подытог:</strong> {{ estimator_summary.totals.subtotal }}</p>
-    <p><strong>VAT:</strong> {{ estimator_summary.totals.vat_amount }}</p>
-    <p><strong>Итого с VAT:</strong> {{ estimator_summary.totals.total_inc_vat }}</p>
+    <p><strong>{{ t("projects.pricing.summary.hours") }}:</strong> {{ project_pricing_summary.labour_hours_total }}</p>
+    <p><strong>{{ t("projects.pricing.summary.materials") }}:</strong> {{ project_pricing_summary.materials_total }} {{ project_pricing.currency }}</p>
+    <p><strong>{{ t("projects.pricing.summary.selected_mode") }}:</strong> {{ project_pricing_summary.selected_mode }}</p>
+    <p><strong>{{ t("projects.pricing.summary.formula") }}:</strong> {{ project_pricing_summary.basis_used.sqm }} × {{ project_pricing_summary.basis_used.rate }} {{ project_pricing.currency }}</p>
+    <p><strong>{{ t("projects.pricing.summary.works") }}:</strong> {{ project_pricing_summary.selected_sell_price }} {{ project_pricing.currency }}</p>
+    <p><strong>{{ t("projects.pricing.summary.total") }}:</strong> {{ project_pricing_summary.selected_total_with_materials }} {{ project_pricing.currency }}</p>
+    {% if project_pricing_summary.warnings %}
+    <ul>
+        {% for warning in project_pricing_summary.warnings %}
+        <li>{{ t(warning) }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+    <p><strong>{{ t("projects.pricing.preview.hourly") }}:</strong> {{ project_pricing_summary.labour_hours_total }} × {{ project_pricing.hourly_rate or project_pricing.hourly_rate_override or 0 }} = {{ project_pricing_summary.labour_price_hourly }}</p>
+    <p><strong>{{ t("projects.pricing.preview.per_m2") }}:</strong> {{ project_pricing_summary.basis_used.sqm }} × {{ project_pricing_summary.basis_used.rate }} = {{ project_pricing_summary.labour_price_per_m2 }}</p>
+    <p><strong>{{ t("projects.pricing.preview.fixed") }}:</strong> {{ project_pricing_summary.labour_price_fixed }}</p>
 
     <details>
         <summary>По помещениям</summary>
