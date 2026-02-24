@@ -49,6 +49,7 @@ from app.services.project_pricing import build_project_pricing_summary
 from app.services.workflow import build_project_workflow_state
 from app.services.work_scope_apply import apply_work_item_to_scope
 from app.services.estimator_workspace import build_estimator_workspace
+from app.services.estimator_engine import build_project_estimate
 from app.services.pricing import (
     LOW_MARGIN_WARN_PCT,
     WARNING_LOW_MARGIN,
@@ -486,6 +487,7 @@ async def project_detail(
     geometry_summary = aggregate_project_geometry(db, project.id)
     pricing = get_or_create_project_pricing(db, project.id)
     estimator_mode_map = {"HOURLY": "hourly", "PER_M2": "sqm", "FIXED_TOTAL": "fixed"}
+    project_estimate = build_project_estimate(db, project.id)
     estimator_summary = build_project_estimate_summary(
         project=project,
         room_ids=room_ids,
@@ -518,7 +520,7 @@ async def project_detail(
         recent_invoices=recent_invoices,
         baseline=baseline,
         geometry_summary=geometry_summary,
-        total_labor_hours=calculate_project_total_hours(db, project.id),
+        total_labor_hours=project_estimate["totals"]["total_hours"],
         pricing_totals=calculate_project_pricing_totals(project),
         settings_obj=settings,
         estimator_summary=estimator_summary,
@@ -529,6 +531,7 @@ async def project_detail(
         materials_calc_totals=material_totals,
         materials_auto_bom=auto_bom,
         workflow_state=build_project_workflow_state(db, project.id, lang=lang),
+        project_estimate=project_estimate,
     )
     return templates.TemplateResponse(request, "projects/detail.html", context)
 
@@ -1898,6 +1901,7 @@ async def project_pricing_screen(
 
     pricing = get_or_create_project_pricing(db, project_id)
     baseline, scenarios = compute_pricing_scenarios(db, project_id, request_id=getattr(request.state, "request_id", None))
+    estimate = build_project_estimate(db, project_id)
     policy = get_or_create_pricing_policy(db)
     scenario_views = [_scenario_view_model(scenario, evaluate_floor(baseline, scenario, policy)) for scenario in scenarios]
     segment = (project.client.client_segment if project.client and project.client.client_segment else "ANY")
@@ -1980,6 +1984,7 @@ async def project_pricing_screen(
         is_readonly=is_readonly,
         baseline=baseline,
         scenarios=scenario_views,
+        estimate=estimate,
         effective_by_mode=effective_by_mode,
         pricing_policy=policy,
         completeness_by_mode=completeness_by_mode,

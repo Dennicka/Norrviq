@@ -8,8 +8,8 @@ from sqlalchemy.orm import Session, selectinload
 from app.models.material_consumption_override import MaterialConsumptionOverride
 from app.models.project import Project, ProjectWorkItem
 from app.services.completeness import compute_completeness
-from app.services.estimates import calculate_project_total_hours, calculate_project_totals, recalculate_project_work_items
-from app.services.geometry import aggregate_project_geometry
+from app.services.estimator_engine import build_project_estimate
+from app.services.estimates import calculate_project_totals, recalculate_project_work_items
 from app.services.materials_bom import compute_project_bom
 from app.models.pricing_policy import get_or_create_pricing_policy
 from app.services.pricing import WARNING_LOW_MARGIN, compute_pricing_scenarios, evaluate_floor, get_or_create_project_pricing
@@ -45,8 +45,8 @@ def build_estimator_workspace(db: Session, project_id: int, lang: str = "ru") ->
 
     recalculate_project_work_items(db, project)
     calculate_project_totals(db, project)
+    estimate = build_project_estimate(db, project_id)
 
-    geometry = aggregate_project_geometry(db, project_id)
     rooms = list(project.rooms)
     room_missing_geometry = [r.name for r in rooms if _d(r.floor_area_m2) <= 0 or _d(r.wall_area_m2) <= 0 or _d(r.ceiling_area_m2) <= 0]
 
@@ -60,24 +60,32 @@ def build_estimator_workspace(db: Session, project_id: int, lang: str = "ru") ->
         wt_key = (item.work_type.name_ru if item.work_type else "-")
         hours_by_work_type[wt_key] += item_hours
 
-    total_hours = calculate_project_total_hours(db, project_id)
+    total_hours = estimate["totals"]["total_hours"]
 
     baseline, scenarios = compute_pricing_scenarios(db, project_id)
     pricing = get_or_create_project_pricing(db, project_id)
     pricing_scenarios = {}
     pricing_warnings: list[str] = []
     policy = get_or_create_pricing_policy(db)
+    scenario_key_map = {
+        "HOURLY": "hourly",
+        "PER_M2": "per_sqm",
+        "PER_ROOM": "per_room",
+        "PIECEWORK": "piecework",
+        "FIXED_TOTAL": "fixed_price",
+    }
     for scenario in scenarios:
+        engine_row = estimate["pricing_scenarios"].get(scenario_key_map.get(scenario.mode, ""), {})
         floor = evaluate_floor(baseline=baseline, scenario=scenario, policy=policy)
         pricing_scenarios[scenario.mode] = {
             "mode": scenario.mode,
-            "labour_amount": _d(scenario.price_ex_vat),
+            "labour_amount": _d(engine_row.get("revenue", scenario.price_ex_vat)),
             "materials_amount": _d(baseline.materials_cost_internal),
-            "subtotal": _d(scenario.price_ex_vat),
-            "total": _d(scenario.price_inc_vat),
-            "margin_pct": _d(scenario.margin_pct),
+            "subtotal": _d(engine_row.get("revenue", scenario.price_ex_vat)),
+            "total": _d(engine_row.get("revenue", scenario.price_inc_vat)),
+            "margin_pct": _d(engine_row.get("margin_percent", scenario.margin_pct)),
             "below_margin_floor": bool(floor.is_below_floor),
-            "warnings": list(scenario.warnings),
+            "warnings": list(engine_row.get("missing_requirements", scenario.warnings)),
         }
         if WARNING_LOW_MARGIN in scenario.warnings:
             pricing_warnings.append(f"{scenario.mode}:LOW_MARGIN")
@@ -111,10 +119,10 @@ def build_estimator_workspace(db: Session, project_id: int, lang: str = "ru") ->
         "project": project,
         "geometry": {
             "rooms_count": len(rooms),
-            "total_floor_area": _d(geometry.total_floor_area_m2),
-            "total_wall_area": _d(geometry.total_wall_area_net_m2),
-            "total_ceiling_area": _d(geometry.total_ceiling_area_m2),
-            "warnings": room_missing_geometry,
+            "total_floor_area": estimate["scopes"]["floor_area_total"],
+            "total_wall_area": estimate["scopes"]["wall_area_net_total"],
+            "total_ceiling_area": estimate["scopes"]["ceiling_area_total"],
+            "warnings": room_missing_geometry + estimate["warnings"],
         },
         "work_items": {
             "grouped": grouped_items,
@@ -127,6 +135,7 @@ def build_estimator_workspace(db: Session, project_id: int, lang: str = "ru") ->
             "scenarios": pricing_scenarios,
             "warnings": pricing_warnings,
         },
+        "estimate": estimate,
         "materials": {
             "rows": material_rows,
             "total_estimated_cost": _d(bom.total_cost_ex_vat),
@@ -143,4 +152,3 @@ def build_estimator_workspace(db: Session, project_id: int, lang: str = "ru") ->
 
 def calculate_project_total_hours_from_items(work_items: list[ProjectWorkItem]) -> Decimal:
     return sum((_d(item.calculated_hours) for item in work_items), Decimal("0")).quantize(Decimal("0.01"))
-

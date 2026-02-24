@@ -7,6 +7,18 @@
 <div data-autosave-status></div>
 <div data-autosave-form-error class="autosave-field-error"></div>
 
+<section style="padding:8px;border:1px solid #ddd;margin:12px 0;">
+    <h2>Estimator engine summary</h2>
+    <div>Total hours: {{ estimate.totals.total_hours }}</div>
+    <div>Total cost: {{ estimate.totals.total_cost }}</div>
+    <div>Perimeter: {{ estimate.scopes.perimeter_total }}</div>
+    {% if estimate.warnings %}
+    <ul>
+        {% for warning in estimate.warnings %}<li>{{ warning }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+</section>
+
 {% if errors %}
 <div class="flash flash-error">
     <strong>Проверьте форму:</strong>
