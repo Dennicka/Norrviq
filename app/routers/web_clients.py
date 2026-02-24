@@ -80,7 +80,7 @@ async def _save_client(
     _apply_client_data(client, data)
     db.add(client)
     if not safe_commit(db, request, message="save_client"):
-        add_flash_message(request, "Не удалось сохранить клиента. Попробуйте снова.", "error")
+        add_flash_message(request, translator("common.save_error_retry"), "error")
         context = template_context(request, lang)
         placeholder = SimpleNamespace(**{**data, "id": resolved_client_id})
         context.update({"client": placeholder, "form_action": form_action})
@@ -206,7 +206,7 @@ async def delete_client(
 
     db.delete(client)
     if not safe_commit(db, request, message="delete_client"):
-        add_flash_message(request, "Не удалось удалить клиента. Попробуйте снова.", "error")
+        add_flash_message(request, translator("common.delete_error_retry"), "error")
         return RedirectResponse(
             url=f"/clients/{client_id}", status_code=status.HTTP_303_SEE_OTHER
         )

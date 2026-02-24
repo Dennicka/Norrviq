@@ -34,12 +34,12 @@
         </label>
     </div>
     <div>
-        <label>Client segment</label>
+        <label>{{ t("clients.segment") }}</label>
         {% set seg = client.client_segment if client and client.client_segment else 'B2C' %}
         <select name="client_segment">
-            <option value="B2C" {% if seg == 'B2C' %}selected{% endif %}>B2C</option>
-            <option value="BRF" {% if seg == 'BRF' %}selected{% endif %}>BRF</option>
-            <option value="B2B" {% if seg == 'B2B' %}selected{% endif %}>B2B</option>
+            <option value="B2C" {% if seg == 'B2C' %}selected{% endif %}>{{ t("clients.segment.b2c") }}</option>
+            <option value="BRF" {% if seg == 'BRF' %}selected{% endif %}>{{ t("clients.segment.brf") }}</option>
+            <option value="B2B" {% if seg == 'B2B' %}selected{% endif %}>{{ t("clients.segment.b2b") }}</option>
         </select>
     </div>
     <div>
