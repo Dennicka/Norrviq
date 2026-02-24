@@ -1,23 +1,36 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>{{ t('materials.norms.title') }}</h1>
+{% if errors %}
+<div class="flash flash-error">Validation error: {{ errors|join(', ') }}</div>
+{% endif %}
 <form method="post">
   {{ csrf_input(request) }}
-  <label><input type="checkbox" name="active" {% if not norm or norm.active %}checked{% endif %}>{{ t('label.active') }}</label>
-  <label>{{ t('label.material') }}<input name="material_name" value="{{ norm.material_name if norm else '' }}" required></label>
-  <label>{{ t('label.category') }}<input name="material_category" value="{{ norm.material_category if norm else '' }}"></label>
-  <label>{{ t('label.work_type') }}<input name="applies_to_work_type" value="{{ norm.applies_to_work_type if norm else '' }}" required></label>
-  <label>{{ t('label.surface_type') }}<select name="surface_type">{% for v in ['wall','ceiling','floor','custom'] %}<option value="{{ v }}" {% if norm and norm.surface_type==v %}selected{% endif %}>{{ t('statuses.surface.' + v) }}</option>{% endfor %}</select></label>
-  <label>{{ t('materials.norm') }}<input type="number" step="0.0001" name="consumption_value" value="{{ norm.consumption_value if norm else '' }}" required></label>
-  <label>{{ t('label.unit') }}<select name="consumption_unit">{% for v in ['per_10_m2','per_1_m2','custom'] %}<option value="{{ v }}" {% if norm and norm.consumption_unit==v %}selected{% endif %}>{{ t('materials.consumption_unit.' + v) }}</option>{% endfor %}</select></label>
-  <label>{{ t('label.material_unit') }}<select name="material_unit">{% for v in ['liter','kg','pcs','roll','bucket'] %}<option value="{{ v }}" {% if norm and norm.material_unit==v %}selected{% endif %}>{{ t('units.' + v) }}</option>{% endfor %}</select></label>
-  <label>{{ t('materials.package_size') }}<input type="number" step="0.0001" name="package_size" value="{{ norm.package_size if norm else '' }}"></label>
-  <label>{{ t('label.package_unit') }}<input name="package_unit" value="{{ norm.package_unit if norm else '' }}"></label>
-  <label>{{ t('materials.waste_percent') }}<input type="number" step="0.01" name="waste_percent" value="{{ norm.waste_percent if norm else '10' }}"></label>
-  <label>{{ t('materials.coats') }}<select name="coats_multiplier_mode">{% for v in ['none','use_work_coats'] %}<option value="{{ v }}" {% if norm and norm.coats_multiplier_mode==v %}selected{% endif %}>{{ t('statuses.coats.' + v) }}</option>{% endfor %}</select></label>
-  <label>{{ t('label.brand_product') }}<input name="brand_product" value="{{ norm.brand_product if norm else '' }}"></label>
-  <label>{{ t('label.default_unit_price_sek') }}<input type="number" step="0.01" name="default_unit_price_sek" value="{{ norm.default_unit_price_sek if norm else '' }}"></label>
-  <label>{{ t('label.notes') }}<textarea name="notes">{{ norm.notes if norm else '' }}</textarea></label>
+  {% set form = form_data if form_data else {} %}
+  <label><input type="checkbox" name="is_active" {% if (form.get('is_active') in ['on','true','1']) or (not form and (not norm or norm.is_active or norm.active)) %}checked{% endif %}>{{ t('label.active') }}</label>
+  <label>{{ t('label.material') }}<input name="material_name" value="{{ form.get('material_name') if form else (norm.material_name if norm else '') }}" required></label>
+  <label>{{ t('label.category') }}<input name="material_category" value="{{ form.get('material_category') if form else (norm.material_category if norm else '') }}"></label>
+  <label>Work kind
+    <select name="work_kind" required>
+      {% for v in ['painting_ceiling','painting_walls','putty_walls','primer_walls','floor_covering'] %}
+      {% set selected = (form.get('work_kind') == v) or (not form and norm and norm.work_kind == v) %}
+      <option value="{{ v }}" {% if selected %}selected{% endif %}>{{ v }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Basis type
+    <select name="basis_type" required>
+      {% for v in ['floor_area','ceiling_area','wall_area','opening_area','perimeter','manual_quantity'] %}
+      {% set selected = (form.get('basis_type') == v) or (not form and norm and norm.basis_type == v) %}
+      <option value="{{ v }}" {% if selected %}selected{% endif %}>{{ v }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Norm (qty per basis)<input type="number" step="0.0001" name="quantity_per_basis" value="{{ form.get('quantity_per_basis') if form else (norm.quantity_per_basis if norm else '') }}" required></label>
+  <label>Basis unit<input name="basis_unit" value="{{ form.get('basis_unit') if form else (norm.basis_unit if norm else 'm2') }}" required></label>
+  <label>{{ t('label.material_unit') }}<input name="material_unit" value="{{ form.get('material_unit') if form else (norm.material_unit if norm else '') }}" required></label>
+  <label>Waste %<input type="number" step="0.01" name="waste_factor_pct" value="{{ form.get('waste_factor_pct') if form else (norm.waste_factor_pct if norm else '0') }}"></label>
+  <label>{{ t('label.notes') }}<textarea name="notes">{{ form.get('notes') if form else (norm.notes if norm else '') }}</textarea></label>
   <button type="submit">{{ t('label.save') }}</button>
 </form>
 {% endblock %}

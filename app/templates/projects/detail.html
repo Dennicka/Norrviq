@@ -395,6 +395,41 @@
 </section>
 
 <section>
+    <h2>Materials (calculated)</h2>
+    {% if materials_calc_totals %}
+    <table>
+        <thead><tr><th>Material</th><th>Qty</th><th>Unit</th></tr></thead>
+        <tbody>
+            {% for total in materials_calc_totals %}
+            <tr><td>{{ total.material_name }}</td><td>{{ total.total_quantity }}</td><td>{{ total.material_unit }}</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <details>
+        <summary>Details by work item</summary>
+        <table>
+            <thead><tr><th>Work item</th><th>Material</th><th>Basis</th><th>Basis qty</th><th>Norm</th><th>Waste %</th><th>Qty</th></tr></thead>
+            <tbody>
+                {% for row in materials_calc_rows %}
+                <tr>
+                    <td>#{{ row.source_work_item_id }}</td>
+                    <td>{{ row.material_name }}</td>
+                    <td>{{ row.basis_type }}</td>
+                    <td>{{ row.basis_quantity }}</td>
+                    <td>{{ row.norm_value }}</td>
+                    <td>{{ row.waste_factor_pct }}</td>
+                    <td>{{ row.calculated_quantity }} {{ row.material_unit }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </details>
+    {% else %}
+    <p>No material consumption rules configured yet. Add rules at <a href="/materials/rules">/materials/rules</a>.</p>
+    {% endif %}
+</section>
+
+<section>
     <h2>{{ t("label.work_type") }}</h2>
     <table>
         <thead>
