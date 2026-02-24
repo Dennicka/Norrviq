@@ -47,6 +47,7 @@ from app.services.geometry import aggregate_project_geometry
 from app.services.project_estimator import build_project_estimate_summary
 from app.services.project_pricing import build_project_pricing_summary
 from app.services.work_scope_apply import apply_work_item_to_scope
+from app.services.estimator_workspace import build_estimator_workspace
 from app.services.pricing import (
     LOW_MARGIN_WARN_PCT,
     WARNING_LOW_MARGIN,
@@ -176,6 +177,23 @@ def _format_margin_pct(value: Decimal | None) -> str:
     if normalized is None:
         return "—"
     return f"{normalized.quantize(Decimal('0.1')):.1f}%"
+
+
+def _find_preset_work_type(worktypes: list[WorkType], preset: str) -> WorkType | None:
+    keys = {
+        "floor_protection": ["protect", "защит", "skydd", "floor"],
+        "ceiling_paint": ["ceiling", "потол", "tak", "paint"],
+        "wall_paint": ["wall", "стен", "vägg", "paint"],
+        "wall_putty": ["putty", "шпат", "spack"],
+        "sanding": ["sand", "шлиф", "slip"],
+        "primer": ["primer", "грунт"],
+    }
+    markers = keys.get(preset, [])
+    for wt in worktypes:
+        haystack = " ".join([str(wt.code or ""), str(wt.category or ""), str(wt.name_ru or ""), str(wt.name_sv or "")]).lower()
+        if all(any(m in haystack for m in [marker]) for marker in markers[:1]) and any(m in haystack for m in markers):
+            return wt
+    return None
 
 
 def _warning_text(code: str) -> str:
@@ -1336,6 +1354,88 @@ async def recalc_project(
     calculate_project_totals(db, project)
 
     return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.get("/{project_id}/estimator")
+async def project_estimator_workspace(
+    project_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    lang: str = Depends(get_current_lang),
+):
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    workspace = build_estimator_workspace(db, project_id, lang=lang)
+    context = build_project_context(db, request, project, lang, workspace=workspace, worktypes=db.query(WorkType).filter(WorkType.is_active).all(), rooms=project.rooms)
+    return templates.TemplateResponse(request, "projects/estimator.html", context)
+
+
+@router.post("/{project_id}/estimator/recalc")
+async def project_estimator_recalc(
+    project_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    lang: str = Depends(get_current_lang),
+):
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    build_estimator_workspace(db, project_id, lang=lang)
+    add_flash_message(request, make_t(lang)("estimator.recalculated"), "success")
+    return RedirectResponse(url=f"/projects/{project_id}/estimator", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{project_id}/estimator/preset")
+async def project_estimator_apply_preset(
+    project_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    lang: str = Depends(get_current_lang),
+):
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    form = await request.form()
+    preset = (form.get("preset") or "").strip()
+    scope_mode = (form.get("scope_mode") or "all_rooms").strip()
+    selected_room_ids = form.getlist("selected_room_ids")
+    layers = Decimal(str(form.get("coats") or "1"))
+    worktypes = db.query(WorkType).filter(WorkType.is_active).all()
+    work_type = _find_preset_work_type(worktypes, preset)
+    t = make_t(lang)
+    if not work_type:
+        add_flash_message(request, t("estimator.bulk.preset_not_found"), "error")
+        return RedirectResponse(url=f"/projects/{project_id}/estimator", status_code=status.HTTP_303_SEE_OTHER)
+    result = apply_work_item_to_scope(
+        project_id,
+        {
+            "work_type_id": work_type.id,
+            "scope_apply_mode": scope_mode,
+            "selected_room_ids": selected_room_ids,
+            "layers": layers,
+            "difficulty_factor": Decimal("1"),
+            "pricing_mode": "hourly",
+        },
+        db,
+    )
+    recalculate_project_work_items(db, project)
+    db.commit()
+    add_flash_message(request, t("estimator.bulk.applied").format(count=result.created_count), "success")
+    return RedirectResponse(url=f"/projects/{project_id}/estimator", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{project_id}/estimator/select-pricing")
+async def project_estimator_select_pricing(
+    project_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    pricing = get_or_create_project_pricing(db, project_id)
+    form = await request.form()
+    mode = form.get("mode") or "HOURLY"
+    select_pricing_mode(db, pricing=pricing, mode=mode, user_id=get_current_user_email(request))
+    return RedirectResponse(url=f"/projects/{project_id}/estimator", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/{project_id}/recalculate-finance")
