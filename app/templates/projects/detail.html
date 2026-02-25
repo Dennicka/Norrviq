@@ -109,69 +109,106 @@
 </section>
 
 <section class="workspace-section" data-tab="documents"{% if active_tab != "documents" %} hidden{% endif %}>
-    <h2>{{ t("menu.invoices") }}</h2>
+    <h2>{{ t("projects.documents.title") }}</h2>
+    <form method="post" action="/projects/{{ project.id }}/documents/preferences" class="documents-toolbar">
+        {{ csrf_input(request) }}
+        <label>
+            {{ t("projects.documents.doc_type") }}
+            <select name="doc_type" onchange="this.form.submit()">
+                <option value="offer" {% if documents_doc_type == 'offer' %}selected{% endif %}>{{ t("projects.documents.offer") }}</option>
+                <option value="invoice" {% if documents_doc_type == 'invoice' %}selected{% endif %}>{{ t("projects.documents.invoice") }}</option>
+            </select>
+        </label>
+        <label>
+            {{ t("projects.documents.document_lang") }}
+            <select name="document_lang" onchange="this.form.submit()">
+                {% for code in ['ru', 'sv', 'en'] %}
+                <option value="{{ code }}" {% if documents_selected_lang == code %}selected{% endif %}>{{ code|upper }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        {% if documents_doc_type == 'invoice' %}
+        <label>
+            {{ t("projects.documents.invoice_pick") }}
+            <select name="invoice_id" onchange="this.form.submit()">
+                {% for inv in recent_invoices %}
+                <option value="{{ inv.id }}" {% if documents_selected_invoice and documents_selected_invoice.id == inv.id %}selected{% endif %}>{{ inv.invoice_number or ('#' ~ inv.id) }} · {{ t('invoice.status.' ~ inv.status) }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        {% endif %}
+    </form>
+
+    <div class="documents-meta muted">
+        <strong>{{ t("projects.documents.terms_template") }}:</strong>
+        {{ documents_terms_template.title }} · {{ documents_terms_template.lang|upper }} · {{ documents_terms_template.segment }}
+        <span class="help" title="{{ t('projects.documents.terms_help') }}">?</span>
+    </div>
+    {% if documents_terms_template.lang != documents_selected_lang %}
+    <div class="flash error">{{ t("projects.documents.terms_lang_mismatch") }} ({{ documents_selected_lang|upper }} → {{ documents_terms_template.lang|upper }})</div>
+    {% endif %}
+    {% if documents_company_missing_fields %}
+    <div class="flash error">
+        <strong>{{ t("projects.documents.company_required.title") }}</strong>
+        <ul>
+            {% for missing_key in documents_company_missing_fields %}
+            <li>{{ t(missing_key) }}</li>
+            {% endfor %}
+        </ul>
+        <a href="/settings/company">{{ t("projects.documents.open_company") }}</a>
+    </div>
+    {% endif %}
+    {% if not documents_pdf_capability.weasyprint_available %}
+    <div class="flash" style="background:#fffbeb;border-color:#f59e0b;">{{ t("projects.documents.pdf_unavailable") }}</div>
+    {% endif %}
+
+    {% if documents_doc_type == 'offer' %}
+    {% set preview_url = '/projects/' ~ project.id ~ '/offer?lang=' ~ documents_selected_lang %}
+    {% set pdf_url = '/offers/' ~ project.id ~ '/pdf?lang=' ~ documents_selected_lang %}
+    {% set print_url = preview_url %}
+    {% else %}
+    {% if documents_selected_invoice %}
+    {% set preview_url = '/projects/' ~ project.id ~ '/invoices/' ~ documents_selected_invoice.id ~ '?lang=' ~ documents_selected_lang %}
+    {% set pdf_url = '/invoices/' ~ documents_selected_invoice.id ~ '/pdf?lang=' ~ documents_selected_lang %}
+    {% set print_url = '/invoices/' ~ documents_selected_invoice.id ~ '/print?lang=' ~ documents_selected_lang %}
+    {% else %}
+    {% set preview_url = '' %}
+    {% set pdf_url = '' %}
+    {% set print_url = '' %}
+    {% endif %}
+    {% endif %}
+
+    <div class="documents-actions">
+        {% if preview_url %}
+        <a href="{{ preview_url }}" target="_blank">{{ t("projects.documents.open_new_tab") }}</a>
+        <a href="{{ print_url }}" target="_blank">{{ t("common.print") }}</a>
+        <a href="{{ pdf_url }}">PDF</a>
+        <a href="/projects/{{ project.id }}?tab=documents&doc_type={{ documents_doc_type }}">{{ t("projects.documents.refresh") }}</a>
+        {% else %}
+        <span class="muted">{{ t("projects.documents.no_invoice_preview") }}</span>
+        {% endif %}
+    </div>
+    {% if preview_url %}
+    <iframe src="{{ preview_url }}" title="{{ t('projects.documents.preview') }}" class="documents-preview-frame"></iframe>
+    {% endif %}
+
     <p>
-        <a href="/projects/{{ project.id }}/invoices/">{{ t("invoice.list.title") }}</a>
-        |
-        <a href="/projects/{{ project.id }}/invoices/create">{{ t("label.create") }}</a>
-        |
+        <a href="/projects/{{ project.id }}/invoices/">{{ t("invoice.list.title") }}</a> |
         <button type="button" id="open-create-invoice-dialog">{{ t("invoice.create") }}</button>
     </p>
     <dialog id="create-invoice-dialog">
         <form method="post" action="/projects/{{ project.id }}/invoices/create-from-project?tab={{ active_tab }}">
             {{ csrf_input(request) }}
             <h3>{{ t("invoice.create_from_project") }}</h3>
-            <label>
-                <input type="checkbox" name="include_labor" value="true" checked>
-                {{ t("invoice.include_labor") }}
-            </label>
-            <br>
-            <label>
-                <input type="checkbox" name="include_materials" value="true">
-                {{ t("invoice.include_materials") }}
-            </label>
-            <br>
-            <label>
-                {{ t("invoice.merge_strategy") }}
-                <select name="merge_strategy">
-                    <option value="REPLACE_ALL" selected>REPLACE_ALL</option>
-                    <option value="APPEND">APPEND</option>
-                    <option value="UPSERT_BY_SOURCE">UPSERT_BY_SOURCE</option>
-                </select>
-            </label>
-            <br>
-            <label>
-                Note
-                <input type="text" name="note" maxlength="255" placeholder="{{ t("common.optional_note") }}">
-            </label>
-            <div style="margin-top: 10px;">
-                <button type="submit">{{ t("invoice.create") }}</button>
-                <button type="button" id="cancel-create-invoice-dialog">{{ t("common.cancel") }}</button>
-            </div>
+            <label><input type="checkbox" name="include_labor" value="true" checked> {{ t("invoice.include_labor") }}</label><br>
+            <label><input type="checkbox" name="include_materials" value="true"> {{ t("invoice.include_materials") }}</label><br>
+            <label>{{ t("invoice.merge_strategy") }}
+                <select name="merge_strategy"><option value="REPLACE_ALL" selected>REPLACE_ALL</option><option value="APPEND">APPEND</option><option value="UPSERT_BY_SOURCE">UPSERT_BY_SOURCE</option></select>
+            </label><br>
+            <label>Note <input type="text" name="note" maxlength="255" placeholder="{{ t("common.optional_note") }}"></label>
+            <div style="margin-top: 10px;"><button type="submit">{{ t("invoice.create") }}</button><button type="button" id="cancel-create-invoice-dialog">{{ t("common.cancel") }}</button></div>
         </form>
     </dialog>
-    <table>
-        <thead>
-            <tr>
-                <th>{{ t("invoice.field.number") }}</th>
-                <th>{{ t("invoice.field.issue_date") }}</th>
-                <th>{{ t("invoice.field.status") }}</th>
-                <th>{{ t("invoice.field.amount_total") }}</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for invoice in recent_invoices %}
-            <tr>
-                <td>{{ invoice.invoice_number }}</td>
-                <td>{{ invoice.issue_date }}</td>
-                <td>{{ t('invoice.status.' ~ invoice.status) }}</td>
-                <td>{{ invoice.client_pays_total }}</td>
-            </tr>
-            {% else %}
-            <tr><td colspan="4">—</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
 </section>
 
 

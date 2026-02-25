@@ -72,6 +72,7 @@ def test_invoice_preview_opens_with_pdf_fallback(monkeypatch):
 
     assert response.status_code == 200
     assert "PDF" in response.text
+    assert "резервный режим" in response.text or "fallback mode" in response.text or "reservläge" in response.text
 
 
 def test_invoice_pdf_redirects_to_print_view_when_weasyprint_missing(monkeypatch):
@@ -89,6 +90,8 @@ def test_invoice_pdf_redirects_to_print_view_when_weasyprint_missing(monkeypatch
     assert "text/html" in print_response.headers["content-type"]
     assert "reservläge" in print_response.text
     assert "Dokumentspråk" in print_response.text
+    assert "top-nav" not in print_response.text
+    assert "offer-toolbar" not in print_response.text
 
 
 def test_invoice_pdf_keeps_legacy_html_render_contract(monkeypatch):

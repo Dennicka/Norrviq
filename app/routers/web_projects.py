@@ -19,6 +19,7 @@ from app.models.material import Material
 from app.models.material_consumption_override import MaterialConsumptionOverride
 from app.models.paint_system import PaintSystem
 from app.models.invoice import Invoice
+from app.models.terms_template import TermsTemplate
 from app.models.audit_event import AuditEvent
 from app.audit import log_event
 from app.models.project import Project, ProjectWorkItem, ProjectWorkerAssignment
@@ -40,6 +41,8 @@ from app.services.offer_commercial import compute_offer_commercial, deserialize_
 from app.services.commercial_snapshot import DOC_TYPE_OFFER as SNAP_OFFER, read_commercial_snapshot
 from app.services.finance import calculate_project_financials, compute_project_finance
 from app.services.terms_templates import DOC_TYPE_OFFER, resolve_terms_template
+from app.services.invoice_documents import normalize_document_lang
+from app.services.pdf_renderer import invoice_pdf_capability
 from app.services.buffer_audit import log_buffer_audit
 from app.services.quality import evaluate_project_quality
 from app.services.completeness import compute_completeness
@@ -529,6 +532,47 @@ async def project_detail(
     auto_bom = build_project_material_bom(project.id, db)
     pricing_summary = build_project_pricing_summary(project, db)
     active_tab = _resolve_project_tab(tab)
+    company_profile = get_or_create_company_profile(db)
+    selected_invoice = recent_invoices[0] if recent_invoices else None
+    offer_lang = normalize_document_lang(project.offer_document_lang, fallback=normalize_document_lang(lang))
+    invoice_lang = normalize_document_lang(
+        selected_invoice.document_lang if selected_invoice else None,
+        fallback=normalize_document_lang(lang),
+    )
+    doc_type = (request.query_params.get("doc_type") or "offer").strip().lower()
+    if doc_type not in {"offer", "invoice"}:
+        doc_type = "offer"
+    selected_doc_lang = offer_lang if doc_type == "offer" else invoice_lang
+    segment = (project.client.client_segment if project.client and project.client.client_segment else "B2C")
+    terms_doc_type = DOC_TYPE_OFFER if doc_type == "offer" else "INVOICE"
+    terms_template = resolve_terms_template(
+        db,
+        profile=company_profile,
+        client=project.client,
+        doc_type=terms_doc_type,
+        lang=selected_doc_lang,
+    )
+    terms_templates = (
+        db.query(TermsTemplate)
+        .filter(TermsTemplate.doc_type == terms_doc_type, TermsTemplate.is_active.is_(True))
+        .order_by(TermsTemplate.segment.asc(), TermsTemplate.lang.asc(), TermsTemplate.version.desc())
+        .all()
+    )
+    company_missing_fields: list[str] = []
+    required_company = {
+        "company.legal_name": company_profile.legal_name,
+        "company.org_number": company_profile.org_number,
+        "company.address_line1": company_profile.address_line1,
+        "company.postal_code": company_profile.postal_code,
+        "company.city": company_profile.city,
+        "company.email": company_profile.email,
+    }
+    for key, value in required_company.items():
+        if not (value or "").strip():
+            company_missing_fields.append(key)
+    if not company_profile.has_any_payment_method():
+        company_missing_fields.append("documents.company_required.payment")
+
     context = build_project_context(
         db,
         request,
@@ -555,8 +599,47 @@ async def project_detail(
         materials_auto_bom=auto_bom,
         workflow_state=build_project_workflow_state(db, project.id, lang=lang),
         active_tab=active_tab,
+        company_profile=company_profile,
+        documents_doc_type=doc_type,
+        documents_offer_lang=offer_lang,
+        documents_invoice_lang=invoice_lang,
+        documents_selected_lang=selected_doc_lang,
+        documents_terms_template=terms_template,
+        documents_terms_templates=terms_templates,
+        documents_selected_invoice=selected_invoice,
+        documents_segment=segment,
+        documents_company_missing_fields=company_missing_fields,
+        documents_pdf_capability=invoice_pdf_capability(),
     )
     return templates.TemplateResponse(request, "projects/detail.html", context)
+
+
+@router.post("/{project_id}/documents/preferences")
+async def update_project_documents_preferences(
+    project_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _lang: str = Depends(get_current_lang),
+    _role: str = Depends(require_role(ADMIN_ROLE, OPERATOR_ROLE)),
+):
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    form = await request.form()
+    doc_type = (form.get("doc_type") or "offer").strip().lower()
+    doc_lang = normalize_document_lang(form.get("document_lang"), fallback=normalize_document_lang(_lang))
+    if doc_type == "offer":
+        project.offer_document_lang = doc_lang
+        db.add(project)
+    elif doc_type == "invoice":
+        invoice_id = form.get("invoice_id")
+        if invoice_id and str(invoice_id).isdigit():
+            invoice = db.get(Invoice, int(invoice_id))
+            if invoice and invoice.project_id == project_id:
+                invoice.document_lang = doc_lang
+                db.add(invoice)
+    db.commit()
+    return RedirectResponse(url=f"/projects/{project_id}?tab=documents&doc_type={doc_type}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.get("/{project_id}/workflow", response_class=HTMLResponse)
@@ -873,7 +956,7 @@ async def delete_project(
 def project_offer(
     project_id: int,
     request: Request,
-    lang: str = Query("sv"),
+    lang: str | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: str = Depends(require_auth),
 ):
@@ -882,9 +965,6 @@ def project_offer(
     """
 
     view = request.query_params.get("view", "client")
-    if lang not in ("ru", "sv", "en"):
-        lang = "sv"
-
     project = (
         db.query(Project)
         .options(
@@ -896,6 +976,8 @@ def project_offer(
     )
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+
+    lang = normalize_document_lang(lang, fallback=normalize_document_lang(project.offer_document_lang))
 
     recalculate_project_work_items(db, project)
     calculate_project_totals(db, project)
