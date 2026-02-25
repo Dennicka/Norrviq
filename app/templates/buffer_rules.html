@@ -165,11 +165,15 @@
 
 <script>
 document.getElementById('preview-btn').addEventListener('click', async () => {
+  const msgSelectProjectFirst = "{{ t('buffer_rules.select_project_first') }}";
+  const msgNoRules = "{{ t('common.no_rules') }}";
+  const msgNoBuffer = "{{ t('buffer_rules.no_buffer') }}";
+  const msgReason = "{{ t('buffer_rules.reason') }}";
   const projectId = document.getElementById('preview-project-id').value;
   const worktypeId = document.getElementById('preview-worktype-id').value;
   const resultBox = document.getElementById('preview-result');
   if (!projectId) {
-    resultBox.textContent = '{{ t("buffer_rules.select_project_first") }}';
+    resultBox.textContent = msgSelectProjectFirst;
     return;
   }
   let url = `/api/ui/buffer-rules/effective?project_id=${encodeURIComponent(projectId)}`;
@@ -179,10 +183,10 @@ document.getElementById('preview-btn').addEventListener('click', async () => {
   const resp = await window.appFetch(url);
   const data = await resp.json();
   if (!data.applied_rule_id) {
-    resultBox.textContent = `${"{{ t('common.no_rules') }}"} -> ${"{{ t('buffer_rules.no_buffer') }}"}. ${"{{ t('buffer_rules.reason') }}"}: ${data.reason}`;
+    resultBox.textContent = `${msgNoRules} -> ${msgNoBuffer}. ${msgReason}: ${data.reason}`;
     return;
   }
-  resultBox.textContent = `Rule #${data.applied_rule_id}\nScope: ${data.scope}\nValue: ${data.buffer_value} ${data.buffer_unit}\nBasis: ${data.buffer_basis}\n${"{{ t('buffer_rules.reason') }}"}: ${data.reason}`;
+  resultBox.textContent = `Rule #${data.applied_rule_id}\nScope: ${data.scope}\nValue: ${data.buffer_value} ${data.buffer_unit}\nBasis: ${data.buffer_basis}\n${msgReason}: ${data.reason}`;
 });
 </script>
 {% endblock %}
