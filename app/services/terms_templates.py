@@ -62,7 +62,9 @@ def resolve_terms_template(
     )
     if default_template_id:
         default_template = db.get(TermsTemplate, default_template_id)
-        if default_template and default_template.is_active:
+        if default_template and default_template.is_active and (
+            not lang or default_template.lang == effective_lang
+        ):
             return default_template
 
     segment = (client.client_segment if client else None) or DEFAULT_SEGMENT
@@ -81,13 +83,15 @@ def resolve_terms_template(
     if template:
         return template
 
-    if effective_lang != DEFAULT_LANG:
+    for fallback_lang in [DEFAULT_LANG, "en"]:
+        if fallback_lang == effective_lang:
+            continue
         template = (
             db.query(TermsTemplate)
             .filter(
                 TermsTemplate.segment == segment,
                 TermsTemplate.doc_type == doc_type,
-                TermsTemplate.lang == DEFAULT_LANG,
+                TermsTemplate.lang == fallback_lang,
                 TermsTemplate.is_active.is_(True),
             )
             .order_by(TermsTemplate.version.desc())
@@ -100,7 +104,7 @@ def resolve_terms_template(
         db.query(TermsTemplate)
         .filter(
             TermsTemplate.doc_type == doc_type,
-            TermsTemplate.lang == DEFAULT_LANG,
+            TermsTemplate.lang.in_([DEFAULT_LANG, "en"]),
             TermsTemplate.is_active.is_(True),
         )
         .order_by(TermsTemplate.version.desc(), TermsTemplate.id.desc())

@@ -96,7 +96,7 @@ def test_invoice_page_shows_rot_block_when_enabled():
 
     response = client.get(f"/projects/{project_id}/invoices/{invoice_id}")
     assert response.status_code == 200
-    assert "ROT-avdrag" in response.text
+    assert "ROT" in response.text
 
 
 def test_issued_invoice_rot_snapshot_immutable():

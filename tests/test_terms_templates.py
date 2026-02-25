@@ -10,8 +10,11 @@ from app.models.company_profile import get_or_create_company_profile
 from app.models.invoice import Invoice
 from app.models.project import Project
 from app.models.user import User
+from app.models.terms_template import TermsTemplate
+from app.models.pricing_policy import get_or_create_pricing_policy
 from app.security import hash_password
 from app.services.terms_templates import DOC_TYPE_INVOICE, DOC_TYPE_OFFER, create_versioned_template, resolve_terms_template
+from app.services.document_numbering import finalize_invoice, finalize_offer
 
 client = TestClient(app)
 settings = get_settings()
@@ -71,29 +74,18 @@ def test_offer_finalize_snapshots_terms_and_is_immutable():
 
     db = SessionLocal()
     try:
+        profile = get_or_create_company_profile(db)
+        policy = get_or_create_pricing_policy(db)
+        policy.warn_only_mode = True
+        policy.block_issue_below_floor = False
+        db.add(policy)
         create_versioned_template(db, segment="B2C", doc_type="OFFER", lang="sv", title="Offer V1", body_text="Body V1")
         db.commit()
-    finally:
-        db.close()
-
-    r1 = client.post(f"/offers/{project_id}/finalize", data={"terms_lang": "sv"}, follow_redirects=False)
-    assert r1.status_code == 303
-
-    db = SessionLocal()
-    try:
-        project = db.get(Project, project_id)
+        project = finalize_offer(db, project_id=project_id, user_id="tester", profile=profile, lang="sv")
         assert project.offer_terms_snapshot_title == "Offer V1"
         create_versioned_template(db, segment="B2C", doc_type="OFFER", lang="sv", title="Offer V2", body_text="Body V2")
         db.commit()
-    finally:
-        db.close()
-
-    r2 = client.post(f"/offers/{project_id}/finalize", data={"terms_lang": "sv"}, follow_redirects=False)
-    assert r2.status_code == 303
-
-    db = SessionLocal()
-    try:
-        project = db.get(Project, project_id)
+        project = finalize_offer(db, project_id=project_id, user_id="tester", profile=profile, lang="sv")
         assert project.offer_terms_snapshot_title == "Offer V1"
     finally:
         db.close()
@@ -105,11 +97,17 @@ def test_invoice_finalize_snapshots_terms_and_is_immutable():
 
     db = SessionLocal()
     try:
+        profile = get_or_create_company_profile(db)
+        policy = get_or_create_pricing_policy(db)
+        policy.warn_only_mode = True
+        policy.block_issue_below_floor = False
+        db.add(policy)
         inv = Invoice(
             project_id=project_id,
             invoice_number=None,
             issue_date=date.today(),
             status="draft",
+            document_lang="sv",
             work_sum_without_moms=0,
             moms_amount=0,
             rot_amount=0,
@@ -118,28 +116,15 @@ def test_invoice_finalize_snapshots_terms_and_is_immutable():
         db.add(inv)
         create_versioned_template(db, segment="B2C", doc_type="INVOICE", lang="sv", title="Inv V1", body_text="IBody1")
         db.commit()
-        invoice_id = inv.id
-    finally:
-        db.close()
 
-    r1 = client.post(f"/invoices/{invoice_id}/finalize", data={"terms_lang": "sv"}, follow_redirects=False)
-    assert r1.status_code == 303
-
-    db = SessionLocal()
-    try:
-        invoice = db.get(Invoice, invoice_id)
+        invoice = finalize_invoice(db, invoice_id=inv.id, user_id="tester", profile=profile, lang="sv")
         assert invoice.invoice_terms_snapshot_title == "Inv V1"
+        assert invoice.issued_lang_snapshot == "sv"
+
         create_versioned_template(db, segment="B2C", doc_type="INVOICE", lang="sv", title="Inv V2", body_text="IBody2")
         db.commit()
-    finally:
-        db.close()
 
-    r2 = client.post(f"/invoices/{invoice_id}/finalize", data={"terms_lang": "sv"}, follow_redirects=False)
-    assert r2.status_code == 303
-
-    db = SessionLocal()
-    try:
-        invoice = db.get(Invoice, invoice_id)
+        invoice = finalize_invoice(db, invoice_id=inv.id, user_id="tester", profile=profile, lang="sv")
         assert invoice.invoice_terms_snapshot_title == "Inv V1"
     finally:
         db.close()
@@ -174,5 +159,23 @@ def test_client_segment_drives_template_selection():
         t = resolve_terms_template(db, profile=profile, client=c, doc_type=DOC_TYPE_INVOICE, lang="sv")
         assert t is not None
         assert t.segment == "B2B"
+    finally:
+        db.close()
+
+
+
+def test_invoice_terms_template_fallback_to_en_when_sv_missing():
+    db = SessionLocal()
+    try:
+        c = Client(name="fallback-en", client_segment="B2C")
+        db.add(c)
+        db.flush()
+        profile = get_or_create_company_profile(db)
+        create_versioned_template(db, segment="B2C", doc_type="INVOICE", lang="en", title="EN", body_text="E")
+        db.query(TermsTemplate).filter(TermsTemplate.segment == "B2C", TermsTemplate.doc_type == "INVOICE", TermsTemplate.lang == "sv").update({"is_active": False})
+        db.commit()
+        tplt = resolve_terms_template(db, profile=profile, client=c, doc_type=DOC_TYPE_INVOICE, lang="sv")
+        assert tplt is not None
+        assert tplt.lang == "en"
     finally:
         db.close()

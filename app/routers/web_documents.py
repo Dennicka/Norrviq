@@ -31,7 +31,8 @@ from app.services.pdf_export import render_pdf_from_html
 from app.services.pdf_renderer import invoice_pdf_capability, render_invoice_pdf
 from app.services.completeness import compute_completeness
 from app.services.quality import evaluate_project_quality
-from app.services.terms_templates import DOC_TYPE_INVOICE, DOC_TYPE_OFFER, resolve_terms_template
+from app.services.terms_templates import DOC_TYPE_OFFER, resolve_terms_template
+from app.services.invoice_documents import invoice_render_lang, resolve_invoice_terms, format_doc_date, format_doc_money
 from app.services.correctness_lock import validate_offer_invariants, validate_invoice_invariants
 from app.dependencies import template_context, templates
 from app.i18n import make_t
@@ -262,15 +263,10 @@ async def invoice_pdf(
         raise HTTPException(status_code=404, detail="Invoice not found")
 
     profile = get_or_create_company_profile(db)
-    if invoice.status == "issued":
-        terms_title = invoice.invoice_terms_snapshot_title or ""
-        terms_body = invoice.invoice_terms_snapshot_body or ""
-    else:
-        template = resolve_terms_template(db, profile=profile, client=invoice.project.client, doc_type=DOC_TYPE_INVOICE, lang=lang)
-        terms_title = template.title
-        terms_body = template.body_text
+    render_lang = invoice_render_lang(invoice, lang)
+    terms_resolution = resolve_invoice_terms(db, profile=profile, invoice=invoice, requested_lang=render_lang)
 
-    commercial = compute_invoice_commercial(db, invoice.project_id, invoice.id, lang=lang)
+    commercial = compute_invoice_commercial(db, invoice.project_id, invoice.id, lang=render_lang)
     if invoice.status == "issued":
         snap = read_commercial_snapshot(db, doc_type=SNAP_INVOICE, doc_id=invoice.id)
         if snap:
@@ -281,29 +277,35 @@ async def invoice_pdf(
             commercial.vat_amount = Decimal(str(snap["totals"].get("vat_amount") or invoice.vat_total))
             commercial.price_inc_vat = Decimal(str(snap["totals"].get("price_inc_vat") or invoice.total_inc_vat))
 
-    context = template_context(request, lang)
+    context = template_context(request, render_lang)
     context.update(
         {
             "invoice": invoice,
             "commercial": commercial,
             "company_profile": profile,
-            "terms_title": terms_title,
-            "terms_body": terms_body,
+            "terms_title": terms_resolution.title,
+            "terms_body": terms_resolution.body,
+            "terms_fallback": terms_resolution.used_fallback,
+            "terms_requested_lang": terms_resolution.requested_lang,
+            "terms_resolved_lang": terms_resolution.resolved_lang,
+            "document_lang": render_lang,
+            "format_doc_date": format_doc_date,
+            "format_doc_money": format_doc_money,
             "is_draft": invoice.status != "issued",
         }
     )
     html = templates.get_template("pdf/invoice_pdf.html").render(context)
     pdf_bytes = render_invoice_pdf(
         invoice.id,
-        lang,
+        render_lang,
         html=html,
         base_url=PROJECT_ROOT,
         stylesheet_path=PDF_STYLESHEET,
         render_pdf=render_pdf_from_html,
     )
     if pdf_bytes is None:
-        add_flash_message(request, make_t(lang)("invoice.pdf_fallback_mode"), "warning")
-        return RedirectResponse(url=f"/invoices/{invoice.id}/print", status_code=status.HTTP_303_SEE_OTHER)
+        add_flash_message(request, make_t(render_lang)("invoice.pdf_fallback_mode"), "warning")
+        return RedirectResponse(url=f"/invoices/{invoice.id}/print?lang={render_lang}", status_code=status.HTTP_303_SEE_OTHER)
     _audit_pdf_download(
         db,
         request=request,
@@ -340,15 +342,10 @@ async def invoice_print_view(
         raise HTTPException(status_code=404, detail="Invoice not found")
 
     profile = get_or_create_company_profile(db)
-    if invoice.status == "issued":
-        terms_title = invoice.invoice_terms_snapshot_title or ""
-        terms_body = invoice.invoice_terms_snapshot_body or ""
-    else:
-        template = resolve_terms_template(db, profile=profile, client=invoice.project.client, doc_type=DOC_TYPE_INVOICE, lang=lang)
-        terms_title = template.title
-        terms_body = template.body_text
+    render_lang = invoice_render_lang(invoice, lang)
+    terms_resolution = resolve_invoice_terms(db, profile=profile, invoice=invoice, requested_lang=render_lang)
 
-    commercial = compute_invoice_commercial(db, invoice.project_id, invoice.id, lang=lang)
+    commercial = compute_invoice_commercial(db, invoice.project_id, invoice.id, lang=render_lang)
     if invoice.status == "issued":
         snap = read_commercial_snapshot(db, doc_type=SNAP_INVOICE, doc_id=invoice.id)
         if snap:
@@ -359,14 +356,20 @@ async def invoice_print_view(
             commercial.vat_amount = Decimal(str(snap["totals"].get("vat_amount") or invoice.vat_total))
             commercial.price_inc_vat = Decimal(str(snap["totals"].get("price_inc_vat") or invoice.total_inc_vat))
 
-    context = template_context(request, lang)
+    context = template_context(request, render_lang)
     context.update(
         {
             "invoice": invoice,
             "commercial": commercial,
             "company_profile": profile,
-            "terms_title": terms_title,
-            "terms_body": terms_body,
+            "terms_title": terms_resolution.title,
+            "terms_body": terms_resolution.body,
+            "terms_fallback": terms_resolution.used_fallback,
+            "terms_requested_lang": terms_resolution.requested_lang,
+            "terms_resolved_lang": terms_resolution.resolved_lang,
+            "document_lang": render_lang,
+            "format_doc_date": format_doc_date,
+            "format_doc_money": format_doc_money,
             "is_draft": invoice.status != "issued",
             "pdf_capability": invoice_pdf_capability(),
         }

@@ -1,83 +1,29 @@
 {% extends "base.html" %}
 {% block extra_head %}
 <link rel="stylesheet" href="{{ url_for('static', path='css/offer.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', path='css/pdf_document.css') }}">
 {% endblock %}
 {% block content %}
 <div class="offer-wrapper">
     <div class="offer-toolbar">
-        <span class="doc-status">{{ t("label.status") }}: {{ invoice.status|upper }}</span>
-        <a href="/invoices/{{ invoice.id }}/pdf">Download PDF</a>
-        {% if not pdf_capability.weasyprint_available %}
-        <a href="/invoices/{{ invoice.id }}/print">{{ t("common.print") }}</a>
-        {% endif %}
+        <span class="doc-status">{{ t("label.status") }}: {{ t('invoice.status.' ~ invoice.status) }} · {{ t("invoice.field.language") }}: {{ document_lang|upper }}</span>
+        <a href="/invoices/{{ invoice.id }}/print?lang={{ document_lang }}">{{ t("common.print") }}</a>
+        <a href="/invoices/{{ invoice.id }}/pdf?lang={{ document_lang }}">{{ t("label.download") }} PDF</a>
         {% if invoice.status != 'issued' %}
         <form method="post" action="/invoices/{{ invoice.id }}/finalize" onsubmit="finalizeInvoice(this)">
             {{ csrf_input(request) }}
-            <input type="hidden" name="terms_lang" value="{{ lang }}">
-            <button type="submit" class="js-finalize-btn">Issue</button>
+            <input type="hidden" name="terms_lang" value="{{ document_lang }}">
+            <button type="submit" class="js-finalize-btn">{{ t("invoice.action.issue") }}</button>
         </form>
         {% endif %}
     </div>
-        {% if not pdf_capability.weasyprint_available %}
-    <div class="alert alert-warning">{{ t("invoice.pdf_fallback_mode") }}</div>
-    {% endif %}
+    {% if terms_fallback %}<div class="alert alert-warning">{{ t("invoice.terms_fallback_warning") }} ({{ terms_requested_lang|upper }} → {{ terms_resolved_lang|upper }})</div>{% endif %}
+    {% if not pdf_capability.weasyprint_available %}<div class="alert alert-warning">{{ t("invoice.pdf_fallback_mode") }}</div>{% endif %}
     <div class="offer-page">
-        <div class="offer-header">
-            <div class="offer-company">
-                <h1>{{ t("menu.invoices") }}</h1>
-                <p>{{ company_profile.legal_name }}</p>
-            </div>
-            <div class="offer-meta">
-                <div>{{ t("invoice.field.number") }}: {{ invoice.invoice_number if invoice.invoice_number else t("label.draft") }}</div>
-                <div>{{ t("label.status") }}: {{ invoice.status|upper }}</div>
-                <div>{{ t("invoice.field.issue_date") }}: {{ invoice.issue_date }}</div>
-            </div>
-        </div>
-
-        <div class="offer-section">
-            <h2>Commercial</h2>
-            <p><strong>Pricing model:</strong> {{ commercial.mode }}</p>
-            <p><strong>Units:</strong> m²={{ commercial.units.total_m2 }}, rum={{ commercial.units.rooms_count }}, st={{ commercial.units.items_count }}</p>
-            {% if commercial.mode == "PER_M2" %}<p><strong>PER_M2:</strong> {{ commercial.units.total_m2 }} × {{ commercial.rate.rate_per_m2 }}</p>{% endif %}
-            {% if commercial.mode == "PER_ROOM" %}<p><strong>PER_ROOM:</strong> {{ commercial.units.rooms_count }} × {{ commercial.rate.rate_per_room }}</p>{% endif %}
-            <h2>Lines</h2>
-            <table border="1" cellpadding="6" cellspacing="0" style="width:100%;">
-                <thead><tr><th>#</th><th>Description</th><th>Qty</th><th>Unit</th><th>Price ex VAT</th><th>Total ex VAT</th></tr></thead>
-                <tbody>
-                {% for line in invoice.lines %}
-                <tr>
-                    <td>{{ line.position }}</td>
-                    <td>{{ line.description }}</td>
-                    <td>{{ line.quantity }}</td>
-                    <td>{{ line.unit or '' }}</td>
-                    <td>{{ line.unit_price_ex_vat }}</td>
-                    <td>{{ line.line_total_ex_vat }}</td>
-                </tr>
-                {% endfor %}
-                </tbody>
-            </table>
-            <p><strong>Arbete exkl. moms:</strong> {{ invoice.labour_ex_vat }}</p>
-            <p><strong>Material exkl. moms:</strong> {{ invoice.material_ex_vat }}</p>
-            <p><strong>Moms:</strong> {{ invoice.vat_total }}</p>
-            {% if (invoice.rot_case and invoice.rot_case.is_enabled) or invoice.rot_snapshot_enabled %}
-            <p><strong>ROT-avdrag:</strong> -{{ invoice.rot_amount }}</p>
-            {% endif %}
-            <p><strong>Att betala:</strong> {{ invoice.client_pays_total }}</p>
-        </div>
-
-        <div class="offer-section">
-            <h2>{{ terms_title or "Terms / Villkor" }}</h2>
-            <pre style="white-space: pre-wrap;">{{ terms_body }}</pre>
-        </div>
+        {% include "invoices/_document_body.html" %}
     </div>
 </div>
 <script>
-function finalizeInvoice(form) {
-    const btn = form.querySelector('.js-finalize-btn');
-    if (btn) {
-        btn.disabled = true;
-        btn.textContent = 'Issuing...';
-    }
-}
+function finalizeInvoice(form){const btn=form.querySelector('.js-finalize-btn');if(btn){btn.disabled=true;btn.textContent='...';}}
 </script>
 {% endblock %}

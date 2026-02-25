@@ -23,6 +23,7 @@ from app.services.commercial_snapshot import DOC_TYPE_INVOICE as SNAP_INVOICE, D
 from app.services.pricing_consistency import validate_pricing_consistency
 from app.services.completeness import compute_completeness
 from app.services.terms_templates import DOC_TYPE_INVOICE, DOC_TYPE_OFFER, resolve_terms_template
+from app.services.invoice_documents import normalize_document_lang
 from app.services.invoice_lines import recalculate_invoice_totals
 
 logger = logging.getLogger("uvicorn.error")
@@ -308,13 +309,14 @@ def finalize_invoice(db: Session, invoice_id: int, user_id: str | None, profile:
                 profile.document_number_padding,
             )
             invoice.issue_date = invoice.issue_date or date.today()
+            resolved_lang = normalize_document_lang(invoice.document_lang or lang)
             if not invoice.invoice_terms_snapshot_title or not invoice.invoice_terms_snapshot_body:
                 template = resolve_terms_template(
                     db,
                     profile=profile,
                     client=invoice.project.client,
                     doc_type=DOC_TYPE_INVOICE,
-                    lang=lang,
+                    lang=resolved_lang,
                 )
                 invoice.invoice_terms_snapshot_title = template.title
                 invoice.invoice_terms_snapshot_body = template.body_text
@@ -326,6 +328,7 @@ def finalize_invoice(db: Session, invoice_id: int, user_id: str | None, profile:
                     entity_id=invoice.id,
                     details={"template_id": template.id, "version": template.version},
                 )
+            invoice.issued_lang_snapshot = resolved_lang
             invoice.commercial_mode_snapshot = commercial.mode
             invoice.units_snapshot = json.dumps(commercial.units, ensure_ascii=False, sort_keys=True, default=str)
             invoice.rates_snapshot = json.dumps(commercial.rate, ensure_ascii=False, sort_keys=True, default=str)

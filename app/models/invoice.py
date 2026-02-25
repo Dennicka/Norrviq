@@ -45,6 +45,8 @@ class Invoice(Base):
     material_source_snapshot_hash = Column(String(64), nullable=True)
 
     comment = Column(String, nullable=True)
+    document_lang = Column(String(2), nullable=False, default="sv")
+    issued_lang_snapshot = Column(String(2), nullable=True)
     invoice_terms_snapshot_title = Column(Text, nullable=True)
     invoice_terms_snapshot_body = Column(Text, nullable=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)

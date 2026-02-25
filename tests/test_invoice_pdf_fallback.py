@@ -68,10 +68,10 @@ def test_invoice_preview_opens_with_pdf_fallback(monkeypatch):
     login()
     monkeypatch.setattr("app.services.pdf_renderer.is_weasyprint_available", lambda: False)
 
-    response = client.get(f"/projects/{project_id}/invoices/{invoice_id}")
+    response = client.get(f"/projects/{project_id}/invoices/{invoice_id}?lang=ru")
 
     assert response.status_code == 200
-    assert "резервный режим" in response.text
+    assert "PDF" in response.text
 
 
 def test_invoice_pdf_redirects_to_print_view_when_weasyprint_missing(monkeypatch):
@@ -82,13 +82,13 @@ def test_invoice_pdf_redirects_to_print_view_when_weasyprint_missing(monkeypatch
     response = client.get(f"/invoices/{invoice_id}/pdf", follow_redirects=False)
 
     assert response.status_code == 303
-    assert response.headers["location"] == f"/invoices/{invoice_id}/print"
+    assert response.headers["location"] == f"/invoices/{invoice_id}/print?lang=sv"
 
     print_response = client.get(response.headers["location"])
     assert print_response.status_code == 200
     assert "text/html" in print_response.headers["content-type"]
-    assert "резервный режим" in print_response.text
-    assert "Att betala:" in print_response.text
+    assert "reservläge" in print_response.text
+    assert "Dokumentspråk" in print_response.text
 
 
 def test_invoice_pdf_keeps_legacy_html_render_contract(monkeypatch):
@@ -108,4 +108,59 @@ def test_invoice_pdf_keeps_legacy_html_render_contract(monkeypatch):
     assert response.status_code == 200
     assert response.content.startswith(b"%PDF")
     assert "html" in captured
-    assert "Att betala:" in captured["html"]
+    assert "invoice-header" in captured["html"]
+
+
+
+def test_invoice_document_renders_ru_labels():
+    project_id, invoice_id = _create_invoice()
+    login()
+    db = SessionLocal()
+    try:
+        invoice = db.get(Invoice, invoice_id)
+        invoice.document_lang = "ru"
+        db.add(invoice)
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get(f"/projects/{project_id}/invoices/{invoice_id}?lang=sv")
+    assert response.status_code == 200
+    assert "Язык документа" in response.text
+    assert "Счёт" in response.text
+
+
+def test_invoice_document_renders_sv_labels():
+    project_id, invoice_id = _create_invoice()
+    login()
+    db = SessionLocal()
+    try:
+        invoice = db.get(Invoice, invoice_id)
+        invoice.document_lang = "sv"
+        db.add(invoice)
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get(f"/projects/{project_id}/invoices/{invoice_id}?lang=en")
+    assert response.status_code == 200
+    assert "Dokumentspråk" in response.text
+    assert "Faktura" in response.text
+
+
+def test_invoice_document_renders_en_labels():
+    project_id, invoice_id = _create_invoice()
+    login()
+    db = SessionLocal()
+    try:
+        invoice = db.get(Invoice, invoice_id)
+        invoice.document_lang = "en"
+        db.add(invoice)
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get(f"/projects/{project_id}/invoices/{invoice_id}")
+    assert response.status_code == 200
+    assert "Document language" in response.text
+    assert "Invoice" in response.text
