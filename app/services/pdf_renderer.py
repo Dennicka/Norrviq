@@ -3,6 +3,8 @@ import importlib.util
 import logging
 from pathlib import Path
 
+from collections.abc import Callable
+
 from app.services.pdf_export import render_pdf_from_html
 
 logger = logging.getLogger("app.pdf")
@@ -33,6 +35,7 @@ def render_invoice_pdf(
     html: str,
     base_url: str | Path,
     stylesheet_path: str | Path | None = None,
+    render_pdf: Callable[..., bytes] = render_pdf_from_html,
 ) -> bytes | None:
     if not is_weasyprint_available():
         logger.warning(
@@ -42,7 +45,7 @@ def render_invoice_pdf(
         )
         return None
     try:
-        return render_pdf_from_html(html=html, base_url=base_url, stylesheet_path=stylesheet_path)
+        return render_pdf(html=html, base_url=base_url, stylesheet_path=stylesheet_path)
     except RuntimeError:
         logger.exception(
             "invoice_pdf_fallback_mode invoice_id=%s lang=%s reason=runtime_error",

@@ -89,3 +89,23 @@ def test_invoice_pdf_redirects_to_print_view_when_weasyprint_missing(monkeypatch
     assert "text/html" in print_response.headers["content-type"]
     assert "резервный режим" in print_response.text
     assert "Att betala:" in print_response.text
+
+
+def test_invoice_pdf_keeps_legacy_html_render_contract(monkeypatch):
+    _, invoice_id = _create_invoice()
+    login()
+    captured = {}
+
+    def _fake_render(*, html, base_url, stylesheet_path):
+        captured["html"] = html
+        return b"%PDF-1.4 fake"
+
+    monkeypatch.setattr("app.services.pdf_renderer.is_weasyprint_available", lambda: True)
+    monkeypatch.setattr("app.routers.web_documents.render_pdf_from_html", _fake_render)
+
+    response = client.get(f"/invoices/{invoice_id}/pdf")
+
+    assert response.status_code == 200
+    assert response.content.startswith(b"%PDF")
+    assert "html" in captured
+    assert "Att betala:" in captured["html"]

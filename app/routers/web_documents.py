@@ -299,6 +299,7 @@ async def invoice_pdf(
         html=html,
         base_url=PROJECT_ROOT,
         stylesheet_path=PDF_STYLESHEET,
+        render_pdf=render_pdf_from_html,
     )
     if pdf_bytes is None:
         add_flash_message(request, make_t(lang)("invoice.pdf_fallback_mode"), "warning")
