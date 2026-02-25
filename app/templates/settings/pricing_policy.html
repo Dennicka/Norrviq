@@ -46,7 +46,7 @@
         <input type="number" min="0" max="100" name="min_completeness_score_for_per_room" value="{{ form_data.get('min_completeness_score_for_per_room', policy.min_completeness_score_for_per_room) }}">
     </div>
     <div class="form-row">
-        <label><input type="checkbox" name="warn_only_below_score" {% if form_data.get('warn_only_below_score', policy.warn_only_below_score) in [True, 'on', 'true', '1', 1] %}checked{% endif %}> {{ t('pricing_policy.warn_only_below_score') }}</label>
+        <label><input type="checkbox" name="warn_only_below_score" {% if form_data.get('warn_only_below_score', policy.warn_only_below_score) in [True, 'on', 'true', '1', 1] %}checked{% endif %}> {{ t('pricing_policy.warn_only_below_score') }} {{ help_icon('pricing_policy.warn_only_below_score') }}</label>
     </div>
     <div class="form-row">
         <button type="submit">{{ t('pricing_policy.save_policy') }}</button>

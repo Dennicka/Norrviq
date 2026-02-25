@@ -89,3 +89,25 @@ def test_language_switcher_preserves_current_path():
     response = client.get("/projects/?lang=ru")
     assert response.status_code == 200
     assert "/lang/en?next=/projects/%3Flang%3Dru" in response.text
+
+def test_ru_key_pages_do_not_render_hardcoded_english_labels():
+    _login()
+    project_id = _project_id()
+
+    buffer_rules_page = client.get('/web/buffer-rules?lang=ru')
+    assert buffer_rules_page.status_code == 200
+    assert 'Буферные правила' in buffer_rules_page.text
+    assert 'Buffer rules' not in buffer_rules_page.text
+    assert 'Rule #' not in buffer_rules_page.text
+
+    pricing_policy_page = client.get('/settings/pricing-policy?lang=ru')
+    assert pricing_policy_page.status_code == 200
+    assert 'Политика цен' in pricing_policy_page.text
+    assert 'Pricing policy' not in pricing_policy_page.text
+    assert 'Minimum margin %' not in pricing_policy_page.text
+
+    project_buffers_page = client.get(f'/projects/{project_id}/buffers?lang=ru')
+    assert project_buffers_page.status_code == 200
+    assert 'Буферы проекта' in project_buffers_page.text
+    assert 'Project buffers' not in project_buffers_page.text
+    assert 'Speed profile' not in project_buffers_page.text

@@ -133,3 +133,166 @@ def get_help_entry(key: str, lang: str) -> dict[str, str] | None:
     if lang in entry:
         return entry[lang]
     return entry.get("ru")
+
+HELP_TEXT.update({
+    "pricing_policy.min_margin_pct": {
+        "ru": {"title": "Минимальная маржа %", "body": "Нижний порог маржи для сценария цены.", "example": "Если маржа ниже порога, система покажет предупреждение/блок."},
+        "sv": {"title": "Minsta marginal %", "body": "Lägsta tillåtna marginal för prisscenario.", "example": "Under tröskeln visas varning/blockering."},
+        "en": {"title": "Minimum margin %", "body": "Lowest allowed margin for a pricing scenario.", "example": "Below threshold the system warns or blocks issue."},
+    },
+    "pricing_policy.min_profit_sek": {
+        "ru": {"title": "Минимальная прибыль (SEK)", "body": "Абсолютный минимум прибыли по документу.", "example": "Если прибыль ниже порога, правило floor срабатывает."},
+        "sv": {"title": "Minsta vinst (SEK)", "body": "Absolut minimivinst per dokument.", "example": "Under nivån triggas floor-regeln."},
+        "en": {"title": "Minimum profit (SEK)", "body": "Absolute minimum profit per document.", "example": "If lower than threshold, floor policy is triggered."},
+    },
+    "pricing_policy.min_effective_hourly": {
+        "ru": {"title": "Минимальная эффективная ставка", "body": "Минимум SEK/ч после всех расчётов.", "example": "Защищает от слишком дешёвых фиксированных цен."},
+        "sv": {"title": "Minsta effektiv timtaxa", "body": "Lägsta SEK/h efter alla beräkningar.", "example": "Skyddar mot för låg fastprisnivå."},
+        "en": {"title": "Minimum effective hourly", "body": "Minimum SEK/hour after all calculations.", "example": "Prevents underpriced fixed totals."},
+    },
+    "pricing_policy.warn_only_mode": {
+        "ru": {"title": "Только предупреждение", "body": "Вместо блокировки показывает предупреждение.", "example": "Используйте при мягком контроле в пилоте."},
+        "sv": {"title": "Endast varning", "body": "Visar varning i stället för blockering.", "example": "Används vid mjuk kontroll under pilot."},
+        "en": {"title": "Warning only", "body": "Shows warnings instead of blocking.", "example": "Useful during rollout when control is soft."},
+    },
+    "pricing_policy.warn_only_below_score": {
+        "ru": {"title": "Порог полноты: только предупреждение", "body": "Ниже порога полноты система предупреждает, но не блокирует.", "example": "Подходит для переходного периода."},
+        "sv": {"title": "Fullständighet: endast varning", "body": "Under tröskeln visas varning men ingen blockering.", "example": "Bra under övergångsperiod."},
+        "en": {"title": "Completeness: warning only", "body": "Below threshold system warns but does not block.", "example": "Useful for transition periods."},
+    },
+    "completeness.fixed_block": {
+        "ru": {"title": "Порог полноты (fixed)", "body": "Минимальный score полноты для fixed режима.", "example": "Ниже порога fixed-прайс помечается рисковым."},
+        "sv": {"title": "Fullständighetströskel (fastpris)", "body": "Minsta score för fastprisläge.", "example": "Under nivån markeras fastpris som riskfyllt."},
+        "en": {"title": "Completeness threshold (fixed)", "body": "Minimum completeness score for fixed mode.", "example": "Below threshold fixed pricing is treated as risky."},
+    },
+    "completeness.score": {
+        "ru": {"title": "Порог полноты", "body": "Минимальный уровень заполненности данных для режима.", "example": "Чем ниже score, тем выше риск ошибки цены."},
+        "sv": {"title": "Fullständighetspoäng", "body": "Miniminivå för datakomplettering i läget.", "example": "Låg poäng innebär högre prisrisk."},
+        "en": {"title": "Completeness score", "body": "Minimum data completeness level for the mode.", "example": "Lower score means higher pricing risk."},
+    },
+    "pricing_policy.min_completeness_per_room": {
+        "ru": {"title": "Порог полноты для per room", "body": "Минимальный score для режима цены за комнату.", "example": "При низком score система предупредит/заблокирует."},
+        "sv": {"title": "Tröskel för per room", "body": "Minsta score för pris per rum.", "example": "Låg score ger varning/blockering."},
+        "en": {"title": "Threshold for per room", "body": "Minimum completeness score for per-room pricing.", "example": "Low score triggers warning/block."},
+    },
+    "buffer_rules.kind": {
+        "ru": {"title": "Тип буфера", "body": "Какой вид буфера применяется к базе.", "example": "SETUP, CLEANUP, TRAVEL или RISK."},
+        "sv": {"title": "Bufferttyp", "body": "Vilken buffertsort som läggs på basen.", "example": "SETUP, CLEANUP, TRAVEL eller RISK."},
+        "en": {"title": "Buffer kind", "body": "Defines which buffer type is applied.", "example": "SETUP, CLEANUP, TRAVEL, or RISK."},
+    },
+    "buffers.basis": {
+        "ru": {"title": "База", "body": "От чего считается буфер: часы или себестоимость.", "example": "LABOR_HOURS или INTERNAL_COST."},
+        "sv": {"title": "Bas", "body": "Vad bufferten beräknas från: timmar eller kostnad.", "example": "LABOR_HOURS eller INTERNAL_COST."},
+        "en": {"title": "Basis", "body": "What the buffer is calculated from: hours or cost.", "example": "LABOR_HOURS or INTERNAL_COST."},
+    },
+    "buffers.percent_vs_fixed": {
+        "ru": {"title": "Единица буфера", "body": "Буфер может быть в процентах или фиксированным значением.", "example": "PERCENT, FIXED_HOURS, FIXED_SEK."},
+        "sv": {"title": "Buffertenhet", "body": "Buffert kan vara procent eller fast värde.", "example": "PERCENT, FIXED_HOURS, FIXED_SEK."},
+        "en": {"title": "Buffer unit", "body": "Buffer can be percent or fixed value.", "example": "PERCENT, FIXED_HOURS, FIXED_SEK."},
+    },
+    "buffer_rules.scope": {
+        "ru": {"title": "Область применения", "body": "Где действует правило: глобально, проект или тип работ.", "example": "PROJECT + scope_id применяет правило к одному проекту."},
+        "sv": {"title": "Omfattning", "body": "Var regeln gäller: globalt, projekt eller arbetstyp.", "example": "PROJECT + scope_id gäller ett projekt."},
+        "en": {"title": "Scope", "body": "Where the rule applies: global, project, or work type.", "example": "PROJECT + scope_id applies to one project."},
+    },
+    "buffer_rules.priority": {
+        "ru": {"title": "Приоритет", "body": "Чем выше, тем раньше правило рассматривается.", "example": "Сначала выбирается правило с максимальным приоритетом."},
+        "sv": {"title": "Prioritet", "body": "Högre värde betyder högre prioritet.", "example": "Regeln med högst prioritet väljs först."},
+        "en": {"title": "Priority", "body": "Higher number means the rule is considered first.", "example": "Highest-priority matching rule wins."},
+    },
+    "buffers.include_setup_cleanup_travel": {
+        "ru": {"title": "Include setup/cleanup/travel", "body": "Включает соответствующие виды буферов в расчёт проекта.", "example": "Отключите, если такие затраты учтены отдельно."},
+        "sv": {"title": "Inkludera setup/cleanup/travel", "body": "Tar med dessa bufferttyper i projektberäkningen.", "example": "Stäng av om de hanteras separat."},
+        "en": {"title": "Include setup/cleanup/travel", "body": "Includes these buffer kinds in project calculations.", "example": "Disable if those costs are handled separately."},
+    },
+    "buffers.include_risk": {
+        "ru": {"title": "Include risk", "body": "Добавляет риск-буфер в базовый расчёт.", "example": "Используйте для проектов с неопределённостью."},
+        "sv": {"title": "Inkludera risk", "body": "Tar med riskbuffert i grundberäkningen.", "example": "Använd för osäkra projekt."},
+        "en": {"title": "Include risk", "body": "Adds risk buffer into baseline calculation.", "example": "Use for projects with uncertainty."},
+    },
+    "project_buffers.speed_profile": {
+        "ru": {"title": "Профиль скорости", "body": "Множитель производительности команды для этого проекта.", "example": "1.15 медленнее, 0.90 быстрее."},
+        "sv": {"title": "Hastighetsprofil", "body": "Produktivitetsmultiplikator för projektet.", "example": "1.15 långsammare, 0.90 snabbare."},
+        "en": {"title": "Speed profile", "body": "Team productivity multiplier for this project.", "example": "1.15 slower, 0.90 faster."},
+    },
+    "materials_norms.basis_type": {
+        "ru": {"title": "Тип базы", "body": "Геометрическая база, относительно которой считается расход.", "example": "wall_area, ceiling_area, perimeter и т.д."},
+        "sv": {"title": "Bastyp", "body": "Geometrisk bas som förbrukningen räknas mot.", "example": "wall_area, ceiling_area, perimeter m.fl."},
+        "en": {"title": "Basis type", "body": "Geometry basis used for consumption calculation.", "example": "wall_area, ceiling_area, perimeter, etc."},
+    },
+    "materials_norms.consumption_qty": {
+        "ru": {"title": "Расход", "body": "Количество материала на базовый объём.", "example": "0.3 л на 1 м²."},
+        "sv": {"title": "Förbrukningsmängd", "body": "Materialmängd per basvolym.", "example": "0.3 l per 1 m²."},
+        "en": {"title": "Consumption qty", "body": "Material quantity per basis volume.", "example": "0.3 L per 1 m²."},
+    },
+    "materials_norms.per_basis_qty": {
+        "ru": {"title": "На базовое количество", "body": "Размер базы, к которому привязан расход.", "example": "Расход 3 л на 10 м² => per_basis_qty=10."},
+        "sv": {"title": "Per basmängd", "body": "Basstorlek som förbrukningen avser.", "example": "3 l per 10 m² => per_basis_qty=10."},
+        "en": {"title": "Per basis qty", "body": "Basis size that the consumption quantity refers to.", "example": "3 L per 10 m² => per_basis_qty=10."},
+    },
+    "materials_norms.per_basis_unit": {
+        "ru": {"title": "Единица базы", "body": "Единица измерения для базового количества.", "example": "m2, rm, room."},
+        "sv": {"title": "Basenhet", "body": "Enhet för basmängden.", "example": "m2, rm, room."},
+        "en": {"title": "Per basis unit", "body": "Unit for the basis quantity.", "example": "m2, rm, room."},
+    },
+    "materials_norms.layers_multiplier": {
+        "ru": {"title": "Множитель слоёв", "body": "Умножает расход на число слоёв в работах.", "example": "2 слоя => расход ×2."},
+        "sv": {"title": "Lagermultiplikator", "body": "Multiplicerar förbrukning med antal lager.", "example": "2 lager => förbrukning ×2."},
+        "en": {"title": "Layers multiplier", "body": "Multiplies consumption by number of coats/layers.", "example": "2 layers => consumption ×2."},
+    },
+    "materials_norms.waste_percent": {
+        "ru": {"title": "Отходы %", "body": "Дополнительный процент на потери материала.", "example": "5% означает коэффициент 1.05."},
+        "sv": {"title": "Spill %", "body": "Extra procent för materialspill.", "example": "5% betyder faktor 1.05."},
+        "en": {"title": "Waste %", "body": "Extra percentage for material waste.", "example": "5% means factor 1.05."},
+    },
+    "materials_norms.work_type_code": {
+        "ru": {"title": "Код типа работ", "body": "Связывает норму с конкретным типом работ.", "example": "paint_walls, paint_ceiling."},
+        "sv": {"title": "Arbetstypkod", "body": "Kopplar normen till en arbetstyp.", "example": "paint_walls, paint_ceiling."},
+        "en": {"title": "Work type code", "body": "Binds the norm to a specific work type.", "example": "paint_walls, paint_ceiling."},
+    },
+    "paint_systems.override_coats": {
+        "ru": {"title": "Переопределить слои", "body": "Задаёт число слоёв для шага вместо значения из рецепта.", "example": "Укажите 2, чтобы принудительно красить в 2 слоя."},
+        "sv": {"title": "Åsidosätt lager", "body": "Sätter antal lager för steget istället för receptvärdet.", "example": "Ange 2 för att alltid måla två lager."},
+        "en": {"title": "Override coats", "body": "Sets coat count for the step instead of recipe default.", "example": "Set 2 to force two coats."},
+    },
+    "paint_systems.override_waste": {
+        "ru": {"title": "Переопределить отходы %", "body": "Заменяет процент отходов рецепта для конкретного шага.", "example": "10% для сложной геометрии."},
+        "sv": {"title": "Åsidosätt spill %", "body": "Ersätter receptets spillprocent för steget.", "example": "10% för komplex geometri."},
+        "en": {"title": "Override waste %", "body": "Overrides recipe waste percentage for this step.", "example": "10% for complex geometry."},
+    },
+    "paint_systems.optional": {
+        "ru": {"title": "Опционально", "body": "Шаг не обязателен и может быть пропущен без ошибки.", "example": "Например, грунт только при плохом основании."},
+        "sv": {"title": "Valfri", "body": "Steget är inte obligatoriskt och kan hoppas över.", "example": "T.ex. primer bara vid dåligt underlag."},
+        "en": {"title": "Optional", "body": "Step is not mandatory and may be skipped.", "example": "E.g., primer only for poor substrate."},
+    },
+    "paint_systems.versioning": {
+        "ru": {"title": "Версионирование", "body": "Новые версии системы сохраняют историю изменений.", "example": "Активной обычно остаётся последняя версия."},
+        "sv": {"title": "Versionering", "body": "Nya systemversioner behåller ändringshistorik.", "example": "Vanligtvis är senaste versionen aktiv."},
+        "en": {"title": "Versioning", "body": "New system versions preserve change history.", "example": "Usually the latest version is active."},
+    },
+    "terms_templates.segment": {
+        "ru": {"title": "Сегмент", "body": "Контекст использования шаблона условий.", "example": "b2b, b2c или internal."},
+        "sv": {"title": "Segment", "body": "Kontext där villkorsmallen används.", "example": "b2b, b2c eller internal."},
+        "en": {"title": "Segment", "body": "Context where the terms template is used.", "example": "b2b, b2c, or internal."},
+    },
+    "terms_templates.doc_type": {
+        "ru": {"title": "Тип документа", "body": "Для какого документа применяются условия.", "example": "offer или invoice."},
+        "sv": {"title": "Dokumenttyp", "body": "Vilken dokumenttyp villkoren gäller för.", "example": "offer eller invoice."},
+        "en": {"title": "Doc type", "body": "Document type the terms apply to.", "example": "offer or invoice."},
+    },
+    "terms_templates.version_from_template": {
+        "ru": {"title": "Версия из шаблона", "body": "Создаёт новую версию на основе существующей.", "example": "Выберите шаблон, чтобы переиспользовать текст."},
+        "sv": {"title": "Version från mall", "body": "Skapar en ny version baserat på befintlig mall.", "example": "Välj mall för att återanvända text."},
+        "en": {"title": "Version from template", "body": "Creates a new version based on an existing template.", "example": "Select template to reuse body text."},
+    },
+    "terms_templates.active": {
+        "ru": {"title": "Активный", "body": "Активные шаблоны доступны для выбора по умолчанию.", "example": "Отключите старые версии, чтобы избежать путаницы."},
+        "sv": {"title": "Aktiv", "body": "Aktiva mallar är tillgängliga som standardval.", "example": "Inaktivera gamla versioner för tydlighet."},
+        "en": {"title": "Active", "body": "Active templates are available for default selection.", "example": "Disable old versions to avoid confusion."},
+    },
+    "terms.snapshot_on_issue": {
+        "ru": {"title": "Сохранить как новую версию", "body": "Сохраняет изменения в отдельной версии, не ломая старые документы.", "example": "История версий нужна для аудита."},
+        "sv": {"title": "Spara som ny version", "body": "Sparar ändringar i en ny version utan att påverka gamla dokument.", "example": "Versionshistorik behövs för revision."},
+        "en": {"title": "Save as new version", "body": "Stores changes in a new version without breaking old documents.", "example": "Version history supports audits."},
+    },
+})

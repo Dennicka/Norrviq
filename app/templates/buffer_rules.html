@@ -23,9 +23,9 @@
     <label>{{ t('buffer_rules.scope') }} {{ help_icon('buffer_rules.scope') }}</label>
     <select name="scope">
       <option value="all" {% if filters.scope == 'all' %}selected{% endif %}>{{ t('common.all') }}</option>
-      <option value="GLOBAL" {% if filters.scope == 'GLOBAL' %}selected{% endif %}>GLOBAL</option>
-      <option value="PROJECT" {% if filters.scope == 'PROJECT' %}selected{% endif %}>PROJECT</option>
-      <option value="WORKTYPE" {% if filters.scope == 'WORKTYPE' %}selected{% endif %}>WORKTYPE</option>
+      <option value="GLOBAL" {% if filters.scope == 'GLOBAL' %}selected{% endif %}>{{ t('buffer_rules.scope.global') }}</option>
+      <option value="PROJECT" {% if filters.scope == 'PROJECT' %}selected{% endif %}>{{ t('buffer_rules.scope.project') }}</option>
+      <option value="WORKTYPE" {% if filters.scope == 'WORKTYPE' %}selected{% endif %}>{{ t('buffer_rules.scope.worktype') }}</option>
     </select>
 
     <label>{{ t('buffer_rules.rule_id') }}</label>
@@ -48,11 +48,11 @@
       {% for r in rules %}
       <tr>
         <td>{{ r.id }}</td>
-        <td>{{ r.kind }}</td>
-        <td>{{ r.scope_type }}</td>
+        <td>{{ t('buffer_rules.kind.' ~ r.kind|lower) }}</td>
+        <td>{{ t('buffer_rules.scope.' ~ r.scope_type|lower) }}</td>
         <td>{% if r.scope_type == 'PROJECT' %}{{ r.scope_id }}{% else %}—{% endif %}</td>
         <td>{% if r.scope_type == 'WORKTYPE' %}{{ r.scope_id }}{% else %}—{% endif %}</td>
-        <td>{{ r.value }} {{ r.unit }}</td>
+        <td>{{ r.value }} {{ t('buffer_rules.unit.' ~ r.unit|lower) }}</td>
         <td>{{ r.priority }}</td>
         <td>{{ t('label.yes') if r.is_active else t('label.no') }}</td>
         <td>{{ r.created_at }}</td>
@@ -81,7 +81,7 @@
     <label>{{ t('buffer_rules.kind') }} {{ help_icon('buffer_rules.kind') }}</label>
     <select name="kind">
       {% for item in ['SETUP','CLEANUP','TRAVEL','RISK'] %}
-      <option value="{{ item }}" {% if form_data.get('kind', 'SETUP') == item %}selected{% endif %}>{{ item }}</option>
+      <option value="{{ item }}" {% if form_data.get('kind', 'SETUP') == item %}selected{% endif %}>{{ t('buffer_rules.kind.' ~ item|lower) }}</option>
       {% endfor %}
     </select>
     {% if errors.get('kind') %}<p class="error">{{ errors['kind'] }}</p>{% endif %}
@@ -89,14 +89,14 @@
     <label>{{ t('buffer_rules.basis') }} {{ help_icon('buffers.basis') }}</label>
     <select name="basis">
       {% for item in ['LABOR_HOURS','INTERNAL_COST'] %}
-      <option value="{{ item }}" {% if form_data.get('basis', 'LABOR_HOURS') == item %}selected{% endif %}>{{ item }}</option>
+      <option value="{{ item }}" {% if form_data.get('basis', 'LABOR_HOURS') == item %}selected{% endif %}>{{ t('buffer_rules.basis.' ~ item|lower) }}</option>
       {% endfor %}
     </select>
 
     <label>{{ t('buffer_rules.unit') }} {{ help_icon('buffers.percent_vs_fixed') }}</label>
     <select name="unit">
       {% for item in ['PERCENT','FIXED_HOURS','FIXED_SEK'] %}
-      <option value="{{ item }}" {% if form_data.get('unit', 'PERCENT') == item %}selected{% endif %}>{{ item }}</option>
+      <option value="{{ item }}" {% if form_data.get('unit', 'PERCENT') == item %}selected{% endif %}>{{ t('buffer_rules.unit.' ~ item|lower) }}</option>
       {% endfor %}
     </select>
     {% if errors.get('unit') %}<p class="error">{{ errors['unit'] }}</p>{% endif %}
@@ -108,7 +108,7 @@
     <label>{{ t('buffer_rules.scope') }} {{ help_icon('buffer_rules.scope') }}</label>
     <select name="scope_type">
       {% for item in ['GLOBAL','PROJECT','WORKTYPE'] %}
-      <option value="{{ item }}" {% if form_data.get('scope_type', 'GLOBAL') == item %}selected{% endif %}>{{ item }}</option>
+      <option value="{{ item }}" {% if form_data.get('scope_type', 'GLOBAL') == item %}selected{% endif %}>{{ t('buffer_rules.scope.' ~ item|lower) }}</option>
       {% endfor %}
     </select>
 
@@ -144,12 +144,12 @@
 <section>
   <h2>{{ t('buffer_rules.history') }}</h2>
   <table>
-    <thead><tr><th>{{ t('common.when') }}</th><th>{{ t('common.actor') }}</th><th>{{ t('common.action') }}</th><th>{{ t('common.entity') }}</th><th>ID</th><th>{{ t('common.before') }}</th><th>{{ t('common.after') }}</th></tr></thead>
+    <thead><tr><th>{{ t('common.when') }}</th><th>{{ t('common.actor') }}</th><th>{{ t('common.action') }}</th><th>{{ t('common.entity') }}</th><th>{{ t('label.id') }}</th><th>{{ t('common.before') }}</th><th>{{ t('common.after') }}</th></tr></thead>
     <tbody>
       {% for row in history_rows %}
       <tr>
         <td>{{ row.event.created_at }}</td>
-        <td>{{ row.event.user_id or 'system' }}</td>
+        <td>{{ row.event.user_id or t('common.system') }}</td>
         <td>{{ row.details.get('action', row.event.event_type) }}</td>
         <td>{{ row.event.entity_type }}</td>
         <td>{{ row.event.entity_id }}</td>
@@ -169,6 +169,10 @@ document.getElementById('preview-btn').addEventListener('click', async () => {
   const msgNoRules = "{{ t('common.no_rules') }}";
   const msgNoBuffer = "{{ t('buffer_rules.no_buffer') }}";
   const msgReason = "{{ t('buffer_rules.reason') }}";
+  const msgRule = "{{ t('buffer_rules.preview.rule') }}";
+  const msgScope = "{{ t('buffer_rules.preview.scope') }}";
+  const msgValue = "{{ t('buffer_rules.preview.value') }}";
+  const msgBasis = "{{ t('buffer_rules.preview.basis') }}";
   const projectId = document.getElementById('preview-project-id').value;
   const worktypeId = document.getElementById('preview-worktype-id').value;
   const resultBox = document.getElementById('preview-result');
@@ -186,7 +190,7 @@ document.getElementById('preview-btn').addEventListener('click', async () => {
     resultBox.textContent = `${msgNoRules} -> ${msgNoBuffer}. ${msgReason}: ${data.reason}`;
     return;
   }
-  resultBox.textContent = `Rule #${data.applied_rule_id}\nScope: ${data.scope}\nValue: ${data.buffer_value} ${data.buffer_unit}\nBasis: ${data.buffer_basis}\n${msgReason}: ${data.reason}`;
+  resultBox.textContent = `${msgRule} #${data.applied_rule_id}\n${msgScope}: ${data.scope}\n${msgValue}: ${data.buffer_value} ${data.buffer_unit}\n${msgBasis}: ${data.buffer_basis}\n${msgReason}: ${data.reason}`;
 });
 </script>
 {% endblock %}

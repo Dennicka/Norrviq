@@ -9,7 +9,7 @@
     <tr>
       <td>{{ norm.work_type_code or norm.work_kind or norm.applies_to_work_type }}</td>
       <td>{{ norm.material_name }}</td>
-      <td>{{ norm.basis_type or norm.surface_type }}</td>
+      <td>{{ t('materials_norms.basis_type.' ~ (norm.basis_type or norm.surface_type or 'custom')) }}</td>
       <td>{{ norm.consumption_qty if norm.consumption_qty is not none else (norm.quantity_per_basis if norm.quantity_per_basis is not none else norm.consumption_value) }} / {{ norm.per_basis_qty if norm.per_basis_qty is not none else 1 }} {{ norm.per_basis_unit or norm.basis_unit or 'm2' }}</td>
       <td>{{ t('label.yes') if norm.layers_multiplier_enabled else t('label.no') }}</td>
       <td>{{ norm.waste_percent if norm.waste_percent is not none else norm.waste_factor_pct }}</td>

@@ -10,8 +10,14 @@ from .registry import get_help_entry
 def help_icon(context, key: str) -> Markup:
     lang = context.get("lang", "ru")
     entry = get_help_entry(key, lang)
+    labels = {
+        "ru": {"more": "Подробнее", "help": "Подсказка"},
+        "sv": {"more": "Läs mer", "help": "Hjälp"},
+        "en": {"more": "Learn more", "help": "Help"},
+    }
+    lang_labels = labels.get(lang, labels["en"])
     if not entry:
-        return Markup(f'<span class="help help-missing" title="Missing help: {escape(key)}">?</span>')
+        return Markup(f'<span class="help help-missing" title="Missing help: {escape(key)}" aria-label="{lang_labels["help"]}">?</span>')
 
     title = escape(entry.get("title", ""))
     body = escape(entry.get("body", ""))
@@ -20,11 +26,11 @@ def help_icon(context, key: str) -> Markup:
 
     link_html = Markup("")
     if link:
-        link_html = Markup(f'<a href="{link}" class="help-popover-link">Подробнее</a>')
+        link_html = Markup(f'<a href="{link}" class="help-popover-link">{lang_labels["more"]}</a>')
 
     return Markup(
         "<details class=\"help-popover\">"
-        "<summary class=\"help\" aria-label=\"help\">?</summary>"
+        f"<summary class=\"help\" aria-label=\"{lang_labels['help']}\" title=\"{lang_labels['help']}\">?</summary>"
         f"<div class=\"help-popover-card\"><strong>{title}</strong><p>{body}</p><p><em>{example}</em></p>{link_html}</div>"
         "</details>"
     )
