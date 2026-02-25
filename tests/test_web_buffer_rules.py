@@ -81,7 +81,7 @@ def test_create_edit_delete_rule_via_web_form():
         follow_redirects=True,
     )
     assert create_resp.status_code == 200
-    assert "12.50 PERCENT" in create_resp.text
+    assert "12.50 %" in create_resp.text
 
     db = SessionLocal()
     try:
@@ -107,7 +107,7 @@ def test_create_edit_delete_rule_via_web_form():
         follow_redirects=True,
     )
     assert edit_resp.status_code == 200
-    assert "15.00 PERCENT" in edit_resp.text
+    assert "15.00 %" in edit_resp.text
 
     del_resp = client.post(f"/web/buffer-rules/{rule_id}/delete", follow_redirects=True)
     assert del_resp.status_code == 200

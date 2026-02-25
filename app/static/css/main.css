@@ -129,6 +129,15 @@ p {
     box-shadow: 0 10px 28px rgba(0, 0, 0, 0.12);
 }
 
+.help-popover:not([open]) .help-popover-card {
+    display: none;
+}
+
+.help-popover:hover .help-popover-card,
+.help-popover:focus-within .help-popover-card {
+    display: block;
+}
+
 .help-popover-card p {
     margin: 6px 0;
     color: #374151;

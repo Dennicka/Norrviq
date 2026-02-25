@@ -19,13 +19,13 @@
 
 <h3>{{ t('label.preview') }}</h3>
 <div>{{ t('project_buffers.raw_baseline') }}: {{ baseline.raw_labor_hours_total }} h / {{ baseline.raw_internal_cost }} SEK</div>
-<div>{{ t('project_buffers.speed') }}: raw={{ baseline.raw_labor_hours_total }} h, multiplier={{ baseline.speed_multiplier }}, after_speed={{ baseline.labor_hours_after_speed }} h (Δ {{ baseline.speed_hours_delta }} h)</div>
+<div>{{ t('project_buffers.speed') }}: {{ t('project_buffers.preview.raw') }}={{ baseline.raw_labor_hours_total }} h, {{ t('project_buffers.preview.multiplier') }}={{ baseline.speed_multiplier }}, {{ t('project_buffers.preview.after_speed') }}={{ baseline.labor_hours_after_speed }} h (Δ {{ baseline.speed_hours_delta }} h)</div>
 <div>{{ t('project_buffers.buffers_total') }}: +{{ baseline.buffers_hours_total }} h / +{{ baseline.buffers_cost_total }} SEK</div>
 <div>{{ t('project_buffers.after_buffers') }}: {{ baseline.labor_hours_total }} h / {{ baseline.internal_total_cost }} SEK</div>
 {% if baseline.buffers %}
 <ul>
 {% for b in baseline.buffers %}
-<li>{{ b.kind }}: +{{ b.hours_delta }} h / +{{ b.sek_delta }} SEK ({{ b.reason }})</li>
+<li>{{ t('buffer_rules.kind.' ~ b.kind|lower) }}: +{{ b.hours_delta }} h / +{{ b.sek_delta }} SEK ({{ b.reason }})</li>
 {% endfor %}
 </ul>
 {% endif %}

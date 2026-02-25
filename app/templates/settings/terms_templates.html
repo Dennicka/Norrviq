@@ -40,11 +40,11 @@
 
 <h2>{{ t('terms_templates.existing_templates') }}</h2>
 <table>
-    <thead><tr><th>ID</th><th>{{ t('terms_templates.segment') }}</th><th>{{ t('terms_templates.doc_type') }}</th><th>{{ t('terms_templates.language') }}</th><th>{{ t('terms_templates.version') }} {{ help_icon('terms.versioning') }}</th><th>{{ t('terms_templates.active') }}</th><th>{{ t('label.title') }}</th></tr></thead>
+    <thead><tr><th>{{ t('label.id') }}</th><th>{{ t('terms_templates.segment') }}</th><th>{{ t('terms_templates.doc_type') }}</th><th>{{ t('terms_templates.language') }}</th><th>{{ t('terms_templates.version') }} {{ help_icon('terms.versioning') }}</th><th>{{ t('terms_templates.active') }}</th><th>{{ t('label.title') }}</th></tr></thead>
     <tbody>
         {% for item in terms_templates %}
         <tr>
-            <td>{{ item.id }}</td><td>{{ item.segment }}</td><td>{{ item.doc_type }}</td><td>{{ item.lang }}</td><td>{{ item.version }}</td><td>{{ item.is_active }}</td><td>{{ item.title }}</td>
+            <td>{{ item.id }}</td><td>{{ item.segment }}</td><td>{{ item.doc_type }}</td><td>{{ item.lang }}</td><td>{{ item.version }}</td><td>{{ t('label.yes') if item.is_active else t('label.no') }}</td><td>{{ item.title }}</td>
         </tr>
         {% endfor %}
     </tbody>
