@@ -11,6 +11,7 @@ from app.models.project import Project, ProjectWorkItem
 from app.models.room import Room
 from app.models.worktype import WorkType
 from app.services.geometry import compute_room_geometry_from_model
+from app.services.estimates import recalculate_project_work_items
 
 client = TestClient(app)
 settings = get_settings()
@@ -181,3 +182,30 @@ def test_selected_rooms_validation_error_when_empty_selection():
     assert response.status_code == 303
     flash_calls = [call.args for call in add_flash.call_args_list]
     assert any("Выберите хотя бы одно помещение" in str(message) and level == "error" for _, message, level in flash_calls)
+
+
+
+def test_room_geometry_change_recalculates_bulk_item_quantities():
+    _login()
+    project_id, work_type_id, room_1_id, _ = _seed_project_with_rooms(category="floor")
+
+    client.post(
+        f"/projects/{project_id}/add-work-item",
+        data={"work_type_id": str(work_type_id), "scope_mode": "all_rooms", "difficulty_factor": "1.0", "layers": "2"},
+        follow_redirects=False,
+    )
+
+    db = SessionLocal()
+    try:
+        project = db.get(Project, project_id)
+        room = db.get(Room, room_1_id)
+        room.floor_area_m2 = Decimal("15.00")
+        db.add(room)
+        db.commit()
+
+        recalculate_project_work_items(db, project)
+        item = db.query(ProjectWorkItem).filter(ProjectWorkItem.project_id == project_id, ProjectWorkItem.room_id == room_1_id).first()
+        assert item is not None
+        assert Decimal(str(item.quantity)) == Decimal("30.00")
+    finally:
+        db.close()

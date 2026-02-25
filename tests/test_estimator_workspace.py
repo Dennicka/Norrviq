@@ -60,7 +60,8 @@ def test_workspace_builder_returns_geometry_hours_pricing_materials():
     assert workspace["geometry"]["rooms_count"] == 2
     assert workspace["geometry"]["total_floor_area"] == Decimal("22")
     assert workspace["work_items"]["total_hours"] == Decimal("11.00")
-    assert {"HOURLY", "FIXED_TOTAL", "PER_M2", "PER_ROOM", "PIECEWORK"}.issubset(set(workspace["pricing"]["scenarios"].keys()))
+    assert {"HOURLY", "FIXED_TOTAL", "PER_M2", "PER_ROOM", "PIECEWORK", "HYBRID"}.issubset(set(workspace["pricing"]["scenarios"].keys()))
+    assert any(row["mode"] == "FIXED_TOTAL" and row["enabled"] is False for row in workspace["pricing"]["compare_rows"])
     assert "rows" in workspace["materials"]
 
 
@@ -142,3 +143,45 @@ def test_estimator_bulk_apply_and_recalc_and_select_pricing():
 
     recalc = client.post(f"/projects/{project_id}/estimator/recalc", data={}, follow_redirects=False)
     assert recalc.status_code == 303
+
+
+
+def test_material_override_has_priority_in_materials_plan():
+    project_id = _seed_project()
+    db = SessionLocal()
+    try:
+        project = db.get(Project, project_id)
+        item = project.work_items[0]
+        material = Material(code=f"MAT-{uuid4().hex[:5]}", name_ru="Краска", name_sv=f"Paint-{uuid4().hex[:5]}", unit="l", default_price_per_unit=Decimal("10"), is_active=True)
+        norm = MaterialConsumptionNorm(
+            applies_to_work_type=item.work_type.code,
+            material_name=material.name_sv,
+            material_category="paint",
+            material_unit="l",
+            consumption_value=Decimal("0.1"),
+            consumption_unit="per_m2",
+            surface_type="wall",
+            active=True,
+        )
+        db.add_all([material, norm])
+        db.flush()
+        project_override = MaterialConsumptionOverride(
+            project_id=project.id,
+            room_id=None,
+            work_type_id=item.work_type_id,
+            material_id=material.id,
+            surface_kind="walls",
+            unit_basis="m2",
+            quantity_per_unit=Decimal("0.5"),
+            base_unit_size=Decimal("1"),
+            is_active=True,
+        )
+        db.add(project_override)
+        db.commit()
+
+        workspace = build_estimator_workspace(db, project_id, lang="ru")
+    finally:
+        db.close()
+
+    assert workspace["materials"]["rows"]
+    assert any(row["source"] in {"project_override", "room_override"} for row in workspace["materials"]["rows"])

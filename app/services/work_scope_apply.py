@@ -153,6 +153,8 @@ def apply_work_item_to_scope(project_id: int, payload: dict, db: Session) -> Sco
     if isinstance(raw_selected, str):
         raw_selected = [raw_selected]
     selected_ids = sorted({int(raw) for raw in raw_selected if str(raw).isdigit()})
+    group_rooms = selected_ids if scope_apply_mode == "selected_rooms" else []
+    source_group_ref = payload.get("source_group_ref") or f"bulk:{scope_apply_mode}:wt{work_type.id}:rooms={','.join(str(v) for v in group_rooms) or 'all'}:layers={Decimal(str(payload.get('layers') or '1')).quantize(Decimal('0.01'))}"
 
     layers = Decimal(str(payload.get("layers") or "1"))
     difficulty_factor = Decimal(str(payload.get("difficulty_factor") or "1"))
@@ -167,6 +169,10 @@ def apply_work_item_to_scope(project_id: int, payload: dict, db: Session) -> Sco
     created_ids: list[int] = []
 
     if scope_apply_mode == "project_aggregate":
+        db.query(ProjectWorkItem).filter(
+            ProjectWorkItem.project_id == project.id,
+            ProjectWorkItem.source_group_ref == source_group_ref,
+        ).delete(synchronize_session=False)
         quantity = resolve_project_quantity(list(project.rooms), work_type, layers=layers)
         if quantity is None or quantity <= 0:
             return ScopeApplySummary(created_count=0, skipped_count=1, warnings=["missing_project_geometry"], created_item_ids=[])
@@ -182,6 +188,7 @@ def apply_work_item_to_scope(project_id: int, payload: dict, db: Session) -> Sco
             hourly_rate_sek=hourly_rate_sek,
             area_rate_sek=area_rate_sek,
             fixed_price_sek=fixed_price_sek,
+            source_group_ref=source_group_ref,
             comment=comment,
         )
         db.add(item)
@@ -190,6 +197,11 @@ def apply_work_item_to_scope(project_id: int, payload: dict, db: Session) -> Sco
         return ScopeApplySummary(created_count=1, skipped_count=0, warnings=[], created_item_ids=created_ids)
 
     target_rooms = _resolve_target_rooms(project, scope_apply_mode, selected_ids, room_id)
+    if scope_apply_mode in {"all_rooms", "selected_rooms"}:
+        db.query(ProjectWorkItem).filter(
+            ProjectWorkItem.project_id == project.id,
+            ProjectWorkItem.source_group_ref == source_group_ref,
+        ).delete(synchronize_session=False)
 
     for room in target_rooms:
         if duplicate_mode == "skip_same_work_in_room":
@@ -223,6 +235,7 @@ def apply_work_item_to_scope(project_id: int, payload: dict, db: Session) -> Sco
             hourly_rate_sek=hourly_rate_sek,
             area_rate_sek=area_rate_sek,
             fixed_price_sek=fixed_price_sek,
+            source_group_ref=source_group_ref,
             comment=comment,
         )
         db.add(item)
