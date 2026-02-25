@@ -7,6 +7,9 @@
     <div class="offer-toolbar">
         <span class="doc-status">{{ t("label.status") }}: {{ invoice.status|upper }}</span>
         <a href="/invoices/{{ invoice.id }}/pdf">Download PDF</a>
+        {% if not pdf_capability.weasyprint_available %}
+        <a href="/invoices/{{ invoice.id }}/print">{{ t("common.print") }}</a>
+        {% endif %}
         {% if invoice.status != 'issued' %}
         <form method="post" action="/invoices/{{ invoice.id }}/finalize" onsubmit="finalizeInvoice(this)">
             {{ csrf_input(request) }}
@@ -15,6 +18,9 @@
         </form>
         {% endif %}
     </div>
+        {% if not pdf_capability.weasyprint_available %}
+    <div class="alert alert-warning">{{ t("invoice.pdf_fallback_mode") }}</div>
+    {% endif %}
     <div class="offer-page">
         <div class="offer-header">
             <div class="offer-company">

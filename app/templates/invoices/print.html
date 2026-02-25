@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="{{ lang }}">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ t("menu.invoices") }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='css/pdf_document.css') }}">
+    <style>
+        .print-toolbar { margin: 12px auto; max-width: 210mm; display: flex; justify-content: space-between; align-items: center; }
+        .print-toolbar button { padding: 6px 12px; }
+        .screen-only { display: block; }
+        @media print {
+            .screen-only { display: none !important; }
+            body { margin: 0; }
+        }
+    </style>
+</head>
+<body>
+<div class="print-toolbar screen-only">
+    <strong>{{ t("invoice.print_view") }}</strong>
+    <button type="button" onclick="window.print()">{{ t("common.print") }}</button>
+</div>
+{% if not pdf_capability.weasyprint_available %}
+<div class="print-toolbar screen-only">
+    <span>{{ t("invoice.pdf_fallback_mode") }}</span>
+</div>
+{% endif %}
+<div class="pdf-page {% if is_draft %}is-draft{% endif %}">
+    {% if is_draft %}
+    <div class="watermark">DRAFT / UTKAST</div>
+    {% endif %}
+
+    <header class="doc-header">
+        <div>
+            <h1>{{ t("menu.invoices") }}</h1>
+            <p>{{ company_profile.legal_name }}</p>
+        </div>
+        <div class="meta">
+            <div>{{ t("invoice.field.number") }}: {{ invoice.invoice_number if invoice.invoice_number else "DRAFT" }}</div>
+            <div>{{ t("label.status") }}: {{ invoice.status|upper }}</div>
+            <div>{{ t("invoice.field.issue_date") }}: {{ invoice.issue_date }}</div>
+        </div>
+    </header>
+
+    <section>
+        <h2>Lines</h2>
+        <table>
+            <thead><tr><th>#</th><th>Description</th><th>Qty</th><th>Unit</th><th>Price ex VAT</th><th>Total ex VAT</th></tr></thead>
+            <tbody>
+            {% for line in invoice.lines %}
+            <tr>
+                <td>{{ line.position }}</td>
+                <td>{{ line.description }}</td>
+                <td>{{ line.quantity }}</td>
+                <td>{{ line.unit or '' }}</td>
+                <td>{{ line.unit_price_ex_vat }}</td>
+                <td>{{ line.line_total_ex_vat }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        <p><strong>Arbete exkl. moms:</strong> {{ invoice.labour_ex_vat }}</p>
+        <p><strong>Material exkl. moms:</strong> {{ invoice.material_ex_vat }}</p>
+        <p><strong>Moms:</strong> {{ invoice.vat_total }}</p>
+        {% if (invoice.rot_case and invoice.rot_case.is_enabled) or invoice.rot_snapshot_enabled %}
+        <p><strong>ROT-avdrag:</strong> -{{ invoice.rot_amount }}</p>
+        {% endif %}
+        <p><strong>Att betala:</strong> {{ invoice.client_pays_total }}</p>
+    </section>
+
+    <section>
+        <h2>{{ terms_title or "Terms / Villkor" }}</h2>
+        <pre>{{ terms_body }}</pre>
+    </section>
+</div>
+</body>
+</html>
