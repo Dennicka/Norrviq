@@ -1656,7 +1656,22 @@ async def project_estimator_workspace(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     workspace = build_estimator_workspace(db, project_id, lang=lang)
-    context = build_project_context(db, request, project, lang, workspace=workspace, worktypes=db.query(WorkType).filter(WorkType.is_active).all(), rooms=project.rooms)
+    available_modes = [row["mode"] for row in workspace.get("pricing", {}).get("compare_rows", [])]
+    visible_modes = request.query_params.getlist("show_modes") or available_modes
+    pricing_filter = (request.query_params.get("filter") or "all").strip().lower()
+    if pricing_filter not in {"all", "selected"}:
+        pricing_filter = "all"
+    context = build_project_context(
+        db,
+        request,
+        project,
+        lang,
+        workspace=workspace,
+        worktypes=db.query(WorkType).filter(WorkType.is_active).all(),
+        rooms=project.rooms,
+        visible_modes=visible_modes,
+        pricing_filter=pricing_filter,
+    )
     return templates.TemplateResponse(request, "projects/estimator.html", context)
 
 

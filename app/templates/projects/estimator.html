@@ -3,26 +3,32 @@
 <h1>{{ t('estimator.title') }} — {{ project.name }}</h1>
 <p><a href="/projects/{{ project.id }}">← {{ t('projects.detail') }}</a></p>
 
-<section>
-    <h2>{{ t('estimator.kpi') }}</h2>
-    <p><strong>{{ t('estimator.total_hours') }}:</strong> {{ workspace.work_items.total_hours }}</p>
-    <p><strong>{{ t('estimator.materials_summary') }}:</strong> {{ workspace.materials.total_estimated_cost }}</p>
-    <p><strong>{{ t('estimator.completeness') }}:</strong> {{ workspace.quality.completeness_score }}%</p>
-    <form method="post" action="/projects/{{ project.id }}/estimator/recalc">{{ csrf_input(request) }}<button type="submit">{{ t('estimator.recalculate') }}</button></form>
-</section>
+<details open>
+    <summary><strong>{{ t('estimator.kpi') }}</strong></summary>
+    <section data-testid="totals">
+        <p><strong>{{ t('estimator.total_hours') }}:</strong> {{ workspace.totals.total_hours }}</p>
+        <p><strong>{{ t('estimator.labour_cost') }}:</strong> {{ workspace.totals.labour }}</p>
+        <p><strong>{{ t('estimator.materials_summary') }}:</strong> {{ workspace.totals.materials }}</p>
+        <p><strong>Subtotal:</strong> {{ workspace.totals.subtotal }}</p>
+        <p><strong>VAT:</strong> {{ workspace.totals.vat }}</p>
+        <p><strong>Total:</strong> {{ workspace.totals.total }}</p>
+        <p><strong>{{ t('estimator.completeness') }}:</strong> {{ workspace.quality.completeness_score }}%</p>
+        <form method="post" action="/projects/{{ project.id }}/estimator/recalc">{{ csrf_input(request) }}<button type="submit">{{ t('estimator.recalculate') }}</button></form>
+    </section>
+</details>
 
-<section>
-    <h2>{{ t('estimator.geometry') }}</h2>
+<details>
+    <summary><strong>{{ t('estimator.geometry') }}</strong></summary>
     <ul>
         <li>{{ t('estimator.rooms') }}: {{ workspace.geometry.rooms_count }}</li>
         <li>{{ t('estimator.floor_area') }}: {{ workspace.geometry.total_floor_area }}</li>
         <li>{{ t('estimator.wall_area') }}: {{ workspace.geometry.total_wall_area }}</li>
         <li>{{ t('estimator.ceiling_area') }}: {{ workspace.geometry.total_ceiling_area }}</li>
     </ul>
-</section>
+</details>
 
-<section>
-    <h2>{{ t('estimator.bulk_actions') }}</h2>
+<details>
+    <summary><strong>{{ t('estimator.bulk_actions') }}</strong></summary>
     <form method="post" action="/projects/{{ project.id }}/estimator/preset">
         {{ csrf_input(request) }}
         <label>{{ t('estimator.apply_preset') }}
@@ -37,76 +43,80 @@
         </label>
         <label>{{ t('estimator.scope') }}
             <select name="scope_mode">
-                <option value="all_rooms">{{ t('estimator.whole_project') }}</option>
-                <option value="selected_rooms">{{ t('estimator.selected_rooms') }}</option>
                 <option value="single_room">{{ t('projects.work_items.scope.single_room') }}</option>
+                <option value="selected_rooms">{{ t('estimator.selected_rooms') }}</option>
+                <option value="all_rooms">{{ t('estimator.whole_project') }}</option>
             </select>
         </label>
         <label>{{ t('estimator.coats') }} <input type="number" name="coats" value="2" step="1" min="1"></label>
-        {% for room in rooms %}
-        <label><input type="checkbox" name="selected_room_ids" value="{{ room.id }}">{{ room.name }}</label>
-        {% endfor %}
+        {% for room in rooms %}<label><input type="checkbox" name="selected_room_ids" value="{{ room.id }}"> {{ room.name }}</label>{% endfor %}
         <button type="submit">{{ t('estimator.apply_preset') }}</button>
     </form>
-</section>
+</details>
 
-<section>
-    <h2>{{ t('estimator.work_items') }}</h2>
+<details open>
+    <summary><strong>{{ t('estimator.work_items') }}</strong></summary>
     {% for room_id, items in workspace.work_items.grouped.items() %}
     <h3>{{ items[0].room.name if items and items[0].room else t('label.project') }}</h3>
     <table>
-        <tr><th>{{ t('label.name') }}</th><th>{{ t('label.quantity') }}</th><th>{{ t('estimator.total_hours') }}</th></tr>
+        <tr><th>{{ t('label.name') }}</th><th>{{ t('label.quantity') }}</th><th>{{ t('estimator.total_hours') }}</th><th>Scope</th></tr>
         {% for item in items %}
         <tr>
             <td>{{ item.work_type and (item.work_type.name_ru if lang == 'ru' else (item.work_type.name_en if lang == 'en' else item.work_type.name_sv)) or '-' }}</td>
             <td>{{ item.quantity }}</td>
             <td>{{ item.calculated_hours }}</td>
+            <td data-testid="scope_badge">{{ item.scope_mode }}</td>
         </tr>
         {% endfor %}
     </table>
     {% endfor %}
-</section>
+</details>
 
-<section>
-    <h2>{{ t('estimator.pricing_options') }}</h2>
-    <table>
-        <tr><th>{{ t('estimator.mode') }}</th><th>{{ t('estimator.labour_cost') }}</th><th>{{ t('estimator.materials_cost') }}</th><th>{{ t('estimator.total_estimate') }}</th><th>{{ t('estimator.margin_percent') }}</th><th></th></tr>
-        {% for mode, row in workspace.pricing.scenarios.items() %}
-        <tr>
-            <td>{{ t('estimator.pricing_mode.' ~ mode) }}</td><td>{{ row.labour_amount }}</td><td>{{ row.materials_amount }}</td><td>{{ row.total }}</td><td>{{ row.margin_pct }}</td>
-            <td>
-                {% if row.below_margin_floor %}<span title="{{ t('estimator.below_margin_floor') }}">⚠</span>{% endif %}
-                <form method="post" action="/projects/{{ project.id }}/estimator/select-pricing">{{ csrf_input(request) }}<input type="hidden" name="mode" value="{{ mode }}"><button type="submit">{{ t('estimator.select_pricing_mode') }}</button></form>
-            </td>
-        </tr>
+<details open>
+    <summary><strong>Сравнение режимов</strong></summary>
+    <form method="get" style="margin-bottom:8px;" data-testid="pricing_filter">
+        <input type="hidden" name="lang" value="{{ lang }}">
+        <label><input type="checkbox" name="filter" value="selected" {% if pricing_filter == 'selected' %}checked{% endif %}> Показывать только выбранные</label>
+        {% for row in workspace.pricing.compare_rows %}
+        <label><input type="checkbox" name="show_modes" value="{{ row.mode }}" {% if row.mode in visible_modes %}checked{% endif %}> {{ row.mode }}</label>
+        {% endfor %}
+        <button type="submit">Apply</button>
+    </form>
+    <table data-testid="pricing_table">
+        <tr><th>Mode</th><th>Revenue</th><th>Cost</th><th>Profit</th><th>Margin%</th><th>Effective hourly</th><th>Status</th><th></th></tr>
+        {% for row in workspace.pricing.compare_rows %}
+            {% if row.mode in visible_modes and (pricing_filter != 'selected' or row.is_selected) %}
+            <tr>
+                <td>{{ row.mode }}</td>
+                <td>{{ row.revenue }}</td>
+                <td>{{ row.cost }}</td>
+                <td>{{ row.profit }}</td>
+                <td>{{ row.margin_pct }}</td>
+                <td>{{ row.effective_hourly }}</td>
+                <td>{% if row.enabled %}enabled{% else %}disabled: {{ row.missing_requirements|join(', ') }}{% endif %}</td>
+                <td>
+                    {% if row.mode != 'HYBRID' %}
+                    <form method="post" action="/projects/{{ project.id }}/estimator/select-pricing">{{ csrf_input(request) }}<input type="hidden" name="mode" value="{{ row.mode }}"><button type="submit" {% if not row.enabled %}disabled{% endif %}>{{ t('estimator.select_pricing_mode') }}</button></form>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endif %}
         {% endfor %}
     </table>
-</section>
+</details>
 
-<section>
-    <h2>{{ t('estimator.materials_summary') }}</h2>
+<details open>
+    <summary><strong>План материалов</strong></summary>
     <p>
         <a href="/projects/{{ project.id }}/materials/overrides">{{ t('estimator.manage_norms') }}</a> |
         <a href="/projects/{{ project.id }}/materials-plan">{{ t('estimator.materials_plan') }}</a> |
         <a href="/projects/{{ project.id }}/shopping-list">{{ t('estimator.shopping_list') }}</a>
     </p>
-    <table>
-        <tr><th>{{ t('label.name') }}</th><th>{{ t('label.quantity') }}</th><th>{{ t('label.unit') }}</th><th>{{ t('estimator.norm_source') }}</th><th>{{ t('label.price') }}</th><th>{{ t('estimator.warnings') }}</th></tr>
+    <table data-testid="materials_plan">
+        <tr><th>{{ t('label.name') }}</th><th>{{ t('label.quantity') }}</th><th>{{ t('label.unit') }}</th><th>waste%</th><th>layers</th><th>{{ t('estimator.norm_source') }}</th><th>{{ t('label.price') }}</th></tr>
         {% for row in workspace.materials.rows %}
-        <tr><td>{{ row.name }}</td><td>{{ row.quantity }}</td><td>{{ row.unit }}</td><td>{{ t('estimator.source.' ~ row.source) }}</td><td>{{ row.estimated_cost }}</td><td>{{ row.warning or '' }}</td></tr>
+        <tr><td>{{ row.name }}</td><td>{{ row.quantity }}</td><td>{{ row.unit }}</td><td>{{ row.waste_percent }}</td><td>{{ row.layers_multiplier }}</td><td>{{ t('estimator.source.' ~ row.source) }}</td><td>{{ row.estimated_cost }}</td></tr>
         {% endfor %}
     </table>
-</section>
-
-<section>
-    <h2>{{ t('estimator.warnings') }}</h2>
-    <ul>
-        {% for warning in workspace.quality.sanity_warnings %}
-        <li>{{ warning }}</li>
-        {% endfor %}
-        {% for warning in workspace.quality.pricing_consistency_warnings %}
-        <li>{{ warning }}</li>
-        {% endfor %}
-    </ul>
-</section>
+</details>
 {% endblock %}

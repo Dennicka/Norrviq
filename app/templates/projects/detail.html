@@ -621,7 +621,8 @@
 
 <section class="workspace-section" data-tab="overview"{% if active_tab != "overview" %} hidden{% endif %}>
     <h2>{{ t("projects.recalculate") }}</h2>
-    <div>
+    <div data-testid="totals">
+        <p>{{ t("estimator.total_hours") }}: {{ total_labor_hours }}</p>
         <p>{{ t("label.work_sum_without_moms") }}: {{ project.work_sum_without_moms or '' }}</p>
         <p>{{ t("label.moms_amount") }}: {{ project.moms_amount or '' }}</p>
         <p>{{ t("label.rot_amount") }}: {{ project.rot_amount or '' }}</p>

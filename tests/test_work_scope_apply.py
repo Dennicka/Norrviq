@@ -118,3 +118,20 @@ def test_duplicate_guard_skip_same_work_in_room():
     finally:
         db.rollback()
         db.close()
+
+
+
+def test_all_rooms_reapply_replaces_group_without_duplicates():
+    db = SessionLocal()
+    try:
+        project, wt, _, _, _ = _seed_project(db)
+        first = apply_work_item_to_scope(project.id, {"work_type_id": wt.id, "scope_apply_mode": "all_rooms", "layers": "1"}, db)
+        second = apply_work_item_to_scope(project.id, {"work_type_id": wt.id, "scope_apply_mode": "all_rooms", "layers": "1"}, db)
+        assert first.created_count == 2
+        assert second.created_count == 2
+        created = db.query(ProjectWorkItem).filter(ProjectWorkItem.project_id == project.id, ProjectWorkItem.work_type_id == wt.id).all()
+        assert len(created) == 2
+        assert len({item.source_group_ref for item in created}) == 1
+    finally:
+        db.rollback()
+        db.close()

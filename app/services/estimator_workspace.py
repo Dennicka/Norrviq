@@ -6,12 +6,14 @@ from decimal import Decimal
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.material_consumption_override import MaterialConsumptionOverride
+from app.models.pricing_policy import get_or_create_pricing_policy
 from app.models.project import Project, ProjectWorkItem
+from app.models.settings import get_or_create_settings
 from app.services.completeness import compute_completeness
-from app.services.estimates import calculate_project_total_hours, calculate_project_totals, recalculate_project_work_items
+from app.services.estimator_engine import compute_estimator_totals
+from app.services.estimates import calculate_project_totals, recalculate_project_work_items
 from app.services.geometry import aggregate_project_geometry
 from app.services.materials_bom import compute_project_bom
-from app.models.pricing_policy import get_or_create_pricing_policy
 from app.services.pricing import WARNING_LOW_MARGIN, compute_pricing_scenarios, evaluate_floor, get_or_create_project_pricing
 from app.services.pricing_consistency import DOC_TYPE_OFFER, validate_pricing_consistency
 from app.services.quality import evaluate_project_quality
@@ -27,6 +29,13 @@ def _apply_source_badge(raw: str) -> str:
     if "project_override" in raw:
         return "project_override"
     return "default"
+
+
+def _build_missing_reasons(scenario: dict) -> list[str]:
+    reasons = list(scenario.get("warnings") or [])
+    if not scenario.get("enabled", True) and not reasons:
+        reasons.append("MISSING_REQUIREMENTS")
+    return reasons
 
 
 def build_estimator_workspace(db: Session, project_id: int, lang: str = "ru") -> dict:
@@ -60,27 +69,48 @@ def build_estimator_workspace(db: Session, project_id: int, lang: str = "ru") ->
         wt_key = (item.work_type.name_ru if item.work_type else "-")
         hours_by_work_type[wt_key] += item_hours
 
-    total_hours = calculate_project_total_hours(db, project_id)
-
     baseline, scenarios = compute_pricing_scenarios(db, project_id)
     pricing = get_or_create_project_pricing(db, project_id)
-    pricing_scenarios = {}
+    pricing_scenarios: dict[str, dict] = {}
     pricing_warnings: list[str] = []
     policy = get_or_create_pricing_policy(db)
     for scenario in scenarios:
         floor = evaluate_floor(baseline=baseline, scenario=scenario, policy=policy)
         pricing_scenarios[scenario.mode] = {
             "mode": scenario.mode,
-            "labour_amount": _d(scenario.price_ex_vat),
-            "materials_amount": _d(baseline.materials_cost_internal),
-            "subtotal": _d(scenario.price_ex_vat),
-            "total": _d(scenario.price_inc_vat),
+            "revenue": _d(scenario.price_ex_vat),
+            "cost": _d(baseline.internal_total_cost),
+            "profit": _d(scenario.profit),
             "margin_pct": _d(scenario.margin_pct),
+            "effective_hourly": _d(scenario.effective_hourly_sell_rate),
+            "total": _d(scenario.price_inc_vat),
+            "enabled": not scenario.invalid,
+            "missing_requirements": list(scenario.warnings if scenario.invalid else []),
             "below_margin_floor": bool(floor.is_below_floor),
             "warnings": list(scenario.warnings),
+            "is_selected": scenario.mode == pricing.mode,
         }
         if WARNING_LOW_MARGIN in scenario.warnings:
             pricing_warnings.append(f"{scenario.mode}:LOW_MARGIN")
+
+    # Lightweight hybrid scenario: safe visible compare based on best available mode.
+    enabled_modes = [row for row in pricing_scenarios.values() if row["enabled"]]
+    if enabled_modes:
+        hybrid = max(enabled_modes, key=lambda row: row["profit"])
+        pricing_scenarios["HYBRID"] = {
+            "mode": "HYBRID",
+            "revenue": hybrid["revenue"],
+            "cost": hybrid["cost"],
+            "profit": hybrid["profit"],
+            "margin_pct": hybrid["margin_pct"],
+            "effective_hourly": hybrid["effective_hourly"],
+            "total": hybrid["total"],
+            "enabled": True,
+            "missing_requirements": [],
+            "below_margin_floor": hybrid["below_margin_floor"],
+            "warnings": [f"BLEND_FROM:{hybrid['mode']}"] + hybrid["warnings"],
+            "is_selected": pricing.mode == "HYBRID",
+        }
 
     bom = compute_project_bom(db, project_id)
     material_rows = []
@@ -98,15 +128,29 @@ def build_estimator_workspace(db: Session, project_id: int, lang: str = "ru") ->
                 "unit": item.unit,
                 "source": source_hint,
                 "estimated_cost": _d(item.cost_ex_vat),
+                "waste_percent": _d(item.waste_percent),
+                "layers_multiplier": _d(item.coats),
                 "warning": "MISSING_PRICE" if has_missing_price else None,
             }
         )
+
+    settings = get_or_create_settings(db)
+    totals = compute_estimator_totals(
+        project=project,
+        materials_ex_vat=_d(bom.total_cost_ex_vat),
+        vat_percent=Decimal(str(settings.moms_percent or 0)),
+    )
 
     completeness = compute_completeness(db, project_id, mode=(pricing.mode or "HOURLY"), segment="OFFER", lang=lang)
     quality = evaluate_project_quality(db, project_id, lang=lang)
     consistency = validate_pricing_consistency(db, project_id, DOC_TYPE_OFFER)
 
     rooms_index = {room.id: room for room in rooms}
+    compare_rows = []
+    for mode, scenario in pricing_scenarios.items():
+        row = {"mode": mode, **scenario, "missing_requirements": _build_missing_reasons(scenario)}
+        compare_rows.append(row)
+
     return {
         "project": project,
         "geometry": {
@@ -118,13 +162,22 @@ def build_estimator_workspace(db: Session, project_id: int, lang: str = "ru") ->
         },
         "work_items": {
             "grouped": grouped_items,
-            "total_hours": total_hours,
+            "total_hours": totals.total_hours,
             "hours_by_room": {rooms_index.get(k).name if k in rooms_index else "project": v for k, v in hours_by_room.items()},
             "hours_by_work_type": dict(hours_by_work_type),
+        },
+        "totals": {
+            "labour": totals.labour,
+            "materials": totals.materials,
+            "subtotal": totals.subtotal,
+            "vat": totals.vat,
+            "total": totals.total,
+            "total_hours": totals.total_hours,
         },
         "pricing": {
             "selected_mode": pricing.mode,
             "scenarios": pricing_scenarios,
+            "compare_rows": compare_rows,
             "warnings": pricing_warnings,
         },
         "materials": {
@@ -143,4 +196,3 @@ def build_estimator_workspace(db: Session, project_id: int, lang: str = "ru") ->
 
 def calculate_project_total_hours_from_items(work_items: list[ProjectWorkItem]) -> Decimal:
     return sum((_d(item.calculated_hours) for item in work_items), Decimal("0")).quantize(Decimal("0.01"))
-

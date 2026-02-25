@@ -202,6 +202,40 @@ def estimate_project_work_bulk(
     )
 
 
+
+
+def _parse_bulk_ref(source_group_ref: str | None) -> dict[str, str]:
+    parts = (source_group_ref or "").split(":")
+    if not parts or parts[0] != "bulk":
+        return {}
+    out: dict[str, str] = {"kind": "bulk"}
+    if len(parts) > 1:
+        out["scope"] = parts[1]
+    for part in parts[2:]:
+        if "=" in part:
+            key, value = part.split("=", 1)
+            out[key] = value
+    return out
+
+
+def refresh_bulk_work_item_quantities(project: Project) -> None:
+    rooms_by_id = {room.id: room for room in project.rooms}
+    for item in project.work_items:
+        meta = _parse_bulk_ref(item.source_group_ref)
+        if not meta:
+            continue
+        layers = Decimal(str(meta.get("layers") or "1"))
+        if _resolve_scope_mode(item) == SCOPE_MODE_PROJECT:
+            qty = resolve_project_quantity(project.rooms, item.work_type, layers=layers)
+            if qty is not None and qty > 0:
+                item.quantity = qty.quantize(Decimal("0.01"))
+            continue
+        room = rooms_by_id.get(item.room_id)
+        if room is None:
+            continue
+        qty = _resolve_bulk_quantity_for_room(room, item.work_type, layers=layers)
+        if qty is not None and qty > 0:
+            item.quantity = qty.quantize(Decimal("0.01"))
 def calculate_work_item(
     item: ProjectWorkItem,
     work_type: WorkType,
@@ -273,6 +307,8 @@ def recalculate_project_work_items(db: Session, project: Project) -> None:
     settings = get_or_create_settings(db)
     hourly_rate = Decimal(str(settings.hourly_rate_company))
     internal_labor_cost_rate = Decimal(str(settings.internal_labor_cost_rate_sek or 0))
+
+    refresh_bulk_work_item_quantities(project)
 
     for item in project.work_items:
         work_type = item.work_type
