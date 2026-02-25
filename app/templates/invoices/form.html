@@ -8,7 +8,7 @@
     {% endif %}
 </h1>
 {% if invoice and not can_edit %}
-<div class="flash error">Invoice is locked after issue {{ help_icon('invoice.issued_lock') }}</div>
+<div class="flash error">{{ t("invoice.locked_after_issue") }} {{ help_icon('invoice.issued_lock') }}</div>
 {% endif %}
 <form method="post" action="{{ action_url }}">
     {{ csrf_input(request) }}
@@ -27,6 +27,15 @@
     <div>
         <label>{{ t("invoice.field.paid_date") }}</label>
         <input type="date" name="paid_date" value="{{ invoice.paid_date if invoice and invoice.paid_date else '' }}" {% if invoice and not can_edit %}disabled{% endif %}>
+    </div>
+    <div>
+        <label>{{ t("invoice.field.language") }}</label>
+        <select name="document_lang" {% if invoice and not can_edit %}disabled{% endif %}>
+            {% set current_doc_lang = invoice.document_lang if invoice else defaults.document_lang %}
+            {% for lang_code in document_lang_options %}
+            <option value="{{ lang_code }}" {% if current_doc_lang == lang_code %}selected{% endif %}>{{ lang_code|upper }}</option>
+            {% endfor %}
+        </select>
     </div>
     <div>
         <label>{{ t("invoice.field.status") }} {{ help_icon('invoice.status') }}</label>

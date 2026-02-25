@@ -1,0 +1,83 @@
+<div class="pdf-page {% if is_draft %}is-draft{% endif %}">
+    {% if is_draft %}<div class="watermark">{{ t("invoice.draft_watermark") }}</div>{% endif %}
+
+    <header class="invoice-header">
+        <div>
+            <h1 class="document-title">{{ t("invoice.document.title") }}</h1>
+            <p class="company-name">{{ company_profile.legal_name }}</p>
+            <div class="meta-grid">
+                <div class="key">{{ t("invoice.footer.org_number") }}</div><div>{{ company_profile.org_number }}</div>
+                <div class="key">{{ t("invoice.footer.vat_number") }}</div><div>{{ company_profile.vat_number or "-" }}</div>
+                <div class="key">{{ t("invoice.footer.address") }}</div><div>{{ company_profile.address_line1 }}{% if company_profile.address_line2 %}, {{ company_profile.address_line2 }}{% endif %}, {{ company_profile.postal_code }} {{ company_profile.city }}</div>
+            </div>
+        </div>
+        <div>
+            <div class="meta-grid">
+                <div class="key">{{ t("invoice.field.number") }}</div><div>{{ invoice.invoice_number or t("label.draft") }}</div>
+                <div class="key">{{ t("invoice.field.issue_date") }}</div><div>{{ format_doc_date(invoice.issue_date, lang) }}</div>
+                <div class="key">{{ t("invoice.field.due_date") }}</div><div>{{ format_doc_date(invoice.due_date, lang) }}</div>
+                <div class="key">{{ t("invoice.field.status") }}</div><div>{{ t('invoice.status.' ~ invoice.status) }}</div>
+                <div class="key">{{ t("invoice.field.language") }}</div><div>{{ lang|upper }}</div>
+            </div>
+        </div>
+    </header>
+
+    <section class="invoice-block">
+        <h2 class="block-title">{{ t("invoice.field.customer") }}</h2>
+        <div>{{ invoice.project.client.name }}</div>
+        <div>{{ invoice.project.client.address or "" }}</div>
+        {% if invoice.comment %}<div style="margin-top:6px;"><span class="key">{{ t("label.comment") }}:</span> {{ invoice.comment }}</div>{% endif %}
+    </section>
+
+    <section class="invoice-block">
+        <table class="details-table">
+            <thead>
+            <tr>
+                <th>#</th>
+                <th>{{ t("invoice.field.description") }}</th>
+                <th class="text-right">{{ t("invoice.field.qty") }}</th>
+                <th class="text-center">{{ t("invoice.field.unit") }}</th>
+                <th class="text-right">{{ t("invoice.field.unit_price") }}</th>
+                <th class="text-right">{{ t("invoice.field.amount") }}</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for line in invoice.lines %}
+            <tr>
+                <td>{{ line.position }}</td>
+                <td>{{ line.description }}</td>
+                <td class="text-right">{{ format_doc_money(line.quantity, lang) }}</td>
+                <td class="text-center">{{ line.unit or '' }}</td>
+                <td class="text-right">{{ format_doc_money(line.unit_price_ex_vat, lang) }}</td>
+                <td class="text-right">{{ format_doc_money(line.line_total_ex_vat, lang) }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </section>
+
+    <section class="invoice-block summary">
+        <div class="summary-row"><span>{{ t("invoice.field.subtotal") }}</span><span>{{ format_doc_money(invoice.subtotal_ex_vat, lang) }}</span></div>
+        <div class="summary-row"><span>{{ t("invoice.field.vat") }}</span><span>{{ format_doc_money(invoice.vat_total, lang) }}</span></div>
+        {% if (invoice.rot_case and invoice.rot_case.is_enabled) or invoice.rot_snapshot_enabled %}
+        <div class="summary-row"><span>{{ t("invoice.field.rot_deduction") }}</span><span>-{{ format_doc_money(invoice.rot_amount, lang) }}</span></div>
+        {% endif %}
+        <div class="summary-row total"><span>{{ t("invoice.field.total") }}</span><span>{{ format_doc_money(invoice.client_pays_total, lang) }}</span></div>
+    </section>
+
+    <section class="invoice-block">
+        <h2 class="block-title">{{ terms_title or t("invoice.field.payment_terms") }}</h2>
+        <pre class="terms">{{ terms_body }}</pre>
+    </section>
+
+    <footer class="footer">
+        <div>{{ t("invoice.field.thank_you") }}</div>
+        <div>{{ company_profile.email }}{% if company_profile.phone %} · {{ company_profile.phone }}{% endif %}{% if company_profile.website %} · {{ company_profile.website }}{% endif %}</div>
+        <div>
+            {% if company_profile.bankgiro %}Bankgiro: {{ company_profile.bankgiro }} {% endif %}
+            {% if company_profile.plusgiro %}Plusgiro: {{ company_profile.plusgiro }} {% endif %}
+            {% if company_profile.iban %}IBAN: {{ company_profile.iban }} {% endif %}
+            {% if company_profile.bic %}BIC: {{ company_profile.bic }}{% endif %}
+        </div>
+    </footer>
+</div>

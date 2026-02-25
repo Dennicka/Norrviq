@@ -28,7 +28,13 @@ from app.services.invoice_lines import (
     generate_invoice_lines_from_project,
     recalculate_invoice_totals,
 )
-from app.services.terms_templates import DOC_TYPE_INVOICE, resolve_terms_template
+from app.services.invoice_documents import (
+    invoice_render_lang,
+    normalize_document_lang,
+    resolve_invoice_terms,
+    format_doc_date,
+    format_doc_money,
+)
 from app.services.invoice_material_lines import (
     MERGE_APPEND as MATERIAL_MERGE_APPEND,
     MERGE_REPLACE as MATERIAL_MERGE_REPLACE,
@@ -132,6 +138,7 @@ async def create_invoice_form(
         "rot_amount": finance_summary.rot_amount,
         "client_pays_total": finance_summary.client_pays_total,
         "comment": "",
+        "document_lang": normalize_document_lang(lang),
     }
 
     context = template_context(request, lang)
@@ -144,6 +151,7 @@ async def create_invoice_form(
             "action_url": f"/projects/{project.id}/invoices/create",
             "company_profile": company_profile,
             "can_edit": True,
+            "document_lang_options": ["ru", "sv", "en"],
         }
     )
     return templates.TemplateResponse(request, "invoices/form.html", context)
@@ -172,6 +180,7 @@ async def create_invoice(
         rot_amount=Decimal(form.get("rot_amount") or "0"),
         client_pays_total=Decimal(form.get("client_pays_total") or "0"),
         comment=form.get("comment"),
+        document_lang=normalize_document_lang(form.get("document_lang"), fallback=normalize_document_lang(_lang)),
     )
 
     db.add(invoice)
@@ -212,20 +221,14 @@ async def invoice_document(
 ):
     invoice = _get_invoice(db, project_id, invoice_id)
     company_profile = get_or_create_company_profile(db)
-    if invoice.status == "issued":
-        terms_title = invoice.invoice_terms_snapshot_title or ""
-        terms_body = invoice.invoice_terms_snapshot_body or ""
-    else:
-        terms_template = resolve_terms_template(
-            db,
-            profile=company_profile,
-            client=invoice.project.client,
-            doc_type=DOC_TYPE_INVOICE,
-            lang=lang,
-        )
-        terms_title = terms_template.title
-        terms_body = terms_template.body_text
-    commercial = compute_invoice_commercial(db, invoice.project_id, invoice.id, lang=lang)
+    render_lang = invoice_render_lang(invoice, lang)
+    terms_resolution = resolve_invoice_terms(
+        db,
+        profile=company_profile,
+        invoice=invoice,
+        requested_lang=render_lang,
+    )
+    commercial = compute_invoice_commercial(db, invoice.project_id, invoice.id, lang=render_lang)
     if invoice.status == "issued":
         snap = read_commercial_snapshot(db, doc_type=SNAP_INVOICE, doc_id=invoice.id)
         if snap:
@@ -235,13 +238,19 @@ async def invoice_document(
             commercial.price_ex_vat = Decimal(str(snap["totals"].get("price_ex_vat") or invoice.subtotal_ex_vat))
             commercial.vat_amount = Decimal(str(snap["totals"].get("vat_amount") or invoice.vat_total))
             commercial.price_inc_vat = Decimal(str(snap["totals"].get("price_inc_vat") or invoice.total_inc_vat))
-    context = template_context(request, lang)
+    context = template_context(request, render_lang)
     context.update({
         "project": invoice.project,
         "invoice": invoice,
         "company_profile": company_profile,
-        "terms_title": terms_title,
-        "terms_body": terms_body,
+        "terms_title": terms_resolution.title,
+        "terms_body": terms_resolution.body,
+        "terms_fallback": terms_resolution.used_fallback,
+        "terms_requested_lang": terms_resolution.requested_lang,
+        "terms_resolved_lang": terms_resolution.resolved_lang,
+        "document_lang": render_lang,
+        "format_doc_date": format_doc_date,
+        "format_doc_money": format_doc_money,
         "commercial": commercial,
         "pdf_capability": invoice_pdf_capability(),
     })
@@ -274,6 +283,7 @@ async def edit_invoice_form(
             "can_edit": can_edit,
             "merge_strategies": [MERGE_REPLACE_ALL, MERGE_APPEND, MERGE_UPSERT_BY_SOURCE],
             "commercial": commercial,
+            "document_lang_options": ["ru", "sv", "en"],
         }
     )
     return templates.TemplateResponse(request, "invoices/form.html", context)
@@ -299,6 +309,7 @@ async def update_invoice(
     if requested_status in INVOICE_STATUSES and requested_status != "issued":
         invoice.status = requested_status
     invoice.comment = form.get("comment")
+    invoice.document_lang = normalize_document_lang(form.get("document_lang"), fallback=invoice.document_lang)
 
     apply_rot = str(form.get("apply_rot") or "").lower() in {"1", "true", "on", "yes"}
     rot_pct_raw = form.get("rot_pct") or "30"
@@ -390,6 +401,7 @@ async def create_invoice_from_project(
             rot_amount=Decimal("0.00"),
             client_pays_total=Decimal("0.00"),
             comment=note,
+            document_lang=normalize_document_lang(_lang),
         )
         db.add(invoice)
         try:
