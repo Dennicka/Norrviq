@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>Pricing Policy</h1>
-<p>Политика владельца: минимальная маржа/прибыль/ставка для блокировки выпуска документов.</p>
+<h1>{{ t('pricing_policy.title') }}</h1>
+<p>{{ t('pricing_policy.description') }}</p>
 
 {% if errors %}
 <div class="flash flash-error">
@@ -16,40 +16,40 @@
 <form method="post" class="form-grid">
     {{ csrf_input(request) }}
     <div class="form-row">
-        <label>Minimum margin % {{ help_icon('pricing_policy.min_margin_pct') }}</label>
+        <label>{{ t('pricing_policy.min_margin_pct') }} {{ help_icon('pricing_policy.min_margin_pct') }}</label>
         <input type="number" step="0.01" min="0" max="80" name="min_margin_pct" value="{{ form_data.get('min_margin_pct', policy.min_margin_pct) }}">
     </div>
     <div class="form-row">
-        <label>Minimum profit (SEK) {{ help_icon('pricing_policy.min_profit_sek') }}</label>
+        <label>{{ t('pricing_policy.min_profit_sek') }} {{ help_icon('pricing_policy.min_profit_sek') }}</label>
         <input type="number" step="0.01" min="0" name="min_profit_sek" value="{{ form_data.get('min_profit_sek', policy.min_profit_sek) }}">
     </div>
     <div class="form-row">
-        <label>Minimum effective hourly ex VAT {{ help_icon('pricing_policy.min_effective_hourly') }}</label>
+        <label>{{ t('pricing_policy.min_effective_hourly') }} {{ help_icon('pricing_policy.min_effective_hourly') }}</label>
         <input type="number" step="0.01" min="0.01" name="min_effective_hourly_ex_vat" value="{{ form_data.get('min_effective_hourly_ex_vat', policy.min_effective_hourly_ex_vat) }}">
     </div>
     <div class="form-row">
-        <label><input type="checkbox" name="block_issue_below_floor" {% if form_data.get('block_issue_below_floor', policy.block_issue_below_floor) in [True, 'on', 'true', '1', 1] %}checked{% endif %}> Блокировать выпуск Offer/Invoice ниже floor</label>
+        <label><input type="checkbox" name="block_issue_below_floor" {% if form_data.get('block_issue_below_floor', policy.block_issue_below_floor) in [True, 'on', 'true', '1', 1] %}checked{% endif %}> {{ t('pricing_policy.block_issue_below_floor') }} {{ help_icon('pricing_policy.block_issue_below_floor') }}</label>
     </div>
     <div class="form-row">
-        <label><input type="checkbox" name="warn_only_mode" {% if form_data.get('warn_only_mode', policy.warn_only_mode) in [True, 'on', 'true', '1', 1] %}checked{% endif %}> Warning only mode (dev/transition)</label>
+        <label><input type="checkbox" name="warn_only_mode" {% if form_data.get('warn_only_mode', policy.warn_only_mode) in [True, 'on', 'true', '1', 1] %}checked{% endif %}> {{ t('pricing_policy.warn_only_mode') }} {{ help_icon('pricing_policy.warn_only_mode') }}</label>
     </div>
     <div class="form-row">
-        <label>Min completeness score for fixed {{ help_icon('completeness.fixed_block') }}</label>
+        <label>{{ t('pricing_policy.min_completeness_fixed') }} {{ help_icon('completeness.fixed_block') }}</label>
         <input type="number" min="0" max="100" name="min_completeness_score_for_fixed" value="{{ form_data.get('min_completeness_score_for_fixed', policy.min_completeness_score_for_fixed) }}">
     </div>
     <div class="form-row">
-        <label>Min completeness score for per m² {{ help_icon('completeness.score') }}</label>
+        <label>{{ t('pricing_policy.min_completeness_per_m2') }} {{ help_icon('completeness.score') }}</label>
         <input type="number" min="0" max="100" name="min_completeness_score_for_per_m2" value="{{ form_data.get('min_completeness_score_for_per_m2', policy.min_completeness_score_for_per_m2) }}">
     </div>
     <div class="form-row">
-        <label>Min completeness score for per room</label>
+        <label>{{ t('pricing_policy.min_completeness_per_room') }} {{ help_icon('pricing_policy.min_completeness_per_room') }}</label>
         <input type="number" min="0" max="100" name="min_completeness_score_for_per_room" value="{{ form_data.get('min_completeness_score_for_per_room', policy.min_completeness_score_for_per_room) }}">
     </div>
     <div class="form-row">
-        <label><input type="checkbox" name="warn_only_below_score" {% if form_data.get('warn_only_below_score', policy.warn_only_below_score) in [True, 'on', 'true', '1', 1] %}checked{% endif %}> Warn only below completeness threshold</label>
+        <label><input type="checkbox" name="warn_only_below_score" {% if form_data.get('warn_only_below_score', policy.warn_only_below_score) in [True, 'on', 'true', '1', 1] %}checked{% endif %}> {{ t('pricing_policy.warn_only_below_score') }}</label>
     </div>
     <div class="form-row">
-        <button type="submit">Save policy</button>
+        <button type="submit">{{ t('pricing_policy.save_policy') }}</button>
     </div>
 </form>
 {% endblock %}

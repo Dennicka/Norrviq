@@ -1,27 +1,27 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>Project buffers — {{ project.name }}</h1>
-<p><a href="/projects/{{ project.id }}">← Back</a></p>
+<h1>{{ t('project_buffers.title') }} — {{ project.name }}</h1>
+<p><a href="/projects/{{ project.id }}">← {{ t('label.back') }}</a></p>
 <form method="post" action="/projects/{{ project.id }}/buffers" data-autosave="true" data-autosave-entity="project-settings" data-autosave-id="{{ project.id }}" data-autosave-fieldhash="buffers" data-server-updated-at="{{ buffer_settings.updated_at.isoformat() if buffer_settings.updated_at else '' }}" data-autosave-endpoint="/api/projects/{{ project.id }}/settings">
   {{ csrf_input(request) }}
-  <label><input type="checkbox" name="include_setup_cleanup_travel" {% if buffer_settings.include_setup_cleanup_travel %}checked{% endif %}> Include setup/cleanup/travel {{ help_icon('buffers.include_setup_cleanup_travel') }}</label><br>
-  <label><input type="checkbox" name="include_risk" {% if buffer_settings.include_risk %}checked{% endif %}> Include risk {{ help_icon('buffers.include_risk') }}</label><br>
-  <label>Speed profile {{ help_icon('speed.multiplier') }}
+  <label><input type="checkbox" name="include_setup_cleanup_travel" {% if buffer_settings.include_setup_cleanup_travel %}checked{% endif %}> {{ t('project_buffers.include_setup_cleanup_travel') }} {{ help_icon('buffers.include_setup_cleanup_travel') }}</label><br>
+  <label><input type="checkbox" name="include_risk" {% if buffer_settings.include_risk %}checked{% endif %}> {{ t('project_buffers.include_risk') }} {{ help_icon('buffers.include_risk') }}</label><br>
+  <label>{{ t('project_buffers.speed_profile') }} {{ help_icon('project_buffers.speed_profile') }}
     <select name="speed_profile_id">
-      <option value="">MEDIUM (default)</option>
+      <option value="">{{ t('project_buffers.speed_profile_default') }}</option>
       {% for profile in speed_profiles %}
       <option value="{{ profile.id }}" {% if execution_profile.speed_profile_id == profile.id %}selected{% endif %}>{{ profile.code }} ({{ profile.multiplier }})</option>
       {% endfor %}
     </select>
   </label><br>
-  <div data-autosave-restore hidden>Restore draft? <button type="button" data-restore>Restore</button> <button type="button" data-discard>Discard</button></div><div data-autosave-status></div><div data-autosave-form-error class="autosave-field-error"></div><button type="submit">Save</button>
+  <div data-autosave-restore hidden>{{ t('project_buffers.restore_draft') }} <button type="button" data-restore>{{ t('project_buffers.restore') }}</button> <button type="button" data-discard>{{ t('project_buffers.discard') }}</button></div><div data-autosave-status></div><div data-autosave-form-error class="autosave-field-error"></div><button type="submit">{{ t('label.save') }}</button>
 </form>
 
-<h3>Preview</h3>
-<div>Raw baseline: {{ baseline.raw_labor_hours_total }} h / {{ baseline.raw_internal_cost }} SEK</div>
-<div>Speed: raw={{ baseline.raw_labor_hours_total }} h, multiplier={{ baseline.speed_multiplier }}, after_speed={{ baseline.labor_hours_after_speed }} h (Δ {{ baseline.speed_hours_delta }} h)</div>
-<div>Buffers total: +{{ baseline.buffers_hours_total }} h / +{{ baseline.buffers_cost_total }} SEK</div>
-<div>After buffers: {{ baseline.labor_hours_total }} h / {{ baseline.internal_total_cost }} SEK</div>
+<h3>{{ t('label.preview') }}</h3>
+<div>{{ t('project_buffers.raw_baseline') }}: {{ baseline.raw_labor_hours_total }} h / {{ baseline.raw_internal_cost }} SEK</div>
+<div>{{ t('project_buffers.speed') }}: raw={{ baseline.raw_labor_hours_total }} h, multiplier={{ baseline.speed_multiplier }}, after_speed={{ baseline.labor_hours_after_speed }} h (Δ {{ baseline.speed_hours_delta }} h)</div>
+<div>{{ t('project_buffers.buffers_total') }}: +{{ baseline.buffers_hours_total }} h / +{{ baseline.buffers_cost_total }} SEK</div>
+<div>{{ t('project_buffers.after_buffers') }}: {{ baseline.labor_hours_total }} h / {{ baseline.internal_total_cost }} SEK</div>
 {% if baseline.buffers %}
 <ul>
 {% for b in baseline.buffers %}

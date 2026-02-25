@@ -1,20 +1,20 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>Paint systems</h1>
+<h1>{{ t('paint_systems.title') }}</h1>
 <form method="post" action="/settings/paint-systems/create">
   {{ csrf_input(request) }}
-  <label>Name <input type="text" name="name" required></label>
-  <label>Description <input type="text" name="description"></label>
-  <label><input type="checkbox" name="is_active" checked> Active</label>
-  <button type="submit">Create system</button>
+  <label>{{ t('label.name') }} <input type="text" name="name" required></label>
+  <label>{{ t('label.description') }} <input type="text" name="description"></label>
+  <label><input type="checkbox" name="is_active" checked> {{ t('label.active') }}</label>
+  <button type="submit">{{ t('paint_systems.create_system') }}</button>
 </form>
 
 {% for system in systems %}
 <section style="margin-top:16px;border-top:1px solid #ccc;">
-  <h3>{{ system.name }} v{{ system.version }} {% if not system.is_active %}(inactive){% endif %}</h3>
+  <h3>{{ system.name }} v{{ system.version }} {% if not system.is_active %}({{ t('label.inactive') }}){% endif %}</h3>
   <p>{{ system.description or '' }}</p>
   <table>
-    <thead><tr><th>Order</th><th>Surface</th><th>Recipe</th><th>Override coats</th><th>Override waste %</th></tr></thead>
+    <thead><tr><th>{{ t('paint_systems.order') }} {{ help_icon('paint_systems.order') }}</th><th>{{ t('paint_systems.surface') }} {{ help_icon('paint_systems.surface') }}</th><th>{{ t('paint_systems.recipe') }} {{ help_icon('paint_systems.recipe') }}</th><th>{{ t('paint_systems.override_coats') }} {{ help_icon('paint_systems.override_coats') }}</th><th>{{ t('paint_systems.override_waste') }} {{ help_icon('paint_systems.override_waste') }}</th></tr></thead>
     <tbody>
       {% for step in system.steps %}
       <tr>
@@ -24,7 +24,7 @@
         <td>{{ step.override_coats_count or '—' }}</td>
         <td>{{ step.override_waste_pct or '—' }}</td>
       </tr>
-      {% else %}<tr><td colspan="5">No steps</td></tr>{% endfor %}
+      {% else %}<tr><td colspan="5">{{ t('common.no_steps') }}</td></tr>{% endfor %}
     </tbody>
   </table>
   {% if system.is_active %}
@@ -32,16 +32,18 @@
     {{ csrf_input(request) }}
     <select name="target_surface">{% for s in surfaces %}<option value="{{ s.value }}">{{ s.value }}</option>{% endfor %}</select>
     <select name="recipe_id">{% for recipe in recipes %}<option value="{{ recipe.id }}">{{ recipe.name }}</option>{% endfor %}</select>
-    <input type="number" name="override_coats_count" placeholder="coats" min="1">
-    <input type="number" name="override_waste_pct" placeholder="waste %" step="0.01">
-    <label><input type="checkbox" name="is_optional"> Optional</label>
-    <button type="submit">Add step</button>
+    <input type="number" name="override_coats_count" placeholder="{{ t('paint_systems.coats_placeholder') }}" min="1">
+    <input type="number" name="override_waste_pct" placeholder="{{ t('paint_systems.waste_placeholder') }}" step="0.01">
+    <label><input type="checkbox" name="is_optional"> {{ t('paint_systems.optional') }} {{ help_icon('paint_systems.optional') }}</label>
+    <button type="submit">{{ t('paint_systems.add_step') }}</button>
   </form>
   {% endif %}
   <form method="post" action="/settings/paint-systems/{{ system.id }}/version">
     {{ csrf_input(request) }}
-    <button type="submit">Create new version</button>
+    <button type="submit">{{ t('paint_systems.create_new_version') }}</button>
   </form>
 </section>
+{% else %}
+<p>{{ t('common.no_rules') }}</p>
 {% endfor %}
 {% endblock %}
