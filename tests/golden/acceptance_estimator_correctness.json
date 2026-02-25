@@ -1,0 +1,312 @@
+{
+  "scenario_1": {
+    "documents": {
+      "invoice_pdf": 200,
+      "invoice_print": 200,
+      "offer_pdf": 200,
+      "offer_preview": 200
+    },
+    "materials_plan": {
+      "lines": 3,
+      "total_cost_ex_vat": "0.00"
+    },
+    "money": {
+      "ex_vat": "4642.00",
+      "total": "5802.50",
+      "vat": "1160.50"
+    },
+    "pricing_compare": {
+      "FIXED_TOTAL": {
+        "effective_hourly_sell_rate": "1161.14",
+        "invalid": false,
+        "margin_pct": "77.59",
+        "price_ex_vat": "9800.00"
+      },
+      "HOURLY": {
+        "effective_hourly_sell_rate": "760.00",
+        "invalid": false,
+        "margin_pct": "65.76",
+        "price_ex_vat": "6414.40"
+      },
+      "PER_M2": {
+        "effective_hourly_sell_rate": "312.80",
+        "invalid": false,
+        "margin_pct": "16.81",
+        "price_ex_vat": "2640.00"
+      },
+      "PER_ROOM": {
+        "effective_hourly_sell_rate": "284.36",
+        "invalid": false,
+        "margin_pct": "8.49",
+        "price_ex_vat": "2400.00"
+      },
+      "PIECEWORK": {
+        "effective_hourly_sell_rate": "284.36",
+        "invalid": false,
+        "margin_pct": "8.49",
+        "price_ex_vat": "2400.00"
+      }
+    },
+    "total_hours": "8.44"
+  },
+  "scenario_2": {
+    "documents": {
+      "invoice_pdf": 200,
+      "invoice_print": 200,
+      "offer_pdf": 200,
+      "offer_preview": 200
+    },
+    "materials_plan": {
+      "lines": 2,
+      "total_cost_ex_vat": "0.00"
+    },
+    "money": {
+      "ex_vat": "1782.00",
+      "total": "2227.50",
+      "vat": "445.50"
+    },
+    "pricing_compare": {
+      "FIXED_TOTAL": {
+        "effective_hourly_sell_rate": "4629.63",
+        "invalid": false,
+        "margin_pct": "94.38",
+        "price_ex_vat": "15000.00"
+      },
+      "HOURLY": {
+        "effective_hourly_sell_rate": "720.00",
+        "invalid": false,
+        "margin_pct": "63.86",
+        "price_ex_vat": "2332.80"
+      },
+      "PER_M2": {
+        "effective_hourly_sell_rate": "2111.11",
+        "invalid": false,
+        "margin_pct": "87.67",
+        "price_ex_vat": "6840.00"
+      },
+      "PER_ROOM": {
+        "effective_hourly_sell_rate": "2222.22",
+        "invalid": false,
+        "margin_pct": "88.29",
+        "price_ex_vat": "7200.00"
+      },
+      "PIECEWORK": {
+        "effective_hourly_sell_rate": "1481.48",
+        "invalid": false,
+        "margin_pct": "82.44",
+        "price_ex_vat": "4800.00"
+      }
+    },
+    "total_hours": "3.24"
+  },
+  "scenario_3": {
+    "documents": {
+      "invoice_pdf": 200,
+      "invoice_print": 200,
+      "offer_pdf": 200,
+      "offer_preview": 200
+    },
+    "materials_plan": {
+      "lines": 1,
+      "total_cost_ex_vat": "0.00"
+    },
+    "money": {
+      "ex_vat": "3993.00",
+      "total": "4991.25",
+      "vat": "998.25"
+    },
+    "pricing_compare": {
+      "FIXED_TOTAL": {
+        "effective_hourly_sell_rate": "2341.60",
+        "invalid": false,
+        "margin_pct": "88.89",
+        "price_ex_vat": "17000.00"
+      },
+      "HOURLY": {
+        "effective_hourly_sell_rate": "760.00",
+        "invalid": false,
+        "margin_pct": "65.76",
+        "price_ex_vat": "5517.60"
+      },
+      "PER_M2": {
+        "effective_hourly_sell_rate": "1041.32",
+        "invalid": false,
+        "margin_pct": "75.01",
+        "price_ex_vat": "7560.00"
+      },
+      "PER_ROOM": {
+        "effective_hourly_sell_rate": "991.74",
+        "invalid": false,
+        "margin_pct": "73.76",
+        "price_ex_vat": "7200.00"
+      },
+      "PIECEWORK": {
+        "effective_hourly_sell_rate": "330.58",
+        "invalid": false,
+        "margin_pct": "21.29",
+        "price_ex_vat": "2400.00"
+      }
+    },
+    "total_hours": "7.26"
+  },
+  "scenario_4": {
+    "documents": {
+      "invoice_pdf": 200,
+      "invoice_print": 200,
+      "offer_pdf": 200,
+      "offer_preview": 200
+    },
+    "materials_plan": {
+      "lines": 1,
+      "total_cost_ex_vat": "0.00"
+    },
+    "money": {
+      "ex_vat": "7909.00",
+      "total": "9886.25",
+      "vat": "1977.25"
+    },
+    "pricing_compare": {
+      "FIXED_TOTAL": {
+        "effective_hourly_sell_rate": "1460.36",
+        "invalid": false,
+        "margin_pct": "82.18",
+        "price_ex_vat": "21000.00"
+      },
+      "HOURLY": {
+        "effective_hourly_sell_rate": "690.00",
+        "invalid": false,
+        "margin_pct": "62.29",
+        "price_ex_vat": "9922.20"
+      },
+      "PER_M2": {
+        "effective_hourly_sell_rate": "506.26",
+        "invalid": false,
+        "margin_pct": "48.60",
+        "price_ex_vat": "7280.00"
+      },
+      "PER_ROOM": {
+        "effective_hourly_sell_rate": "166.90",
+        "invalid": false,
+        "margin_pct": "-55.91",
+        "price_ex_vat": "2400.00"
+      },
+      "PIECEWORK": {
+        "effective_hourly_sell_rate": "55.63",
+        "invalid": false,
+        "margin_pct": "-367.73",
+        "price_ex_vat": "800.00"
+      }
+    },
+    "total_hours": "14.38"
+  },
+  "scenario_5": {
+    "documents": {
+      "invoice_pdf": 200,
+      "invoice_print": 200,
+      "offer_pdf": 200,
+      "offer_preview": 200
+    },
+    "materials_plan": {
+      "lines": 1,
+      "total_cost_ex_vat": "0.00"
+    },
+    "money": {
+      "ex_vat": "1980.00",
+      "total": "2475.00",
+      "vat": "495.00"
+    },
+    "pricing_compare": {
+      "FIXED_TOTAL": {
+        "effective_hourly_sell_rate": "3888.89",
+        "invalid": false,
+        "margin_pct": "93.31",
+        "price_ex_vat": "14000.00"
+      },
+      "HOURLY": {
+        "effective_hourly_sell_rate": "740.00",
+        "invalid": false,
+        "margin_pct": "64.84",
+        "price_ex_vat": "2664.00"
+      },
+      "PER_M2": {
+        "effective_hourly_sell_rate": "1022.22",
+        "invalid": false,
+        "margin_pct": "74.54",
+        "price_ex_vat": "3680.00"
+      },
+      "PER_ROOM": {
+        "effective_hourly_sell_rate": "666.67",
+        "invalid": false,
+        "margin_pct": "60.97",
+        "price_ex_vat": "2400.00"
+      },
+      "PIECEWORK": {
+        "effective_hourly_sell_rate": "222.22",
+        "invalid": false,
+        "margin_pct": "-17.10",
+        "price_ex_vat": "800.00"
+      }
+    },
+    "total_hours": "3.60"
+  },
+  "scenario_6": {
+    "documents": {
+      "invoice_pdf": 200,
+      "invoice_print": 200,
+      "offer_pdf": 200,
+      "offer_preview": 200
+    },
+    "invalid_check": {
+      "missing_project": {
+        "detail": "Project not found",
+        "status": 404
+      },
+      "missing_work_type": {
+        "detail": "Work type required",
+        "status": 400
+      }
+    },
+    "materials_plan": {
+      "lines": 0,
+      "total_cost_ex_vat": "0.00"
+    },
+    "money": {
+      "ex_vat": "0.00",
+      "total": "0.00",
+      "vat": "0.00"
+    },
+    "pricing_compare": {
+      "FIXED_TOTAL": {
+        "effective_hourly_sell_rate": "0.00",
+        "invalid": false,
+        "margin_pct": "100.00",
+        "price_ex_vat": "9000.00"
+      },
+      "HOURLY": {
+        "effective_hourly_sell_rate": "0.00",
+        "invalid": false,
+        "margin_pct": "0.00",
+        "price_ex_vat": "0.00"
+      },
+      "PER_M2": {
+        "effective_hourly_sell_rate": "0.00",
+        "invalid": false,
+        "margin_pct": "100.00",
+        "price_ex_vat": "2160.00"
+      },
+      "PER_ROOM": {
+        "effective_hourly_sell_rate": "0.00",
+        "invalid": false,
+        "margin_pct": "100.00",
+        "price_ex_vat": "2400.00"
+      },
+      "PIECEWORK": {
+        "effective_hourly_sell_rate": "0.00",
+        "invalid": true,
+        "margin_pct": "0.00",
+        "price_ex_vat": "0.00"
+      }
+    },
+    "total_hours": "0.00"
+  }
+}
