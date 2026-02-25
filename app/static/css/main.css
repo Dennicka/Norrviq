@@ -147,3 +147,13 @@ p {
 .help-popover-link {
     font-size: 12px;
 }
+
+.project-workspace-header { display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:1rem; }
+.project-workspace-tabs { display:flex; gap:6px; flex-wrap:wrap; }
+.project-workspace-tabs a { text-decoration:none; padding:6px 10px; border:1px solid #d1d5db; border-radius:8px; color:#334155; background:#fff; }
+.project-workspace-tabs a.active { background:#0d6efd; color:#fff; border-color:#0d6efd; }
+.project-workspace-actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.project-workspace-layout { display:grid; grid-template-columns:minmax(0,1fr) 320px; gap:16px; align-items:start; }
+.project-summary-panel { position:sticky; top:12px; background:#fff; border:1px solid #d1d5db; border-radius:10px; padding:12px; }
+.workspace-section { background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:12px; margin-bottom:12px; }
+@media (max-width: 1024px) { .project-workspace-layout { grid-template-columns:1fr; } .project-summary-panel { position:static; } }

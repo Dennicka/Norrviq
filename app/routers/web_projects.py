@@ -391,6 +391,29 @@ def build_project_context(db: Session, request: Request, project: Project, lang:
     return context
 
 
+PROJECT_WORKSPACE_TABS = {
+    "overview",
+    "rooms",
+    "scope",
+    "materials",
+    "buffers",
+    "pricing",
+    "documents",
+    "audit",
+}
+
+
+def _resolve_project_tab(raw_tab: str | None) -> str:
+    candidate = (raw_tab or "overview").strip().lower()
+    return candidate if candidate in PROJECT_WORKSPACE_TABS else "overview"
+
+
+def _project_redirect_with_tab(project_id: int, request: Request, fallback_tab: str = "overview") -> str:
+    tab_value = request.query_params.get("tab")
+    tab = _resolve_project_tab(tab_value or fallback_tab)
+    return f"/projects/{project_id}?tab={tab}"
+
+
 @router.get("/")
 async def list_projects(
     request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang)
@@ -455,6 +478,7 @@ async def project_detail(
     db: Session = Depends(get_db),
     lang: str = Depends(get_current_lang),
     room_ids: list[int] = Query(default=[]),
+    tab: str = Query("overview"),
 ):
     project = (
         db.query(Project)
@@ -504,6 +528,7 @@ async def project_detail(
     material_rows, material_totals = calculate_material_needs_for_project(db, project.id)
     auto_bom = build_project_material_bom(project.id, db)
     pricing_summary = build_project_pricing_summary(project, db)
+    active_tab = _resolve_project_tab(tab)
     context = build_project_context(
         db,
         request,
@@ -529,6 +554,7 @@ async def project_detail(
         materials_calc_totals=material_totals,
         materials_auto_bom=auto_bom,
         workflow_state=build_project_workflow_state(db, project.id, lang=lang),
+        active_tab=active_tab,
     )
     return templates.TemplateResponse(request, "projects/detail.html", context)
 
@@ -736,7 +762,7 @@ async def update_estimator_pricing_mode(
     if errors:
         for code in errors:
             add_flash_message(request, code, "error")
-        return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
+        return RedirectResponse(url=_project_redirect_with_tab(project_id, request, "scope"), status_code=status.HTTP_303_SEE_OTHER)
 
     pricing.mode = mode_map[mode]
     pricing.pricing_mode = mode
@@ -755,7 +781,7 @@ async def update_estimator_pricing_mode(
     pricing.include_materials = pricing.include_materials_in_sell_price
     db.add(pricing)
     db.commit()
-    return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(url=_project_redirect_with_tab(project_id, request, "scope"), status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.get("/{project_id}/edit")
@@ -803,7 +829,7 @@ async def update_project(
         add_flash_message(request, make_t(lang)("common.update_error_retry"), "error")
         return RedirectResponse(url=f"/projects/{project.id}/edit", status_code=status.HTTP_303_SEE_OTHER)
 
-    return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(url=_project_redirect_with_tab(project.id, request, "overview"), status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/{project_id}/delete")
@@ -1286,7 +1312,7 @@ async def add_work_item(
     if pricing_error:
         add_flash_message(request, pricing_error, "error")
         db.rollback()
-        return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
+        return RedirectResponse(url=_project_redirect_with_tab(project.id, request, "scope"), status_code=status.HTTP_303_SEE_OTHER)
 
     if scope_apply_mode in {"all_rooms", "selected_rooms", "project_aggregate"}:
         selected_room_ids = form.getlist("selected_room_ids") or form.getlist("room_ids")
@@ -1310,7 +1336,7 @@ async def add_work_item(
         if scope_apply_mode == "selected_rooms" and not selected_room_ids:
             add_flash_message(request, translator("projects.work_items.empty_selected_rooms"), "error")
             db.rollback()
-            return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
+            return RedirectResponse(url=_project_redirect_with_tab(project.id, request, "scope"), status_code=status.HTTP_303_SEE_OTHER)
         missing_geometry_rooms = [warning.split(":", 1)[1] for warning in result.warnings if warning.startswith("missing_geometry:")]
         if missing_geometry_rooms:
             names = ", ".join(missing_geometry_rooms[:5])
@@ -1331,7 +1357,7 @@ async def add_work_item(
         if not result.created_item_ids:
             add_flash_message(request, translator("projects.work_items.bulk_no_valid_rooms"), "error")
             db.rollback()
-            return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
+            return RedirectResponse(url=_project_redirect_with_tab(project.id, request, "scope"), status_code=status.HTTP_303_SEE_OTHER)
         recalculate_project_work_items(db, project)
         calculate_project_totals(db, project)
         add_flash_message(
@@ -1340,14 +1366,14 @@ async def add_work_item(
             "success",
         )
         db.commit()
-        return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
+        return RedirectResponse(url=_project_redirect_with_tab(project.id, request, "scope"), status_code=status.HTTP_303_SEE_OTHER)
 
     room_id = form.get("room_id")
     room = db.get(Room, int(room_id)) if room_id else None
     if room is None:
         add_flash_message(request, translator("projects.work_items.room_required"), "error")
         db.rollback()
-        return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
+        return RedirectResponse(url=_project_redirect_with_tab(project.id, request, "scope"), status_code=status.HTTP_303_SEE_OTHER)
 
     if room.project_id != project.id:
         raise HTTPException(status_code=400, detail="Room is not part of project")
@@ -1357,7 +1383,7 @@ async def add_work_item(
     if single_pricing_error:
         add_flash_message(request, single_pricing_error, "error")
         db.rollback()
-        return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
+        return RedirectResponse(url=_project_redirect_with_tab(project.id, request, "scope"), status_code=status.HTTP_303_SEE_OTHER)
 
     item = ProjectWorkItem(
         project_id=project.id,
@@ -1381,12 +1407,12 @@ async def add_work_item(
         add_flash_message(request, issue.message, "error" if issue.severity == "BLOCK" else "warning")
     if block_issues:
         db.rollback()
-        return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
+        return RedirectResponse(url=_project_redirect_with_tab(project.id, request, "scope"), status_code=status.HTTP_303_SEE_OTHER)
 
     recalculate_project_work_items(db, project)
     calculate_project_totals(db, project)
     db.commit()
-    return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(url=_project_redirect_with_tab(project.id, request, "scope"), status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.get("/{project_id}/items/{item_id}/edit")
@@ -1512,7 +1538,7 @@ async def delete_work_item(
         calculate_project_totals(db, project)
 
     add_flash_message(request, translator("projects.work_items.deleted"), "success")
-    return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(url=_project_redirect_with_tab(project_id, request, "scope"), status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/{project_id}/recalculate")
@@ -1534,7 +1560,7 @@ async def recalc_project(
     recalculate_project_work_items(db, project)
     calculate_project_totals(db, project)
 
-    return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(url=_project_redirect_with_tab(project.id, request, "scope"), status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.get("/{project_id}/estimator")
@@ -1620,7 +1646,7 @@ async def project_estimator_select_pricing(
 
 
 @router.post("/{project_id}/recalculate-finance")
-async def recalculate_finance(project_id: int, db: Session = Depends(get_db)):
+async def recalculate_finance(project_id: int, request: Request, db: Session = Depends(get_db)):
     project = (
         db.query(Project)
         .options(
@@ -1639,7 +1665,7 @@ async def recalculate_finance(project_id: int, db: Session = Depends(get_db)):
     calculate_project_totals(db, project)
     calculate_project_financials(db, project)
 
-    return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(url=_project_redirect_with_tab(project.id, request, "overview"), status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/{project_id}/add-cost-item")
@@ -1671,7 +1697,7 @@ async def add_cost_item(
 
     calculate_project_financials(db, project)
 
-    return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(url=_project_redirect_with_tab(project.id, request, "overview"), status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/{project_id}/add-worker-assignment")
@@ -1700,7 +1726,7 @@ async def add_worker_assignment(
 
     calculate_project_financials(db, project)
 
-    return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(url=_project_redirect_with_tab(project.id, request, "overview"), status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.get("/{project_id}/costs/{cost_id}/edit")
@@ -1771,7 +1797,7 @@ async def save_cost_item(
     translator = make_t(lang)
     add_flash_message(request, translator("projects.cost_items.updated"), "success")
 
-    return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(url=_project_redirect_with_tab(project.id, request, "overview"), status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/{project_id}/costs/{cost_id}/delete")
@@ -1798,7 +1824,7 @@ async def delete_cost_item(
     translator = make_t(lang)
     add_flash_message(request, translator("projects.cost_items.deleted"), "success")
 
-    return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(url=_project_redirect_with_tab(project.id, request, "overview"), status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.get("/{project_id}/hours/{assignment_id}/edit")
@@ -1855,7 +1881,7 @@ async def save_assignment(
     translator = make_t(lang)
     add_flash_message(request, translator("projects.worker_assignments.updated"), "success")
 
-    return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(url=_project_redirect_with_tab(project.id, request, "overview"), status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/{project_id}/hours/{assignment_id}/delete")
@@ -1882,7 +1908,7 @@ async def delete_assignment(
     translator = make_t(lang)
     add_flash_message(request, translator("projects.worker_assignments.deleted"), "success")
 
-    return RedirectResponse(url=f"/projects/{project.id}", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(url=_project_redirect_with_tab(project.id, request, "overview"), status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.get("/{project_id}/pricing")
