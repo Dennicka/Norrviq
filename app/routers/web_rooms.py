@@ -267,14 +267,20 @@ async def delete_room(
     )
     if usage_count:
         add_flash_message(request, translator("rooms.delete.blocked"), "error")
+        tab = (request.query_params.get("tab") or "rooms").strip().lower()
+        if tab not in {"overview", "rooms", "scope", "materials", "buffers", "pricing", "documents", "audit"}:
+            tab = "rooms"
         return RedirectResponse(
-            url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER
+            url=f"/projects/{project_id}?tab={tab}", status_code=status.HTTP_303_SEE_OTHER
         )
 
     db.delete(room)
     db.commit()
     add_flash_message(request, translator("rooms.delete.success"), "success")
-    return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
+    tab = (request.query_params.get("tab") or "rooms").strip().lower()
+    if tab not in {"overview", "rooms", "scope", "materials", "buffers", "pricing", "documents", "audit"}:
+        tab = "rooms"
+    return RedirectResponse(url=f"/projects/{project_id}?tab={tab}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/{room_id}/duplicate")

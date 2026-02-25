@@ -1,6 +1,27 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>{{ project.name }}</h1>
+<div class="project-workspace-header">
+    <div class="project-workspace-tabs" role="tablist" aria-label="{{ t('projects.workspace.tabs_aria') }}">
+        <a href="/projects/{{ project.id }}?tab=overview" class="{{ 'active' if active_tab == 'overview' else '' }}">{{ t('projects.workspace.tab.overview') }}</a>
+        <a href="/projects/{{ project.id }}?tab=rooms" class="{{ 'active' if active_tab == 'rooms' else '' }}">{{ t('projects.workspace.tab.rooms') }}</a>
+        <a href="/projects/{{ project.id }}?tab=scope" class="{{ 'active' if active_tab == 'scope' else '' }}">{{ t('projects.workspace.tab.scope') }}</a>
+        <a href="/projects/{{ project.id }}?tab=materials" class="{{ 'active' if active_tab == 'materials' else '' }}">{{ t('projects.workspace.tab.materials') }}</a>
+        <a href="/projects/{{ project.id }}?tab=buffers" class="{{ 'active' if active_tab == 'buffers' else '' }}">{{ t('projects.workspace.tab.buffers') }}</a>
+        <a href="/projects/{{ project.id }}?tab=pricing" class="{{ 'active' if active_tab == 'pricing' else '' }}">{{ t('projects.workspace.tab.pricing') }}</a>
+        <a href="/projects/{{ project.id }}?tab=documents" class="{{ 'active' if active_tab == 'documents' else '' }}">{{ t('projects.workspace.tab.documents') }}</a>
+        <a href="/projects/{{ project.id }}?tab=audit" class="{{ 'active' if active_tab == 'audit' else '' }}">{{ t('projects.workspace.tab.audit') }}</a>
+    </div>
+    <div class="project-workspace-actions">
+        <form method="post" action="/projects/{{ project.id }}/recalculate?tab={{ active_tab }}" style="display:inline;">{{ csrf_input(request) }}<button type="submit">{{ t('label.save') }}</button></form>
+        <form method="post" action="/projects/{{ project.id }}/recalculate-finance?tab={{ active_tab }}" style="display:inline;">{{ csrf_input(request) }}<button type="submit">{{ t('projects.recalculate') }}</button></form>
+        <a href="/projects/{{ project.id }}/offer?lang={{ lang }}" target="_blank">{{ t('projects.workspace.action.preview_offer') }}</a>
+        <a href="/projects/{{ project.id }}/invoices/">{{ t('projects.workspace.action.preview_invoice') }}</a>
+        <a href="/offers/{{ project.id }}/pdf">{{ t('projects.workspace.action.download_pdf') }}</a>
+    </div>
+</div>
+<div class="project-workspace-layout">
+    <div class="project-workspace-main">
 <p>
     <a href="/projects/{{ project.id }}/offer?lang=sv" target="_blank">{{ t("offer.title") }} (SV)</a>
     |
@@ -17,17 +38,17 @@
     | <a href="/projects/{{ project.id }}/shopping-list">{{ t("shopping.title") }}</a> | <a href="/projects/{{ project.id }}/materials-actuals">{{ t("materials.actual_materials") }}</a>
     <a href="/projects/{{ project.id }}/paint-settings">{{ t("menu.paint_systems") }}</a>
     <a href="/projects/{{ project.id }}/buffers">{{ t("menu.buffer_rules") }}</a>
-    <form method="post" action="/projects/{{ project.id }}/delete" style="display:inline;">
+    <form method="post" action="/projects/{{ project.id }}/delete?tab={{ active_tab }}" style="display:inline;">
         {{ csrf_input(request) }}
         <button type="submit" onclick="return confirm('{{ t("label.delete") }}?');">{{ t('label.delete') }}</button>
     </form>
 </p>
-<section>
+<section class="workspace-section" data-tab="overview"{% if active_tab != "overview" %} hidden{% endif %}>
     <h2>{{ t("projects.detail") }}</h2>
     <p><strong>{{ t("label.client") }}:</strong> {{ project.client.name if project.client else "" }}</p>
     <p><strong>{{ t("label.address") }}:</strong> {{ project.address or '' }}</p>
     <p><strong>{{ t("label.status") }} <span class="help" title="{{ t('project.status.help') }}">?</span>:</strong> {{ t('statuses.project.' ~ project.status) }}</p>
-    <p><strong>{{ t("label.use_rot") }}:</strong> {{ t("label.yes") if project.use_rot else t("label.no") }}</p>
+    <p><strong>{{ t("label.use_rot") }} {{ help_icon("invoice.apply_rot") }}:</strong> {{ t("label.yes") if project.use_rot else t("label.no") }}</p>
     <p><strong>{{ t("label.comment") }}:</strong> {{ project.description or '' }}</p>
     <p><strong>{{ t('label.planned_start_date') }} <span class="help" title="{{ t('project.dates.help') }}">?</span>:</strong> {{ project.planned_start_date or '' }}</p>
     <p><strong>{{ t('label.planned_end_date') }} <span class="help" title="{{ t('project.dates.help') }}">?</span>:</strong> {{ project.planned_end_date or '' }}</p>
@@ -35,8 +56,8 @@
     <p><strong>{{ t('label.actual_end_date') }} <span class="help" title="{{ t('project.dates.help') }}">?</span>:</strong> {{ project.actual_end_date or '' }}</p>
 </section>
 
-<section>
-    <h2>{{ t("projects.buffer_applied") }}</h2>
+<section class="workspace-section" data-tab="buffers"{% if active_tab != "buffers" %} hidden{% endif %}>
+    <h2>{{ t("projects.buffer_applied") }} {{ help_icon("buffers.percent_vs_fixed") }} {{ help_icon("project_buffers.speed_profile") }}</h2>
     {% if baseline.effective_buffer and baseline.effective_buffer.get('rule_id') %}
     <p>Buffer: +{{ baseline.effective_buffer.get('value') }}{% if baseline.effective_buffer.get('unit') == 'PERCENT' %}%{% endif %} (Rule <a href="/web/buffer-rules?rule_id={{ baseline.effective_buffer.get('rule_id') }}">#{{ baseline.effective_buffer.get('rule_id') }}</a>, scope: {{ baseline.effective_buffer.get('scope') or 'n/a' }})</p>
     {% else %}
@@ -45,7 +66,7 @@
 </section>
 
 
-<section>
+<section class="workspace-section" data-tab="audit"{% if active_tab != "audit" %} hidden{% endif %}>
     <h2>{{ t("projects.quality.title") }}</h2>
     {% if quality_report.blocks_count == 0 and quality_report.warnings_count == 0 %}
     <p style="color:green;">{{ t("projects.quality.status_ok") }}</p>
@@ -68,7 +89,7 @@
 </section>
 
 
-<section>
+<section class="workspace-section" data-tab="overview"{% if active_tab != "overview" %} hidden{% endif %}>
     <h2>Completeness / Confidence</h2>
     <p><strong>Score:</strong> {{ completeness_report.score }}/100 ({{ completeness_report.level }})</p>
     {% if not completeness_report.can_issue_fixed_price and (project.pricing and project.pricing.mode == 'FIXED_TOTAL') %}
@@ -87,7 +108,7 @@
     </ul>
 </section>
 
-<section>
+<section class="workspace-section" data-tab="documents"{% if active_tab != "documents" %} hidden{% endif %}>
     <h2>{{ t("menu.invoices") }}</h2>
     <p>
         <a href="/projects/{{ project.id }}/invoices/">{{ t("invoice.list.title") }}</a>
@@ -97,7 +118,7 @@
         <button type="button" id="open-create-invoice-dialog">{{ t("invoice.create") }}</button>
     </p>
     <dialog id="create-invoice-dialog">
-        <form method="post" action="/projects/{{ project.id }}/invoices/create-from-project">
+        <form method="post" action="/projects/{{ project.id }}/invoices/create-from-project?tab={{ active_tab }}">
             {{ csrf_input(request) }}
             <h3>{{ t("invoice.create_from_project") }}</h3>
             <label>
@@ -154,7 +175,7 @@
 </section>
 
 
-<section>
+<section class="workspace-section" data-tab="rooms"{% if active_tab != "rooms" %} hidden{% endif %}>
     <h2>{{ t("projects.geometry.title") }}</h2>
     <table>
         <tbody>
@@ -177,7 +198,7 @@
     {% endif %}
 </section>
 
-<section>
+<section class="workspace-section" data-tab="rooms"{% if active_tab != "rooms" %} hidden{% endif %}>
     <h2>{{ t("rooms.section_title") }}</h2>
     <p>{{ t("rooms.help") }}</p>
     <p>
@@ -212,7 +233,7 @@
                 <td>{{ room.baseboard_length_m or '' }}</td>
                 <td>
                     <a href="/projects/{{ project.id }}/rooms/{{ room.id }}/edit">{{ t("projects.edit") }}</a>
-                    <form method="post" action="/projects/{{ project.id }}/rooms/{{ room.id }}/delete" style="display:inline;">
+                    <form method="post" action="/projects/{{ project.id }}/rooms/{{ room.id }}/delete?tab={{ active_tab }}" style="display:inline;">
                         {{ csrf_input(request) }}
                         <button type="submit" onclick="return confirm('{{ t("label.delete") }}?');">{{ t("label.delete") }}</button>
                     </form>
@@ -225,9 +246,9 @@
     </table>
 </section>
 
-<section>
+<section class="workspace-section" data-tab="scope"{% if active_tab != "scope" %} hidden{% endif %}>
     <h2>{{ t("label.add_work_item") }}</h2>
-    <form method="post" action="/projects/{{ project.id }}/add-work-item">
+    <form method="post" action="/projects/{{ project.id }}/add-work-item?tab={{ active_tab }}">
         {{ csrf_input(request) }}
         <div>
             <label>{{ t("label.work_type") }}</label>
@@ -347,9 +368,9 @@
     </form>
 </section>
 
-<section>
+<section class="workspace-section" data-tab="pricing"{% if active_tab != "pricing" %} hidden{% endif %}>
     <h2>Сводка сметы</h2>
-    <form method="get" action="/projects/{{ project.id }}">
+    <form method="get" action="/projects/{{ project.id }}?tab={{ active_tab }}">
         <fieldset>
             <legend>{{ t("projects.estimator.scope") }}</legend>
             <label><input type="checkbox" name="all_rooms" value="1" checked disabled> {{ t("projects.estimator.scope.all_rooms") }}</label>
@@ -362,9 +383,9 @@
             <button type="submit">{{ t("projects.estimator.scope.apply") }}</button>
         </fieldset>
     </form>
-    <form method="post" action="/projects/{{ project.id }}/estimator-pricing-mode">
+    <form method="post" action="/projects/{{ project.id }}/estimator-pricing-mode?tab={{ active_tab }}">
         {{ csrf_input(request) }}
-        <h3>{{ t("projects.pricing.mode_block") }}</h3>
+        <h3>{{ t("projects.pricing.mode_block") }} {{ help_icon("pricing_policy.min_margin_pct") }} {{ help_icon("pricing_policy.min_profit_sek") }} {{ help_icon("pricing_policy.min_effective_hourly") }}</h3>
         <label>{{ t("projects.pricing.mode") }}</label>
         <select name="project_pricing_mode">
             <option value="hourly" {% if project_pricing.mode == 'HOURLY' %}selected{% endif %}>{{ t("projects.estimator.pricing_mode.hourly") }}</option>
@@ -458,8 +479,8 @@
     </details>
 </section>
 
-<section>
-    <h2>Материалы (авторасчёт)</h2>
+<section class="workspace-section" data-tab="materials"{% if active_tab != "materials" %} hidden{% endif %}>
+    <h2>{{ t("projects.workspace.materials_auto") }} {{ help_icon("materials_norms.consumption_qty") }} {{ help_icon("paint_systems.recipe") }}</h2>
     {% if materials_auto_bom and materials_auto_bom.line_items %}
     <table>
         <thead><tr><th>Work</th><th>Material</th><th>Theoretical</th><th>Purchase</th><th>Cost</th></tr></thead>
@@ -510,7 +531,7 @@
     {% endif %}
 </section>
 
-<section>
+<section class="workspace-section" data-tab="scope"{% if active_tab != "scope" %} hidden{% endif %}>
     <h2>{{ t("label.work_type") }}</h2>
     <table>
         <thead>
@@ -548,7 +569,7 @@
                 <td>{{ item.margin_pct or '' }}</td>
                 <td>
                     <a href="/projects/{{ project.id }}/items/{{ item.id }}/edit">{{ t('projects.edit') }}</a>
-                    <form method="post" action="/projects/{{ project.id }}/items/{{ item.id }}/delete" style="display:inline;">
+                    <form method="post" action="/projects/{{ project.id }}/items/{{ item.id }}/delete?tab={{ active_tab }}" style="display:inline;">
                         {{ csrf_input(request) }}
                         <button type="submit" onclick="return confirm('{{ t("label.delete") }}?');">{{ t('label.delete') }}</button>
                     </form>
@@ -561,7 +582,7 @@
     </table>
 </section>
 
-<section>
+<section class="workspace-section" data-tab="overview"{% if active_tab != "overview" %} hidden{% endif %}>
     <h2>{{ t("projects.recalculate") }}</h2>
     <div>
         <p>{{ t("label.work_sum_without_moms") }}: {{ project.work_sum_without_moms or '' }}</p>
@@ -569,17 +590,17 @@
         <p>{{ t("label.rot_amount") }}: {{ project.rot_amount or '' }}</p>
         <p>{{ t("label.client_pays_total") }}: {{ project.client_pays_total or '' }}</p>
     </div>
-    <form method="post" action="/projects/{{ project.id }}/recalculate">
+    <form method="post" action="/projects/{{ project.id }}/recalculate?tab={{ active_tab }}">
         {{ csrf_input(request) }}
         <button type="submit">{{ t("projects.recalculate") }}</button>
     </form>
-    <form method="post" action="/projects/{{ project.id }}/recalculate-finance" style="margin-top: 8px;">
+    <form method="post" action="/projects/{{ project.id }}/recalculate-finance?tab={{ active_tab }}" style="margin-top: 8px;">
         {{ csrf_input(request) }}
         <button type="submit">{{ t("projects.finance.recalculate") }}</button>
     </form>
 </section>
 
-<section>
+<section class="workspace-section" data-tab="overview"{% if active_tab != "overview" %} hidden{% endif %}>
     <h2>{{ t("projects.cost_items.title") }}</h2>
     <table>
         <thead>
@@ -600,7 +621,7 @@
                 <td>{{ item.amount }}</td>
                 <td>
                     <a href="/projects/{{ project.id }}/costs/{{ item.id }}/edit">✏ {{ t('label.edit') }}</a>
-                    <form method="post" action="/projects/{{ project.id }}/costs/{{ item.id }}/delete" style="display:inline;">
+                    <form method="post" action="/projects/{{ project.id }}/costs/{{ item.id }}/delete?tab={{ active_tab }}" style="display:inline;">
                         {{ csrf_input(request) }}
                         <button type="submit" onclick="return confirm('{{ t("label.delete") }}?');">🗑 {{ t('label.delete') }}</button>
                     </form>
@@ -613,7 +634,7 @@
     </table>
 
     <h3>{{ t("projects.cost_items.add") }}</h3>
-    <form method="post" action="/projects/{{ project.id }}/add-cost-item">
+    <form method="post" action="/projects/{{ project.id }}/add-cost-item?tab={{ active_tab }}">
         {{ csrf_input(request) }}
         <div>
             <label>{{ t("label.category") }}</label>
@@ -649,7 +670,7 @@
     </form>
 </section>
 
-<section>
+<section class="workspace-section" data-tab="overview"{% if active_tab != "overview" %} hidden{% endif %}>
     <h2>{{ t("projects.worker_assignments.title") }}</h2>
     {% if project.worker_assignments %}
     <table>
@@ -669,7 +690,7 @@
                 <td>{{ assignment.actual_hours or '' }}</td>
                 <td>
                     <a href="/projects/{{ project.id }}/hours/{{ assignment.id }}/edit">✏ {{ t('label.edit') }}</a>
-                    <form method="post" action="/projects/{{ project.id }}/hours/{{ assignment.id }}/delete" style="display:inline;">
+                    <form method="post" action="/projects/{{ project.id }}/hours/{{ assignment.id }}/delete?tab={{ active_tab }}" style="display:inline;">
                         {{ csrf_input(request) }}
                         <button type="submit" onclick="return confirm('{{ t("label.delete") }}?');">🗑 {{ t('label.delete') }}</button>
                     </form>
@@ -683,7 +704,7 @@
     {% endif %}
 
     <h3>{{ t("projects.worker_assignments.add") }}</h3>
-    <form method="post" action="/projects/{{ project.id }}/add-worker-assignment">
+    <form method="post" action="/projects/{{ project.id }}/add-worker-assignment?tab={{ active_tab }}">
         {{ csrf_input(request) }}
         <div>
             <label>{{ t("label.worker") }}</label>
@@ -706,7 +727,7 @@
     </form>
 </section>
 
-<section>
+<section class="workspace-section" data-tab="overview"{% if active_tab != "overview" %} hidden{% endif %}>
     <h2>{{ t("projects.finance.title") }}</h2>
     <div class="finance-block">
         <h3>{{ t("projects.finance.revenue") }}</h3>
@@ -790,6 +811,22 @@
         </table>
     </div>
 </section>
+    </div>
+    <aside class="project-summary-panel">
+        <h2>{{ t("projects.workspace.summary.title") }}</h2>
+        <p><strong>{{ project.name }}</strong><br>{{ project.client.name if project.client else "—" }}</p>
+        <p>{{ t("label.status") }}: {{ t("statuses.project." ~ project.status) }}</p>
+        <p>{{ t("projects.workspace.summary.total_ex") }}: {{ finance_summary.work_sum_without_moms }}</p>
+        <p>{{ t("projects.workspace.summary.total_inc") }}: {{ finance_summary.client_pays_total }}</p>
+        <p>{{ t("finance.profit") }}: {{ finance_summary.profit }} · {{ t("finance.margin_percent") }}: {{ finance_summary.margin_percent if finance_summary.margin_percent is not none else "—" }}%</p>
+        <p>{{ t("label.use_rot") }}: {{ t("label.yes") if project.use_rot else t("label.no") }}{% if project.use_rot %} ({{ finance_summary.rot_amount }}){% endif %}</p>
+        <p>{{ t("projects.workspace.summary.completeness") }}: {{ completeness_report.score }}/100</p>
+        {% if quality_report.blocks_count or quality_report.warnings_count %}
+            <p>{{ t("projects.workspace.summary.risks") }}: {{ quality_report.blocks_count + quality_report.warnings_count }}</p>
+        {% endif %}
+        <p><a href="/projects/{{ project.id }}/offer?lang=sv" target="_blank">{{ t("offer.title") }} SV</a> · <a href="/projects/{{ project.id }}/offer?lang=ru" target="_blank">{{ t("offer.title") }} RU</a></p>
+    </aside>
+</div>
 <script>
 const unitTemplate = "{{ t('worktypes.info.unit_prefix') }}";
 const normTemplate = "{{ t('worktypes.info.base_norm') }}";
