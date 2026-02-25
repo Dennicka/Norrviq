@@ -32,7 +32,7 @@ from app.services.pdf_renderer import invoice_pdf_capability, render_invoice_pdf
 from app.services.completeness import compute_completeness
 from app.services.quality import evaluate_project_quality
 from app.services.terms_templates import DOC_TYPE_OFFER, resolve_terms_template
-from app.services.invoice_documents import invoice_render_lang, resolve_invoice_terms, format_doc_date, format_doc_money
+from app.services.invoice_documents import invoice_render_lang, normalize_document_lang, resolve_invoice_terms, format_doc_date, format_doc_money
 from app.services.correctness_lock import validate_offer_invariants, validate_invoice_invariants
 from app.dependencies import template_context, templates
 from app.i18n import make_t
@@ -152,6 +152,8 @@ async def offer_pdf(
     if not project:
         raise HTTPException(status_code=404, detail="Offer not found")
 
+    render_lang = normalize_document_lang(lang, fallback=normalize_document_lang(project.offer_document_lang))
+
     recalculate_project_work_items(db, project)
     calculate_project_totals(db, project)
 
@@ -182,7 +184,7 @@ async def offer_pdf(
     else:
         commercial = None
     if commercial is None:
-        computed = compute_offer_commercial(db, project.id, lang=lang)
+        computed = compute_offer_commercial(db, project.id, lang=render_lang)
         commercial = {
             "mode": computed.mode,
             "units": computed.units,
@@ -202,11 +204,11 @@ async def offer_pdf(
         terms_title = project.offer_terms_snapshot_title or ""
         terms_body = project.offer_terms_snapshot_body or ""
     else:
-        template = resolve_terms_template(db, profile=profile, client=project.client, doc_type=DOC_TYPE_OFFER, lang=lang)
+        template = resolve_terms_template(db, profile=profile, client=project.client, doc_type=DOC_TYPE_OFFER, lang=render_lang)
         terms_title = template.title
         terms_body = template.body_text
 
-    context = template_context(request, lang)
+    context = template_context(request, render_lang)
     context.update(
         {
             "project": project,
