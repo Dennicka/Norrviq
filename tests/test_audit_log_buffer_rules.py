@@ -15,11 +15,13 @@ settings = get_settings()
 
 
 def _login_admin():
-    return client.post(
+    response = client.post(
         "/login",
         data={"username": settings.admin_email, "password": settings.admin_password, "next": "/projects/"},
         follow_redirects=False,
     )
+    client.get("/lang/en?next=/", follow_redirects=False)
+    return response
 
 
 def _project_id() -> int:

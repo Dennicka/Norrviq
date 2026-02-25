@@ -46,6 +46,83 @@ HELP_TEXT: Final[dict[str, dict[str, dict[str, str]]]] = {
     "invoice.apply_rot": {"ru": {"title": "Применить ROT", "body": "Включает расчёт ROT для подходящих трудовых строк.", "example": "Пример: галочка включена — итог клиента уменьшается."}},
     "invoice.status": {"ru": {"title": "Статус инвойса", "body": "Черновик, выпущен, оплачен и т.д. Статус управляет доступностью действий.", "example": "Пример: DRAFT можно править, ISSUED — почти нет."}},
     "quality.rule_severity": {"ru": {"title": "Серьёзность правила", "body": "Выберите, предупреждать или блокировать действие при нарушении правила.", "example": "Пример: отрицательная сумма = BLOCK, необычно большая сумма = WARNING."}},
+    "pricing_policy.block_issue_below_floor": {
+        "ru": {"title": "Блокировать выпуск ниже floor", "body": "Если включено, нельзя выпустить оффер/инвойс при нарушении минимумов политики.", "example": "Пример: при марже ниже минимума кнопка выпуска блокируется."},
+        "en": {"title": "Block issue below floor", "body": "When enabled, issuing Offer/Invoice is blocked if floor checks fail.", "example": "Example: too-low margin blocks issue."},
+    },
+    "pricing_policy.warn_only_mode": {
+        "ru": {"title": "Только предупреждение", "body": "Режим без блокировки: система только предупреждает о нарушении порогов.", "example": "Пример: можно выпустить документ, но увидите warning."},
+        "en": {"title": "Warning only mode", "body": "Do not block actions; show warnings only.", "example": "Example: issue is allowed but flagged."},
+    },
+    "pricing_policy.min_completeness_per_room": {
+        "ru": {"title": "Минимальная полнота для per room", "body": "Минимальный score полноты, чтобы разрешить режим за комнату.", "example": "Пример: при score 45 и пороге 60 режим будет flagged."},
+    },
+    "buffer_rules.kind": {
+        "ru": {"title": "Тип буфера", "body": "Определяет назначение правила: setup, cleanup, travel или risk.", "example": "Пример: TRAVEL добавляет резерв на логистику."},
+    },
+    "buffer_rules.scope": {
+        "ru": {"title": "Scope", "body": "Где действует правило: глобально, для проекта, вида работ или категории.", "example": "Пример: WORKTYPE ограничивает правило конкретным кодом работ."},
+    },
+    "buffer_rules.priority": {
+        "ru": {"title": "Приоритет", "body": "Порядок применения правил. Большее значение = выше приоритет.", "example": "Пример: специфичное правило ставят выше общего."},
+    },
+    "project_buffers.speed_profile": {
+        "ru": {"title": "Профиль скорости", "body": "Множитель, который ускоряет или замедляет базовые трудозатраты проекта.", "example": "Пример: profile 1.15 добавит 15% часов."},
+    },
+    "paint_systems.order": {
+        "ru": {"title": "Порядок", "body": "Позиция шага в цепочке системы окраски.", "example": "Пример: 1 = грунт, 2 = первый слой, 3 = финиш."},
+    },
+    "paint_systems.surface": {
+        "ru": {"title": "Поверхность", "body": "Для какой поверхности применяется шаг рецепта.", "example": "Пример: WALL или CEILING."},
+    },
+    "paint_systems.recipe": {
+        "ru": {"title": "Рецепт", "body": "Какой material recipe использовать в этом шаге.", "example": "Пример: грунт + краска бренда X."},
+    },
+    "paint_systems.override_coats": {
+        "ru": {"title": "Переопределить слои", "body": "Локально заменить число слоёв для шага, не меняя рецепт в целом.", "example": "Пример: вместо 2 слоёв задать 3."},
+    },
+    "paint_systems.override_waste": {
+        "ru": {"title": "Переопределить отходы %", "body": "Локально заменить процент отходов для шага.", "example": "Пример: 8% вместо стандартных 5%."},
+    },
+    "paint_systems.optional": {
+        "ru": {"title": "Опционально", "body": "Шаг можно пропустить, если он не нужен для конкретного проекта.", "example": "Пример: дополнительный защитный слой как optional."},
+    },
+    "materials_norms.basis_type": {
+        "ru": {"title": "Тип базы", "body": "Какая геометрия используется как основание нормы (пол, стены, периметр и т.д.).", "example": "Пример: wall_area для расхода по стенам."},
+    },
+    "materials_norms.consumption_qty": {
+        "ru": {"title": "Расход", "body": "Количество материала на базовую величину.", "example": "Пример: 0.12 л на 1 м²."},
+    },
+    "materials_norms.per_basis_qty": {
+        "ru": {"title": "На базовое количество", "body": "Базовое количество, к которому привязан расход.", "example": "Пример: 10 м², если расход задан на 10 м²."},
+    },
+    "materials_norms.layers_multiplier": {
+        "ru": {"title": "Множитель слоёв", "body": "Учитывает число слоёв при итоговом расходе материала.", "example": "Пример: 2 слоя = расход ×2."},
+    },
+    "materials_norms.work_type_code": {
+        "ru": {"title": "Код типа работ", "body": "Внутренний код работ для привязки нормы. Код не переводится и хранится как есть.", "example": "Пример: PAINT_WALL_INTERIOR."},
+    },
+    "materials_norms.material_unit": {
+        "ru": {"title": "Единица материала", "body": "Единица измерения расхода материала.", "example": "Пример: l, kg, pcs."},
+    },
+    "materials_norms.waste_percent": {
+        "ru": {"title": "Отходы %", "body": "Дополнительный запас на потери/остатки.", "example": "Пример: 7% повышает итоговый расход на 1.07."},
+    },
+    "terms_templates.segment": {
+        "ru": {"title": "Сегмент", "body": "Бизнес-сегмент шаблона условий.", "example": "Пример: B2C или B2B."},
+    },
+    "terms_templates.doc_type": {
+        "ru": {"title": "Тип документа", "body": "Для какого документа применяется шаблон.", "example": "Пример: OFFER или INVOICE."},
+    },
+    "terms_templates.language": {
+        "ru": {"title": "Язык", "body": "Язык текста шаблона условий.", "example": "Пример: ru/sv/en."},
+    },
+    "terms_templates.version_from_template": {
+        "ru": {"title": "Версия из шаблона", "body": "Создать новую версию, скопировав существующий шаблон.", "example": "Пример: взять v2 как основу для v3."},
+    },
+    "terms_templates.active": {
+        "ru": {"title": "Активный", "body": "Активная версия доступна для новых документов.", "example": "Пример: выключите старую версию после публикации новой."},
+    },
 }
 
 

@@ -1,46 +1,46 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>Terms templates {{ help_icon('terms.versioning') }}</h1>
+<h1>{{ t('terms_templates.title') }} {{ help_icon('terms.versioning') }}</h1>
 
-<h2>Create / New version</h2>
+<h2>{{ t('terms_templates.create_new_version') }}</h2>
 <form method="post" action="/settings/terms" class="form-grid">
     {{ csrf_input(request) }}
-    <label>Segment</label>
+    <label>{{ t('terms_templates.segment') }} {{ help_icon('terms_templates.segment') }}</label>
     <select name="segment">
         {% for s in segments %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
     </select>
 
-    <label>Doc type</label>
+    <label>{{ t('terms_templates.doc_type') }} {{ help_icon('terms_templates.doc_type') }}</label>
     <select name="doc_type">
         {% for d in doc_types %}<option value="{{ d }}">{{ d }}</option>{% endfor %}
     </select>
 
-    <label>Language</label>
+    <label>{{ t('terms_templates.language') }} {{ help_icon('terms_templates.language') }}</label>
     <select name="lang">
         {% for l in langs %}<option value="{{ l }}">{{ l }}</option>{% endfor %}
     </select>
 
-    <label>Version from template (optional)</label>
+    <label>{{ t('terms_templates.version_from_template') }} {{ help_icon('terms_templates.version_from_template') }}</label>
     <select name="source_template_id">
-        <option value="">-- none --</option>
+        <option value="">-- {{ t('label.none') }} --</option>
         {% for item in terms_templates %}
         <option value="{{ item.id }}">#{{ item.id }} {{ item.segment }}/{{ item.doc_type }}/{{ item.lang }} v{{ item.version }}</option>
         {% endfor %}
     </select>
 
-    <label>Title</label>
+    <label>{{ t('label.title') }}</label>
     <input type="text" name="title" required>
 
-    <label>Body</label>
+    <label>{{ t('label.description') }}</label>
     <textarea name="body_text" rows="8" required></textarea>
 
-    <label><input type="checkbox" name="is_active" checked> Active</label>
-    <button type="submit">Save as new version {{ help_icon('terms.snapshot_on_issue') }}</button>
+    <label><input type="checkbox" name="is_active" checked> {{ t('terms_templates.active') }} {{ help_icon('terms_templates.active') }}</label>
+    <button type="submit">{{ t('terms_templates.save_new_version') }} {{ help_icon('terms.snapshot_on_issue') }}</button>
 </form>
 
-<h2>Existing templates</h2>
+<h2>{{ t('terms_templates.existing_templates') }}</h2>
 <table>
-    <thead><tr><th>ID</th><th>Segment</th><th>Type</th><th>Lang</th><th>Version {{ help_icon('terms.versioning') }}</th><th>Active</th><th>Title</th></tr></thead>
+    <thead><tr><th>ID</th><th>{{ t('terms_templates.segment') }}</th><th>{{ t('terms_templates.doc_type') }}</th><th>{{ t('terms_templates.language') }}</th><th>{{ t('terms_templates.version') }} {{ help_icon('terms.versioning') }}</th><th>{{ t('terms_templates.active') }}</th><th>{{ t('label.title') }}</th></tr></thead>
     <tbody>
         {% for item in terms_templates %}
         <tr>
