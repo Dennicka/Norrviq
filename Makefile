@@ -1,4 +1,4 @@
-.PHONY: check migrate run preflight doctor bootstrap-local run-local i18n-audit
+.PHONY: check migrate run preflight doctor bootstrap-local run-local i18n-audit test-acceptance
 
 check:
 	ruff check .
@@ -24,3 +24,6 @@ bootstrap-local:
 
 run-local:
 	APP_ENV=local COOKIE_SECURE=false uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload
+
+test-acceptance:
+	pytest -q tests/e2e/test_acceptance_estimator_correctness.py
