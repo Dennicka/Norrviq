@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>{{ t('materials.norms.title') }}</h1>
-{% if errors %}<div class="flash flash-error">Validation error: {{ errors|join(', ') }}</div>{% endif %}
+{% if errors %}<div class="flash flash-error">{{ t('common.validation_error') }}: {{ errors|join(', ') }}</div>{% endif %}
 <form method="post">
   {{ csrf_input(request) }}
   {% set form = form_data if form_data else {} %}

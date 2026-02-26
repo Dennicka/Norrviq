@@ -4,13 +4,12 @@
 <div class="project-workspace-header">
     <div class="project-workspace-tabs" role="tablist" aria-label="{{ t('projects.workspace.tabs_aria') }}">
         <a href="/projects/{{ project.id }}?tab=overview" class="{{ 'active' if active_tab == 'overview' else '' }}">{{ t('projects.workspace.tab.overview') }}</a>
-        <a href="/projects/{{ project.id }}?tab=rooms" class="{{ 'active' if active_tab == 'rooms' else '' }}">{{ t('projects.workspace.tab.rooms') }}</a>
-        <a href="/projects/{{ project.id }}?tab=scope" class="{{ 'active' if active_tab == 'scope' else '' }}">{{ t('projects.workspace.tab.scope') }}</a>
-        <a href="/projects/{{ project.id }}?tab=materials" class="{{ 'active' if active_tab == 'materials' else '' }}">{{ t('projects.workspace.tab.materials') }}</a>
+        <a href="/projects/{{ project.id }}/estimator">{{ t('projects.workspace.tab.estimator') }}</a>
+        <a href="/projects/{{ project.id }}/materials-plan">{{ t('projects.workspace.tab.materials_plan') }}</a>
+        <a href="/projects/{{ project.id }}/shopping-list">{{ t('projects.workspace.tab.shopping_list') }}</a>
+        <a href="/projects/{{ project.id }}?tab=pricing" class="{{ 'active' if active_tab == 'pricing' else '' }}">{{ t('projects.workspace.tab.pricing_settings') }}</a>
         <a href="/projects/{{ project.id }}?tab=buffers" class="{{ 'active' if active_tab == 'buffers' else '' }}">{{ t('projects.workspace.tab.buffers') }}</a>
-        <a href="/projects/{{ project.id }}?tab=pricing" class="{{ 'active' if active_tab == 'pricing' else '' }}">{{ t('projects.workspace.tab.pricing') }}</a>
         <a href="/projects/{{ project.id }}?tab=documents" class="{{ 'active' if active_tab == 'documents' else '' }}">{{ t('projects.workspace.tab.documents') }}</a>
-        <a href="/projects/{{ project.id }}?tab=audit" class="{{ 'active' if active_tab == 'audit' else '' }}">{{ t('projects.workspace.tab.audit') }}</a>
     </div>
     <div class="project-workspace-actions">
         <form method="post" action="/projects/{{ project.id }}/recalculate?tab={{ active_tab }}" style="display:inline;">{{ csrf_input(request) }}<button type="submit">{{ t('label.save') }}</button></form>

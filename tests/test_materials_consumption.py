@@ -165,4 +165,4 @@ def test_invalid_rule_input_returns_form_error():
         follow_redirects=False,
     )
     assert response.status_code == 422
-    assert "Validation error" in response.text
+    assert "Ошибка валидации" in response.text
