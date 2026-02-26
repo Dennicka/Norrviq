@@ -1,7 +1,7 @@
 import hashlib
 import json
 from dataclasses import asdict, dataclass
-from decimal import Decimal, ROUND_CEILING, ROUND_HALF_UP
+from decimal import Decimal, ROUND_HALF_UP
 
 from sqlalchemy.orm import Session
 
@@ -10,9 +10,8 @@ from app.models.invoice import Invoice
 from app.models.invoice_line import InvoiceLine
 from app.models.material import Material
 from app.models.project_procurement_settings import ProjectProcurementSettings
-from app.models.supplier_material_price import SupplierMaterialPrice
 from app.services.invoice_lines import recalculate_invoice_totals
-from app.services.materials_bom import compute_project_bom
+from app.services.materials_bom import ProcurementStrategy, compute_procurement_plan
 
 MONEY_Q = Decimal("0.01")
 
@@ -105,111 +104,61 @@ def get_or_create_procurement_settings(db: Session, project_id: int) -> ProjectP
     return settings
 
 
-def _select_price(prices: list[SupplierMaterialPrice], supplier_id: int | None, preferred_supplier_id: int | None, auto_select_cheapest: bool) -> SupplierMaterialPrice | None:
-    if not prices:
-        return None
-    if supplier_id:
-        for price in prices:
-            if price.supplier_id == supplier_id:
-                return price
-        return None
-    if preferred_supplier_id:
-        for price in prices:
-            if price.supplier_id == preferred_supplier_id:
-                return price
-    if auto_select_cheapest:
-        def _unit_price(p: SupplierMaterialPrice) -> Decimal:
-            pack_size = Decimal(str(p.pack_size or 0))
-            pack_price = Decimal(str(p.pack_price_ex_vat or 0))
-            if pack_size <= 0:
-                return Decimal("Infinity")
-            return pack_price / pack_size
-
-        return min(
-            prices,
-            key=lambda p: (
-                _unit_price(p),
-                Decimal(str(p.pack_price_ex_vat or 0)),
-                p.supplier_id,
-                p.id,
-            ),
-        )
-    return min(prices, key=lambda p: (p.supplier_id, p.id))
-
-
-def _round_packs(planned_qty: Decimal, pack_size: Decimal, rounding_rule: str, min_pack_qty: Decimal) -> Decimal:
-    ratio = planned_qty / pack_size
-    if rounding_rule == "NONE":
-        packs = ratio
-    elif rounding_rule == "NEAREST":
-        packs = ratio.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
-    else:
-        packs = ratio.to_integral_value(rounding=ROUND_CEILING)
-    return packs if packs >= min_pack_qty else min_pack_qty
-
-
 def compute_project_shopping_list(
     db: Session,
     project_id: int,
     supplier_id: int | None = None,
     group_by_supplier: bool = True,
     include_items_without_price: bool = True,
+    strategy: str | None = None,
 ) -> ShoppingListReport:
-    bom = compute_project_bom(db, project_id)
     settings = get_or_create_procurement_settings(db, project_id)
-    warnings: list[str] = []
+    strategy_mode = (strategy or ("PREFERRED_FIRST" if settings.preferred_supplier_id else "CHEAPEST")).upper()
+    if strategy_mode == "FIXED_SUPPLIER" and not supplier_id:
+        supplier_id = settings.preferred_supplier_id
+    plan = compute_procurement_plan(
+        db,
+        project_id,
+        strategy=ProcurementStrategy(strategy_mode if strategy_mode in {"CHEAPEST", "PREFERRED_FIRST", "FIXED_SUPPLIER"} else "CHEAPEST"),
+        supplier_id=supplier_id or settings.preferred_supplier_id,
+    )
+    warnings: list[str] = list(plan.warnings)
     items: list[ShoppingListItem] = []
 
-    for bom_item in bom.items:
-        planned_qty = Decimal(str(bom_item.qty_final_unit or 0))
+    for line in plan.lines:
+        planned_qty = Decimal(str(line.qty or 0))
         if planned_qty <= 0:
             continue
-        material = db.get(Material, bom_item.material_id)
-        prices = db.query(SupplierMaterialPrice).filter(SupplierMaterialPrice.material_id == bom_item.material_id).all()
-        selected_price = _select_price(prices, supplier_id, settings.preferred_supplier_id, settings.auto_select_cheapest)
-
-        pack_size = Decimal(str(selected_price.pack_size)) if selected_price and selected_price.pack_size else None
-        pack_unit = selected_price.pack_unit if selected_price else None
-        if pack_size is None and material and material.pack_size is not None:
+        material = db.get(Material, line.material_id)
+        pack_size = None
+        pack_unit = line.unit
+        if material and material.pack_size is not None:
             pack_size = Decimal(str(material.pack_size))
-            pack_unit = material.pack_unit or bom_item.unit
-        rounding_rule = str((material.pack_rounding_rule if material else "CEIL") or "CEIL")
-        min_pack_qty = Decimal(str((material.min_pack_qty if material else 1) or 1))
+            pack_unit = material.pack_unit or line.unit
 
-        line_warnings: list[str] = []
-        if pack_size is None or pack_size <= 0:
-            packs_needed = planned_qty
-            purchase_qty = planned_qty
-            pack_size = None
-            line_warnings.append("NO_PACK_SIZE")
-        else:
-            packs_needed = _round_packs(planned_qty, pack_size, rounding_rule, min_pack_qty)
-            purchase_qty = _qm(packs_needed * pack_size)
+        if pack_size is None and line.packs_needed > 0:
+            pack_size = (line.purchase_qty / line.packs_needed) if line.packs_needed > 0 else None
 
-        unit_price = Decimal(str(selected_price.price_per_pack)) if selected_price else None
-        if unit_price is None:
-            line_warnings.append("NO_SUPPLIER_PRICE")
+        line_warnings = list(line.warnings)
+        if line.unit_price_ex_vat is None:
             if not include_items_without_price:
                 continue
-
-        line_total = _qm((unit_price or Decimal("0")) * packs_needed)
-        for code in line_warnings:
-            warnings.append(f"material:{bom_item.material_id}:{code}")
+            line_warnings.append("NO_SUPPLIER_PRICE")
 
         items.append(
             ShoppingListItem(
-                material_id=bom_item.material_id,
-                material_name=bom_item.name,
+                material_id=line.material_id,
+                material_name=line.material_name,
                 planned_qty=planned_qty,
-                planned_unit=bom_item.unit,
+                planned_unit=line.unit,
                 pack_size=pack_size,
-                pack_unit=pack_unit or bom_item.unit,
-                packs_needed=packs_needed,
-                purchase_qty=purchase_qty,
-                supplier_id=selected_price.supplier_id if selected_price else None,
-                supplier_name=selected_price.supplier.name if selected_price else None,
-                unit_price=unit_price,
-                line_total_cost=line_total,
+                pack_unit=pack_unit,
+                packs_needed=line.packs_needed,
+                purchase_qty=_qm(line.purchase_qty),
+                supplier_id=line.supplier_id,
+                supplier_name=line.supplier_name,
+                unit_price=line.unit_price_ex_vat,
+                line_total_cost=_qm(line.line_total_cost_ex_vat),
                 warnings=line_warnings,
             )
         )

@@ -1,5 +1,6 @@
 from dataclasses import dataclass
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, ROUND_CEILING, ROUND_HALF_UP
+from enum import Enum
 
 from sqlalchemy.orm import Session, joinedload
 
@@ -14,6 +15,7 @@ from app.models.paint_system import PaintSystemSurface, ProjectPaintSettings, Ro
 from app.models.project import Project, ProjectWorkItem
 from app.models.project_material_settings import ProjectMaterialSettings
 from app.models.room import Room
+from app.models.supplier_material_price import SupplierMaterialPrice
 from app.services.takeoff import compute_project_areas, get_or_create_project_takeoff_settings
 
 UNIT_Q = Decimal("0.0001")
@@ -63,6 +65,36 @@ class BOMReport:
     items: list[BOMItem]
     total_cost_ex_vat: Decimal
     total_sell_ex_vat: Decimal
+    warnings: list[str]
+
+
+class ProcurementStrategy(str, Enum):
+    CHEAPEST = "CHEAPEST"
+    PREFERRED_FIRST = "PREFERRED_FIRST"
+    FIXED_SUPPLIER = "FIXED_SUPPLIER"
+
+
+@dataclass
+class ProcurementLine:
+    material_id: int
+    material_name: str
+    qty: Decimal
+    unit: str
+    supplier_id: int | None
+    supplier_name: str | None
+    price_unit: str | None
+    unit_price_ex_vat: Decimal | None
+    packs_needed: Decimal
+    purchase_qty: Decimal
+    line_total_cost_ex_vat: Decimal
+    warnings: list[str]
+
+
+@dataclass
+class ProcurementPlan:
+    strategy: ProcurementStrategy
+    lines: list[ProcurementLine]
+    total_cost_ex_vat: Decimal
     warnings: list[str]
 
 
@@ -250,7 +282,7 @@ def _compute_bom_from_norms(db: Session, project: Project, warnings: list[str]) 
     materials_by_name = {m.name_sv.lower(): m for m in materials.values()}
 
     grouped: dict[str, dict] = {}
-    for item in project.work_items:
+    for item in sorted(project.work_items, key=lambda wi: wi.id or 0):
         work_code = (item.work_type.code or "").strip().lower()
         matched_norms = norms_by_work.get(work_code, [])
         if not matched_norms:
@@ -283,13 +315,22 @@ def _compute_bom_from_norms(db: Session, project: Project, warnings: list[str]) 
 
             if measure <= 0:
                 continue
-            qty = (measure / (resolved.base_unit_size if resolved.base_unit_size > 0 else Decimal("1"))) * resolved.quantity_per_unit
+            per_basis_qty = Decimal(str(norm.per_basis_qty or resolved.base_unit_size or 1))
+            consumption_qty = Decimal(str(norm.consumption_qty or norm.quantity_per_basis or resolved.quantity_per_unit or 0))
+            if per_basis_qty <= 0:
+                per_basis_qty = Decimal("1")
+            qty = (measure / per_basis_qty) * consumption_qty
 
             coats = Decimal("1")
+            if norm.layers_multiplier_enabled:
+                coats_candidate = Decimal(str(item.quantity or 1))
+                coats = coats_candidate if coats_candidate > 0 else Decimal("1")
             if norm.coats_multiplier_mode == "use_work_coats":
-                coats = Decimal(str(item.quantity or 1)) if Decimal(str(item.quantity or 0)) > 0 else Decimal("1")
+                coats_candidate = Decimal(str(item.quantity or 1))
+                coats = coats_candidate if coats_candidate > 0 else Decimal("1")
             qty = _q(qty * coats)
-            qty = _q(qty * (Decimal("1") + resolved.waste_percent / Decimal("100")))
+            waste_pct = Decimal(str(norm.waste_factor_pct if norm.waste_factor_pct is not None else resolved.waste_percent))
+            qty = _q(qty * (Decimal("1") + waste_pct / Decimal("100")))
 
             pack_size = Decimal(str(norm.package_size)) if norm.package_size is not None else None
             packs_count = None
@@ -300,7 +341,7 @@ def _compute_bom_from_norms(db: Session, project: Project, warnings: list[str]) 
             unit_price = Decimal(str(norm.default_unit_price_sek or 0))
             cost = _qm((Decimal(packs_count) * unit_price) if packs_count is not None else (qty_final * unit_price))
             basis_label = {"m2": "m2", "piece": "pcs", "room": "room"}.get(resolved.unit_basis, resolved.unit_basis)
-            norm_label = f"{resolved.quantity_per_unit} / {resolved.base_unit_size} {basis_label}"
+            norm_label = f"{consumption_qty} / {per_basis_qty} {basis_label}"
 
             key = f"{norm.material_name}|{norm.material_unit}"
             bucket = grouped.setdefault(
@@ -317,7 +358,7 @@ def _compute_bom_from_norms(db: Session, project: Project, warnings: list[str]) 
                     "surface": resolved.surface_kind,
                     "coats": coats,
                     "norm": norm_label,
-                    "waste": resolved.waste_percent,
+                    "waste": waste_pct,
                     "unit": norm.material_unit,
                     "material_name": norm.material_name,
                     "details": [],
@@ -531,3 +572,96 @@ def apply_bom_to_invoice_material_lines(db: Session, project_id: int, report: BO
     recalculate_invoice_totals(db, invoice)
     db.commit()
     return len(report.items)
+
+
+def _convert_qty(value: Decimal, from_unit: str | None, to_unit: str | None, *, density_kg_per_l: Decimal | None = None, pack_size: Decimal | None = None, pack_unit: str | None = None) -> Decimal | None:
+    source = (from_unit or "").strip().upper()
+    target = (to_unit or "").strip().upper()
+    if source == target:
+        return value
+    if {source, target} == {"L", "KG"}:
+        if density_kg_per_l is None or density_kg_per_l <= 0:
+            return None
+        if source == "L":
+            return value * density_kg_per_l
+        return value / density_kg_per_l
+    if source == "PACK":
+        if pack_size is None or pack_size <= 0 or not pack_unit:
+            return None
+        return _convert_qty(value * pack_size, pack_unit, target, density_kg_per_l=density_kg_per_l, pack_size=pack_size, pack_unit=pack_unit)
+    if target == "PACK":
+        if pack_size is None or pack_size <= 0 or not pack_unit:
+            return None
+        in_pack_unit = _convert_qty(value, source, pack_unit, density_kg_per_l=density_kg_per_l, pack_size=pack_size, pack_unit=pack_unit)
+        if in_pack_unit is None:
+            return None
+        return in_pack_unit / pack_size
+    return None
+
+
+def _select_supplier_price(*, prices: list[SupplierMaterialPrice], strategy: ProcurementStrategy, supplier_id: int | None) -> SupplierMaterialPrice | None:
+    if not prices:
+        return None
+    sorted_prices = sorted(prices, key=lambda p: (Decimal(str(p.pack_price_ex_vat or 0)), p.supplier_id, p.id))
+    if strategy == ProcurementStrategy.FIXED_SUPPLIER:
+        return next((p for p in sorted_prices if p.supplier_id == supplier_id), None)
+    if strategy == ProcurementStrategy.PREFERRED_FIRST and supplier_id:
+        preferred = next((p for p in sorted_prices if p.supplier_id == supplier_id), None)
+        if preferred:
+            return preferred
+    return sorted_prices[0]
+
+
+def compute_procurement_plan(db: Session, project_id: int, strategy: ProcurementStrategy = ProcurementStrategy.CHEAPEST, supplier_id: int | None = None) -> ProcurementPlan:
+    bom = compute_project_bom(db, project_id)
+    lines: list[ProcurementLine] = []
+    warnings: list[str] = []
+    for item in bom.items:
+        line_warnings: list[str] = []
+        prices = db.query(SupplierMaterialPrice).filter(SupplierMaterialPrice.material_id == item.material_id).all()
+        selected = _select_supplier_price(prices=prices, strategy=strategy, supplier_id=supplier_id)
+        qty = Decimal(str(item.qty_final_unit or 0))
+        packs_needed = Decimal("0")
+        purchase_qty = qty
+        line_total = Decimal("0")
+        unit_price = None
+        price_unit = None
+        if selected is None:
+            line_warnings.append("NO_SUPPLIER_PRICE")
+            line_total = _qm(Decimal(str(item.cost_ex_vat or 0)))
+        else:
+            pack_size = Decimal(str(selected.pack_size or 0))
+            if pack_size <= 0:
+                line_warnings.append("NO_PACK_SIZE")
+                line_warnings.append("INVALID_PACK_SIZE")
+                line_total = _qm(Decimal(str(item.cost_ex_vat or 0)))
+            else:
+                qty_in_pack_unit = _convert_qty(qty, item.unit, selected.pack_unit)
+                if qty_in_pack_unit is None:
+                    line_warnings.append(f"CONVERSION_{item.unit}_TO_{selected.pack_unit}_UNAVAILABLE")
+                else:
+                    packs_needed = (qty_in_pack_unit / pack_size).to_integral_value(rounding=ROUND_CEILING)
+                    purchase_qty = packs_needed * pack_size
+                    unit_price = Decimal(str(selected.pack_price_ex_vat or 0))
+                    price_unit = "PACK"
+                    line_total = _qm(packs_needed * unit_price)
+        if line_warnings:
+            warnings.extend([f"material:{item.material_id}:{code}" for code in line_warnings])
+        lines.append(
+            ProcurementLine(
+                material_id=item.material_id,
+                material_name=item.name,
+                qty=qty,
+                unit=item.unit,
+                supplier_id=selected.supplier_id if selected else None,
+                supplier_name=selected.supplier.name if selected else None,
+                price_unit=price_unit,
+                unit_price_ex_vat=unit_price,
+                packs_needed=packs_needed,
+                purchase_qty=_q(purchase_qty),
+                line_total_cost_ex_vat=line_total,
+                warnings=line_warnings,
+            )
+        )
+    total = _qm(sum((line.line_total_cost_ex_vat for line in lines), Decimal("0")))
+    return ProcurementPlan(strategy=strategy, lines=lines, total_cost_ex_vat=total, warnings=sorted(set(warnings)))

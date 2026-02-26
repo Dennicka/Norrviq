@@ -139,8 +139,17 @@ def _parse_catalog_form(form) -> tuple[dict, list[str]]:
 
 @router.get("/rules")
 @router.get("/norms")
-async def list_rules(request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang)):
-    norms = db.query(MaterialConsumptionNorm).order_by(MaterialConsumptionNorm.id.desc()).all()
+async def list_rules(request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang), active: bool | None = None, material: str | None = None, work_type_code: str | None = None, basis_type: str | None = None):
+    query = db.query(MaterialConsumptionNorm)
+    if active is not None:
+        query = query.filter(MaterialConsumptionNorm.active.is_(active))
+    if material:
+        query = query.filter(MaterialConsumptionNorm.material_name.ilike(f"%{material.strip()}%"))
+    if work_type_code:
+        query = query.filter(MaterialConsumptionNorm.work_type_code == work_type_code.strip())
+    if basis_type:
+        query = query.filter(MaterialConsumptionNorm.basis_type == basis_type.strip())
+    norms = query.order_by(MaterialConsumptionNorm.id.desc()).all()
     context = template_context(request, lang)
     context["norms"] = norms
     return templates.TemplateResponse(request, "materials/norms_list.html", context)

@@ -10,6 +10,7 @@
       {% endfor %}
     </select>
   </label>
+  <label>{{ t('shopping.strategy') if t else "Strategy" }}<select name="strategy"><option value="CHEAPEST" {% if selected_strategy == "CHEAPEST" %}selected{% endif %}>CHEAPEST</option><option value="PREFERRED_FIRST" {% if selected_strategy == "PREFERRED_FIRST" %}selected{% endif %}>PREFERRED</option><option value="FIXED_SUPPLIER" {% if selected_strategy == "FIXED_SUPPLIER" %}selected{% endif %}>FIXED</option></select></label>
   <label><input type="checkbox" name="group_by_supplier" value="true" {% if group_by_supplier %}checked{% endif %}> {{ t('shopping.group_by_supplier') }}</label>
   <label><input type="checkbox" name="include_items_without_price" value="true" {% if include_items_without_price %}checked{% endif %}> {{ t('shopping.include_without_price') }}</label>
   <button type="submit">{{ t('common.apply') }}</button>
