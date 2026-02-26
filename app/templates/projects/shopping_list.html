@@ -1,13 +1,45 @@
 {% extends 'base.html' %}
 {% block content %}
-<h1>Shopping List</h1>
-<p><a href="/materials/catalog">Manage material catalog</a></p>
-<p><a href="/projects/{{ project.id }}/shopping-list/export.csv">Export CSV</a> | <a href="/projects/{{ project.id }}/shopping-list/export.pdf">Export PDF</a></p>
-<table><tr><th>Material</th><th>Required qty</th><th>Selected product</th><th>Package size</th><th>Packages to buy</th><th>Buy qty</th><th>Overbuy</th><th>Total ex VAT</th><th>Total inc VAT</th></tr>
-{% for i in shopping_list.items %}<tr><td>{{ i.material_name }}</td><td>{{ i.qty_final_unit }} {{ i.unit }}</td><td>{{ i.supplier_name or '-' }}</td><td>{{ i.pack_size or '-' }}</td><td>{{ i.packs_count }}</td><td>{{ (i.packs_count * i.pack_size) if i.pack_size else '-' }}</td><td>{{ ((i.packs_count * i.pack_size) - i.qty_final_unit) if i.pack_size else '-' }}</td><td>{{ i.total_ex_vat }}</td><td>{{ i.estimated_cost_inc_vat }}</td></tr>{% endfor %}
+<h1 data-testid="shopping-title">{{ t('shopping.title') }}</h1>
+<form method="get" action="/projects/{{ project.id }}/shopping-list" style="margin-bottom: 12px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+  <label>{{ t('shopping.supplier') }}
+    <select name="supplier_id">
+      <option value="">{{ t('shopping.supplier_all') }}</option>
+      {% for supplier in suppliers %}
+        <option value="{{ supplier.id }}" {% if selected_supplier_id == supplier.id %}selected{% endif %}>{{ supplier.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label><input type="checkbox" name="group_by_supplier" value="true" {% if group_by_supplier %}checked{% endif %}> {{ t('shopping.group_by_supplier') }}</label>
+  <label><input type="checkbox" name="include_items_without_price" value="true" {% if include_items_without_price %}checked{% endif %}> {{ t('shopping.include_without_price') }}</label>
+  <button type="submit">{{ t('common.apply') }}</button>
+</form>
+<p><a href="/projects/{{ project.id }}/shopping-list/print">{{ t('common.print') }}</a> | <a href="/projects/{{ project.id }}/shopping-list/export.csv">Export CSV</a> | <a href="/projects/{{ project.id }}/shopping-list/export.pdf">Export PDF</a></p>
+<table>
+  <tr>
+    <th>{{ t('shopping.material') }}</th><th>{{ t('shopping.planned_qty') }}</th><th>{{ t('shopping.pack_size') }}</th><th>{{ t('shopping.packs_needed') }}</th><th>{{ t('shopping.supplier') }}</th><th>{{ t('shopping.unit_price') }}</th><th>{{ t('shopping.line_total') }}</th>
+  </tr>
+  {% for i in shopping_list.items %}
+  <tr>
+    <td>{{ i.material_name }} {% if 'NO_PACK_SIZE' in i.warnings %}<small>No pack size</small>{% endif %} {% if 'NO_SUPPLIER_PRICE' in i.warnings %}<small>No supplier price</small>{% endif %}</td>
+    <td>{{ i.planned_qty }} {{ i.planned_unit }}</td>
+    <td>{{ i.pack_size or '-' }} {{ i.pack_unit or '' }}</td>
+    <td>{{ i.packs_needed }}</td>
+    <td>{{ i.supplier_name or '-' }}</td>
+    <td>{{ i.unit_price or '-' }}</td>
+    <td>{{ i.line_total_cost }}</td>
+  </tr>
+  {% endfor %}
 </table>
-<p>Total ex VAT: {{ shopping_list.total_ex_vat }} | inc VAT: {{ shopping_list.total_inc_vat }}</p>
-{% if shopping_list.warnings %}<h3>Unresolved materials</h3><ul>{% for w in shopping_list.warnings %}<li>{{ w }}</li>{% endfor %}</ul>{% endif %}
-<form method="post" action="/projects/{{ project.id }}/shopping-list/apply-costs">{{ csrf_input(request) }}<button type="submit">Apply to Project Costs</button></form>
-<form method="post" action="/projects/{{ project.id }}/shopping-list/apply-invoice">{{ csrf_input(request) }}<button type="submit" {% if not draft_invoice %}disabled{% endif %}>Apply as Invoice Material Lines</button></form>
+<p>Total packs: {{ shopping_list.total_packs }} | total cost (SEK): {{ shopping_list.total_cost_sek }}</p>
+<h3>Unresolved materials</h3>
+{% if shopping_list.warnings %}
+<ul>
+  {% for warning in shopping_list.warnings %}
+    <li>{{ warning }}</li>
+  {% endfor %}
+</ul>
+{% else %}
+<p>—</p>
+{% endif %}
 {% endblock %}

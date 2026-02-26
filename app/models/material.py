@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, Integer, Numeric, String
+from sqlalchemy import Boolean, Column, Enum, Integer, Numeric, String
 from sqlalchemy.orm import relationship
 
 from app.db import Base
@@ -14,6 +14,11 @@ class Material(Base):
     category = Column(String, nullable=True)
     unit = Column(String, nullable=False)
     sku = Column(String, nullable=True)
+    pack_size = Column(Numeric(12, 4), nullable=True)
+    pack_unit = Column(String(20), nullable=True)
+    pack_rounding_rule = Column(Enum("CEIL", "NEAREST", "NONE", name="material_pack_rounding_rule"), nullable=False, default="CEIL")
+    min_pack_qty = Column(Numeric(12, 2), nullable=False, default=1)
+    is_bulk_material = Column(Boolean, nullable=False, default=False)
     default_pack_size = Column(Numeric(12, 2), nullable=True)
     default_cost_per_unit_ex_vat = Column(Numeric(12, 2), nullable=True)
     default_sell_per_unit_ex_vat = Column(Numeric(12, 2), nullable=True)

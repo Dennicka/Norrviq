@@ -63,6 +63,20 @@ def _create_invoice() -> tuple[int, int]:
         db.close()
 
 
+def _create_offer_project() -> int:
+    db = SessionLocal()
+    try:
+        c = Client(name=f"Client-{uuid.uuid4()}", address="Addr")
+        db.add(c)
+        db.flush()
+        project = Project(name="Offer Fallback", client_id=c.id)
+        db.add(project)
+        db.commit()
+        return project.id
+    finally:
+        db.close()
+
+
 def test_invoice_preview_opens_with_pdf_fallback(monkeypatch):
     project_id, invoice_id = _create_invoice()
     login()
@@ -82,16 +96,12 @@ def test_invoice_pdf_redirects_to_print_view_when_weasyprint_missing(monkeypatch
 
     response = client.get(f"/invoices/{invoice_id}/pdf", follow_redirects=False)
 
-    assert response.status_code == 303
-    assert response.headers["location"] == f"/invoices/{invoice_id}/print?lang=sv"
-
-    print_response = client.get(response.headers["location"])
-    assert print_response.status_code == 200
-    assert "text/html" in print_response.headers["content-type"]
-    assert "reservläge" in print_response.text
-    assert "Dokumentspråk" in print_response.text
-    assert "top-nav" not in print_response.text
-    assert "offer-toolbar" not in print_response.text
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    assert "reservläge" in response.text
+    assert "Dokumentspråk" in response.text
+    assert "top-nav" not in response.text
+    assert "offer-toolbar" not in response.text
 
 
 def test_invoice_pdf_keeps_legacy_html_render_contract(monkeypatch):
@@ -112,6 +122,18 @@ def test_invoice_pdf_keeps_legacy_html_render_contract(monkeypatch):
     assert response.content.startswith(b"%PDF")
     assert "html" in captured
     assert "invoice-header" in captured["html"]
+
+
+def test_offer_pdf_returns_html_when_pdf_engine_unavailable(monkeypatch):
+    project_id = _create_offer_project()
+    login()
+    monkeypatch.setattr("app.routers.web_documents.render_pdf_from_html", lambda **_: (_ for _ in ()).throw(RuntimeError("PDF engine is not available")))
+
+    response = client.get(f"/offers/{project_id}/pdf")
+
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    assert "fallback mode" in response.text or "резервный" in response.text or "reservläge" in response.text
 
 
 

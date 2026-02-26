@@ -1,8 +1,8 @@
 <!doctype html><html><body>
 <h1>Shopping List — {{ project.name }}</h1>
 <table>
-<tr><th>Material</th><th>Packs</th><th>Pack size</th><th>Supplier</th><th>Total ex VAT</th></tr>
-{% for i in shopping_list.items %}<tr><td>{{ i.material_name }}</td><td>{{ i.packs_count }}</td><td>{{ i.pack_size or '-' }}</td><td>{{ i.supplier_name or '-' }}</td><td>{{ i.total_ex_vat }}</td></tr>{% endfor %}
+<tr><th>Material</th><th>Planned</th><th>Packs</th><th>Pack size</th><th>Supplier</th><th>Line total</th></tr>
+{% for i in shopping_list.items %}<tr><td>{{ i.material_name }}</td><td>{{ i.planned_qty }} {{ i.planned_unit }}</td><td>{{ i.packs_needed }}</td><td>{{ i.pack_size or '-' }} {{ i.pack_unit or '' }}</td><td>{{ i.supplier_name or '-' }}</td><td>{{ i.line_total_cost }}</td></tr>{% endfor %}
 </table>
-<p>Total ex VAT: {{ shopping_list.total_ex_vat }}</p>
+<p>Total packs: {{ shopping_list.total_packs }} | Total SEK: {{ shopping_list.total_cost_sek }}</p>
 </body></html>

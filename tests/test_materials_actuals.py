@@ -1,6 +1,5 @@
 from datetime import datetime, timezone
 from decimal import Decimal
-import importlib.util
 from uuid import uuid4
 
 import pytest
@@ -15,6 +14,7 @@ from app.models.project import Project
 from app.models.room import Room
 from app.models.supplier import Supplier
 from app.models.supplier_material_price import SupplierMaterialPrice
+from app.services.pdf_engine import is_pdf_engine_available
 from app.models.user import User
 from app.security import hash_password
 from app.services.material_actuals import compute_materials_plan_vs_actual, create_material_purchase
@@ -144,7 +144,7 @@ def test_export_csv_contains_expected_headers():
     assert "material_id,material_name" in response.text
 
 
-@pytest.mark.skipif(importlib.util.find_spec("weasyprint") is None, reason="weasyprint not installed")
+@pytest.mark.skipif(not is_pdf_engine_available(), reason="pdf engine not available")
 def test_export_pdf_returns_pdf_header():
     _login("ma-admin3@example.com", "admin")
     project_id, _ = _seed_project()

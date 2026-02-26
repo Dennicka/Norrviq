@@ -2,6 +2,9 @@
 <html>
 <head><meta charset="utf-8"><title>{{ t("offer.title") }}</title></head>
 <body>
+    {% if show_pdf_fallback_hint %}
+    <div>{{ t("invoice.pdf_fallback_mode") }} — {{ t("common.save_as_pdf_via_browser") }}</div>
+    {% endif %}
     <h1>{{ t("offer.title") }}</h1>
     <div>{{ company_profile.legal_name }}</div>
     <div>{{ t("offer.number") }}: {{ offer_number if offer_number else "DRAFT" }}</div>
