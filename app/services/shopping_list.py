@@ -8,10 +8,10 @@ from sqlalchemy.orm import Session
 from app.models.cost import CostCategory, ProjectCostItem
 from app.models.invoice import Invoice
 from app.models.invoice_line import InvoiceLine
+from app.models.material import Material
 from app.models.project_procurement_settings import ProjectProcurementSettings
 from app.models.supplier_material_price import SupplierMaterialPrice
 from app.services.invoice_lines import recalculate_invoice_totals
-from app.services.material_costing import cost_project_materials
 from app.services.materials_bom import compute_project_bom
 
 MONEY_Q = Decimal("0.01")
@@ -21,17 +21,54 @@ MONEY_Q = Decimal("0.01")
 class ShoppingListItem:
     material_id: int
     material_name: str
-    sku: str | None
-    unit: str
-    qty_final_unit: Decimal
-    supplier_name: str | None
+    planned_qty: Decimal
+    planned_unit: str
     pack_size: Decimal | None
-    packs_count: int
-    pack_price_ex_vat: Decimal
-    total_ex_vat: Decimal
-    vat_rate_pct: Decimal
-    estimated_cost_inc_vat: Decimal
-    notes: str | None
+    pack_unit: str | None
+    packs_needed: Decimal
+    purchase_qty: Decimal
+    supplier_id: int | None
+    supplier_name: str | None
+    unit_price: Decimal | None
+    line_total_cost: Decimal
+    warnings: list[str]
+    sku: str | None = None
+
+    @property
+    def qty_final_unit(self) -> Decimal:
+        return self.planned_qty
+
+    @property
+    def unit(self) -> str:
+        return self.planned_unit
+
+    @property
+    def packs_count(self) -> Decimal:
+        return self.packs_needed
+
+    @property
+    def pack_price_ex_vat(self) -> Decimal:
+        return self.unit_price or Decimal("0")
+
+    @property
+    def total_ex_vat(self) -> Decimal:
+        return self.line_total_cost
+
+    @property
+    def estimated_cost_inc_vat(self) -> Decimal:
+        return self.line_total_cost
+
+    @property
+    def vat_rate_pct(self) -> Decimal:
+        return Decimal("25.00")
+
+    @property
+    def notes(self) -> str | None:
+        return ",".join(self.warnings) if self.warnings else None
+
+    @property
+    def cost_ex_vat(self) -> Decimal:
+        return self.line_total_cost
 
 
 @dataclass
@@ -39,9 +76,18 @@ class ShoppingListReport:
     project_id: int
     source_hash: str
     items: list[ShoppingListItem]
-    total_ex_vat: Decimal
-    total_inc_vat: Decimal
+    total_packs: Decimal
+    total_cost_sek: Decimal
+    grouped_by_supplier: dict[str, list[ShoppingListItem]]
     warnings: list[str]
+
+    @property
+    def total_ex_vat(self) -> Decimal:
+        return self.total_cost_sek
+
+    @property
+    def total_inc_vat(self) -> Decimal:
+        return self.total_cost_sek
 
 
 def _qm(v: Decimal) -> Decimal:
@@ -59,140 +105,119 @@ def get_or_create_procurement_settings(db: Session, project_id: int) -> ProjectP
     return settings
 
 
-def _select_price(prices: list[SupplierMaterialPrice], preferred_supplier_id: int | None, auto_select_cheapest: bool) -> SupplierMaterialPrice | None:
+def _select_price(prices: list[SupplierMaterialPrice], supplier_id: int | None, preferred_supplier_id: int | None, auto_select_cheapest: bool) -> SupplierMaterialPrice | None:
     if not prices:
+        return None
+    if supplier_id:
+        for price in prices:
+            if price.supplier_id == supplier_id:
+                return price
         return None
     if preferred_supplier_id:
         for price in prices:
             if price.supplier_id == preferred_supplier_id:
                 return price
     if auto_select_cheapest:
-        return min(prices, key=lambda p: (Decimal(str(p.pack_price_ex_vat or 0)), p.id))
-    return min(prices, key=lambda p: (Decimal(str(p.pack_price_ex_vat or 0)), p.id))
+        return min(prices, key=lambda p: (Decimal(str(p.pack_price_ex_vat or 0)), p.supplier_id, p.id))
+    return min(prices, key=lambda p: (p.supplier_id, p.id))
 
 
-def compute_project_shopping_list(db: Session, project_id: int) -> ShoppingListReport:
+def _round_packs(planned_qty: Decimal, pack_size: Decimal, rounding_rule: str, min_pack_qty: Decimal) -> Decimal:
+    ratio = planned_qty / pack_size
+    if rounding_rule == "NONE":
+        packs = ratio
+    elif rounding_rule == "NEAREST":
+        packs = ratio.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    else:
+        packs = ratio.to_integral_value(rounding=ROUND_CEILING)
+    return packs if packs >= min_pack_qty else min_pack_qty
+
+
+def compute_project_shopping_list(
+    db: Session,
+    project_id: int,
+    supplier_id: int | None = None,
+    group_by_supplier: bool = True,
+    include_items_without_price: bool = True,
+) -> ShoppingListReport:
     bom = compute_project_bom(db, project_id)
-    catalog_report = cost_project_materials(db, project_id)
-    if not bom.items:
-        items = [
-            ShoppingListItem(
-                material_id=idx,
-                material_name=row.material_name,
-                sku=None,
-                unit=row.required_unit,
-                qty_final_unit=row.required_quantity,
-                supplier_name=None,
-                pack_size=row.package_size,
-                packs_count=row.packages_to_buy,
-                pack_price_ex_vat=row.unit_price_ex_vat,
-                total_ex_vat=row.total_ex_vat,
-                vat_rate_pct=Decimal("25.00") if row.total_ex_vat == 0 else _qm(row.total_vat / row.total_ex_vat * Decimal("100")),
-                estimated_cost_inc_vat=row.total_inc_vat,
-                notes=", ".join(row.warnings) if row.warnings else None,
-            )
-            for idx, row in enumerate(catalog_report.rows, start=1)
-        ]
-        warning_codes = [f"material:{i.material_id}:{i.notes}" for i in items if i.notes]
-        payload = {
-            "project_id": project_id,
-            "items": [{**asdict(item), "qty_final_unit": str(item.qty_final_unit)} for item in items],
-            "totals": {"ex": str(catalog_report.total_ex_vat), "inc": str(catalog_report.total_inc_vat)},
-        }
-        source_hash = hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()
-        return ShoppingListReport(
-            project_id=project_id,
-            source_hash=source_hash,
-            items=items,
-            total_ex_vat=catalog_report.total_ex_vat,
-            total_inc_vat=catalog_report.total_inc_vat,
-            warnings=warning_codes,
-        )
-
     settings = get_or_create_procurement_settings(db, project_id)
     warnings: list[str] = []
     items: list[ShoppingListItem] = []
 
     for bom_item in bom.items:
-        prices = db.query(SupplierMaterialPrice).filter(SupplierMaterialPrice.material_id == bom_item.material_id).all()
-        price = _select_price(prices, settings.preferred_supplier_id, settings.auto_select_cheapest)
-        vat_rate = Decimal("25.00")
-
-        if price is None:
-            unit_price = Decimal(str((bom_item.cost_ex_vat / bom_item.qty_final_unit) if bom_item.qty_final_unit > 0 else 0))
-            total_ex = _qm(unit_price * bom_item.qty_final_unit)
-            warnings.append(f"material:{bom_item.material_id}:NO_SUPPLIER_PRICE")
-            items.append(
-                ShoppingListItem(
-                    material_id=bom_item.material_id,
-                    material_name=bom_item.name,
-                    sku=None,
-                    unit=bom_item.unit,
-                    qty_final_unit=bom_item.qty_final_unit,
-                    supplier_name=None,
-                    pack_size=None,
-                    packs_count=0,
-                    pack_price_ex_vat=unit_price,
-                    total_ex_vat=total_ex,
-                    vat_rate_pct=vat_rate,
-                    estimated_cost_inc_vat=_qm(total_ex * (Decimal("1") + vat_rate / Decimal("100"))),
-                    notes="fallback_default_cost_per_unit",
-                )
-            )
+        planned_qty = Decimal(str(bom_item.qty_final_unit or 0))
+        if planned_qty <= 0:
             continue
+        material = db.get(Material, bom_item.material_id)
+        prices = db.query(SupplierMaterialPrice).filter(SupplierMaterialPrice.material_id == bom_item.material_id).all()
+        selected_price = _select_price(prices, supplier_id, settings.preferred_supplier_id, settings.auto_select_cheapest)
 
-        pack_size = Decimal(str(price.pack_size or 0))
-        if pack_size <= 0:
-            warnings.append(f"material:{bom_item.material_id}:MISSING_PACK_SIZE")
-            pack_size = bom_item.qty_final_unit if bom_item.qty_final_unit > 0 else Decimal("1")
+        pack_size = Decimal(str(selected_price.pack_size)) if selected_price and selected_price.pack_size else None
+        pack_unit = selected_price.pack_unit if selected_price else None
+        if pack_size is None and material and material.pack_size is not None:
+            pack_size = Decimal(str(material.pack_size))
+            pack_unit = material.pack_unit or bom_item.unit
+        rounding_rule = str((material.pack_rounding_rule if material else "CEIL") or "CEIL")
+        min_pack_qty = Decimal(str((material.min_pack_qty if material else 1) or 1))
 
-        packs_count = 1
-        if settings.rounding_mode.value == "CEIL_TO_PACKS":
-            packs_count = int((bom_item.qty_final_unit / pack_size).to_integral_value(rounding=ROUND_CEILING)) if pack_size > 0 else 1
+        line_warnings: list[str] = []
+        if pack_size is None or pack_size <= 0:
+            packs_needed = planned_qty
+            purchase_qty = planned_qty
+            pack_size = None
+            line_warnings.append("NO_PACK_SIZE")
+        else:
+            packs_needed = _round_packs(planned_qty, pack_size, rounding_rule, min_pack_qty)
+            purchase_qty = _qm(packs_needed * pack_size)
 
-        pack_price = Decimal(str(price.pack_price_ex_vat or 0))
-        total_ex = _qm(Decimal(packs_count) * pack_price)
-        material = price.material
-        vat_rate = Decimal(str(material.vat_rate_pct or 25))
+        unit_price = Decimal(str(selected_price.price_per_pack)) if selected_price else None
+        if unit_price is None:
+            line_warnings.append("NO_SUPPLIER_PRICE")
+            if not include_items_without_price:
+                continue
+
+        line_total = _qm((unit_price or Decimal("0")) * packs_needed)
+        for code in line_warnings:
+            warnings.append(f"material:{bom_item.material_id}:{code}")
+
         items.append(
             ShoppingListItem(
                 material_id=bom_item.material_id,
                 material_name=bom_item.name,
-                sku=material.sku,
-                unit=bom_item.unit,
-                qty_final_unit=bom_item.qty_final_unit,
-                supplier_name=price.supplier.name,
+                planned_qty=planned_qty,
+                planned_unit=bom_item.unit,
                 pack_size=pack_size,
-                packs_count=packs_count,
-                pack_price_ex_vat=pack_price,
-                total_ex_vat=total_ex,
-                vat_rate_pct=vat_rate,
-                estimated_cost_inc_vat=_qm(total_ex * (Decimal("1") + vat_rate / Decimal("100"))),
-                notes=None,
+                pack_unit=pack_unit or bom_item.unit,
+                packs_needed=packs_needed,
+                purchase_qty=purchase_qty,
+                supplier_id=selected_price.supplier_id if selected_price else None,
+                supplier_name=selected_price.supplier.name if selected_price else None,
+                unit_price=unit_price,
+                line_total_cost=line_total,
+                warnings=line_warnings,
             )
         )
 
-    for unresolved in catalog_report.unresolved_rows:
-        warnings.append(f"material:{unresolved.material_code}:UNRESOLVED_PRICING")
+    items = sorted(items, key=lambda i: (i.material_name.lower(), i.material_id))
+    grouped: dict[str, list[ShoppingListItem]] = {}
+    if group_by_supplier:
+        for item in items:
+            key = item.supplier_name or "Unassigned"
+            grouped.setdefault(key, []).append(item)
 
-    total_ex = _qm(sum((i.total_ex_vat for i in items), start=Decimal("0")))
-    total_inc = _qm(sum((i.estimated_cost_inc_vat for i in items), start=Decimal("0")))
+    total_packs = _qm(sum((item.packs_needed for item in items), start=Decimal("0")))
+    total_cost = _qm(sum((item.line_total_cost for item in items), start=Decimal("0")))
     payload = {
         "project_id": project_id,
-        "items": [
-            {
-                **asdict(item),
-                "qty_final_unit": str(item.qty_final_unit),
-                "pack_size": str(item.pack_size) if item.pack_size is not None else None,
-                "pack_price_ex_vat": str(item.pack_price_ex_vat),
-                "total_ex_vat": str(item.total_ex_vat),
-            }
-            for item in items
-        ],
-        "totals": {"ex": str(total_ex), "inc": str(total_inc)},
+        "supplier_id": supplier_id,
+        "group_by_supplier": group_by_supplier,
+        "include_items_without_price": include_items_without_price,
+        "items": [{**asdict(item), "planned_qty": str(item.planned_qty), "pack_size": str(item.pack_size) if item.pack_size is not None else None, "packs_needed": str(item.packs_needed)} for item in items],
+        "totals": {"packs": str(total_packs), "cost": str(total_cost)},
     }
     source_hash = hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()
-    return ShoppingListReport(project_id=project_id, source_hash=source_hash, items=items, total_ex_vat=total_ex, total_inc_vat=total_inc, warnings=sorted(set(warnings)))
+    return ShoppingListReport(project_id=project_id, source_hash=source_hash, items=items, total_packs=total_packs, total_cost_sek=total_cost, grouped_by_supplier=grouped, warnings=sorted(set(warnings)))
 
 
 def apply_shopping_list_to_project_cost_items(db: Session, project_id: int, report: ShoppingListReport) -> int:
@@ -205,19 +230,7 @@ def apply_shopping_list_to_project_cost_items(db: Session, project_id: int, repo
         db.add(category)
         db.flush()
     for item in report.items:
-        db.add(
-            ProjectCostItem(
-                project_id=project_id,
-                cost_category_id=category.id,
-                material_id=item.material_id,
-                title=f"Shopping: {item.material_name}",
-                amount=item.total_ex_vat,
-                is_material=True,
-                source_type="SHOPPING_LIST",
-                source_hash=report.source_hash,
-                comment=f"packs={item.packs_count}",
-            )
-        )
+        db.add(ProjectCostItem(project_id=project_id, cost_category_id=category.id, material_id=item.material_id, title=f"Shopping: {item.material_name}", amount=item.line_total_cost, is_material=True, source_type="SHOPPING_LIST", source_hash=report.source_hash, comment=f"packs={item.packs_needed}"))
     db.commit()
     return len(report.items)
 
@@ -231,7 +244,7 @@ def apply_shopping_list_to_invoice_material_lines(db: Session, project_id: int, 
     changed = 0
     for item in report.items:
         line = by_material.get(item.material_id)
-        qty = Decimal(item.packs_count)
+        qty = Decimal(str(item.packs_needed))
         if line is None:
             max_pos += 1
             line = InvoiceLine(invoice_id=invoice.id, position=max_pos, kind="MATERIAL", source_type="SHOPPING_LIST", source_id=item.material_id)
@@ -239,8 +252,8 @@ def apply_shopping_list_to_invoice_material_lines(db: Session, project_id: int, 
         line.description = f"Shopping: {item.material_name}"
         line.unit = "pack"
         line.quantity = qty
-        line.unit_price_ex_vat = _qm(item.pack_price_ex_vat)
-        line.vat_rate_pct = _qm(item.vat_rate_pct)
+        line.unit_price_ex_vat = _qm(item.unit_price or Decimal("0"))
+        line.vat_rate_pct = _qm(Decimal("25"))
         line.source_hash = report.source_hash
         changed += 1
     db.flush()

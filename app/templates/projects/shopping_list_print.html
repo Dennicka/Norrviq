@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Shopping List Print</title>
+  <style>
+    @page { size: A4; margin: 12mm; }
+    body { font-family: Arial, sans-serif; font-size: 12px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid #ddd; padding: 4px; }
+  </style>
+</head>
+<body>
+  <h1>{{ project.name }} — {{ t('shopping.title') }}</h1>
+  <p>{{ t('shopping.date') }}: {{ export_date }}</p>
+  {% if group_by_supplier and shopping_list.grouped_by_supplier %}
+    {% for supplier_name, rows in shopping_list.grouped_by_supplier.items() %}
+      <h3>{{ supplier_name }}</h3>
+      <table>
+        <tr><th>{{ t('shopping.material') }}</th><th>{{ t('shopping.planned_qty') }}</th><th>{{ t('shopping.pack_size') }}</th><th>{{ t('shopping.packs_needed') }}</th><th>{{ t('shopping.line_total') }}</th></tr>
+        {% for i in rows %}
+          <tr><td>{{ i.material_name }}</td><td>{{ i.planned_qty }} {{ i.planned_unit }}</td><td>{{ i.pack_size or '-' }} {{ i.pack_unit or '' }}</td><td>{{ i.packs_needed }}</td><td>{{ i.line_total_cost }}</td></tr>
+        {% endfor %}
+      </table>
+    {% endfor %}
+  {% else %}
+    <table>
+      <tr><th>{{ t('shopping.material') }}</th><th>{{ t('shopping.planned_qty') }}</th><th>{{ t('shopping.pack_size') }}</th><th>{{ t('shopping.packs_needed') }}</th><th>{{ t('shopping.line_total') }}</th></tr>
+      {% for i in shopping_list.items %}
+        <tr><td>{{ i.material_name }}</td><td>{{ i.planned_qty }} {{ i.planned_unit }}</td><td>{{ i.pack_size or '-' }} {{ i.pack_unit or '' }}</td><td>{{ i.packs_needed }}</td><td>{{ i.line_total_cost }}</td></tr>
+      {% endfor %}
+    </table>
+  {% endif %}
+  <p>Total packs: {{ shopping_list.total_packs }} | Total SEK: {{ shopping_list.total_cost_sek }}</p>
+</body>
+</html>

@@ -21,3 +21,11 @@ class SupplierMaterialPrice(Base):
 
     supplier = relationship("Supplier", back_populates="material_prices")
     material = relationship("Material", back_populates="supplier_prices")
+
+    @property
+    def price_per_pack(self):
+        return self.pack_price_ex_vat
+
+    @property
+    def last_updated_at(self):
+        return self.updated_at
