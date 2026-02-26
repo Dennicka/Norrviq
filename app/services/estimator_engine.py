@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.models.project import Project, ProjectWorkItem
 from app.models.room import Room
 from app.models.settings import get_or_create_settings
+from app.services.materials_bom import compute_procurement_plan
 
 MONEY_Q = Decimal("0.01")
 HOURS_Q = Decimal("0.01")
@@ -259,22 +260,25 @@ def calculate_project_pricing_totals(db: Session, project_id: int, mode: str) ->
     project = _load_project(db, project_id)
     settings = get_or_create_settings(db)
     geometry = aggregate_project_geometry(db, project_id)
-    rows: list[dict] = []
     labour_rate = _d(getattr(settings, "internal_labor_cost_rate_sek", None))
+    rows: list[dict] = []
+    procurement = compute_procurement_plan(db, project_id)
+    materials_total = _q(procurement.total_cost_ex_vat)
     for item in project.work_items:
         qty = compute_work_item_qty(item, geometry.rooms, geometry)
         hours = compute_work_item_hours(item, qty)
         sell = compute_work_item_sell(item, qty, hours, settings, mode_override=_parse_pricing_mode(mode))
-        rows.append({"hours": hours, "sell": sell, "labour": _q(hours * labour_rate), "materials": _q(_d(item.materials_cost_sek))})
-    return _totals_from_rows(rows, _d(getattr(settings, "moms_percent", 0)))
+        rows.append({"hours": hours, "sell": sell, "labour": _q(hours * labour_rate), "materials": Decimal("0")})
+    totals = _totals_from_rows(rows, _d(getattr(settings, "moms_percent", 0)))
+    return Totals(total_hours=totals.total_hours, sell_ex_vat=totals.sell_ex_vat, labour_cost_ex_vat=totals.labour_cost_ex_vat, materials_ex_vat=materials_total, vat_total=_q((totals.sell_ex_vat + materials_total) * (_d(getattr(settings, "moms_percent", 0)) / Decimal("100"))), total_ex_vat=_q(totals.sell_ex_vat + materials_total), total_inc_vat=_q(totals.sell_ex_vat + materials_total + _q((totals.sell_ex_vat + materials_total) * (_d(getattr(settings, "moms_percent", 0)) / Decimal("100")))), profit_ex_vat=_q(totals.sell_ex_vat - totals.labour_cost_ex_vat - materials_total), margin_percent=(Decimal("0.00") if totals.sell_ex_vat <= 0 else _q((_q(totals.sell_ex_vat - totals.labour_cost_ex_vat - materials_total) / totals.sell_ex_vat) * Decimal("100"))), effective_hourly_ex_vat=totals.effective_hourly_ex_vat)
 
 
 def recalculate_project_work_items(db: Session, project_id: int) -> RecalcResult:
     project = _load_project(db, project_id)
     settings = get_or_create_settings(db)
     geometry = aggregate_project_geometry(db, project_id)
-    rows: list[dict] = []
     labour_rate = _d(getattr(settings, "internal_labor_cost_rate_sek", None))
+    rows: list[dict] = []
 
     for item in project.work_items:
         qty = compute_work_item_qty(item, geometry.rooms, geometry)
@@ -299,24 +303,34 @@ def build_project_estimate(db: Session, project_id: int) -> ProjectEstimate:
     settings = get_or_create_settings(db)
     geometry = aggregate_project_geometry(db, project_id)
     labour_rate = _d(getattr(settings, "internal_labor_cost_rate_sek", None))
-    rows: list[dict] = []
     per_room_hours: dict[int | None, Decimal] = {}
     per_category_hours: dict[str, Decimal] = {}
 
+    procurement = compute_procurement_plan(db, project_id)
+    materials_total = _q(procurement.total_cost_ex_vat)
+    total_hours_raw = Decimal("0")
+    total_sell_raw = Decimal("0")
+    total_labour_raw = Decimal("0")
     for item in project.work_items:
         qty = compute_work_item_qty(item, geometry.rooms, geometry)
         hours = compute_work_item_hours(item, qty)
         sell = compute_work_item_sell(item, qty, hours, settings)
         labour = _q(hours * labour_rate)
-        materials = _q(_d(item.materials_cost_sek))
-        rows.append({"hours": hours, "sell": sell, "labour": labour, "materials": materials})
+        total_hours_raw += hours
+        total_sell_raw += sell
+        total_labour_raw += labour
         per_room_hours[item.room_id] = _q(per_room_hours.get(item.room_id, Decimal("0")) + hours, HOURS_Q)
         category = (item.work_type.category if item.work_type else "other") or "other"
         per_category_hours[category] = _q(per_category_hours.get(category, Decimal("0")) + hours, HOURS_Q)
 
     modes = [PricingMode.HOURLY.value, PricingMode.PER_M2.value, PricingMode.FIXED_TOTAL.value, PricingMode.PIECEWORK.value]
     comparison = {mode: calculate_project_pricing_totals(db, project_id, mode) for mode in modes}
-    totals = _totals_from_rows(rows, _d(getattr(settings, "moms_percent", 0)))
+    vat_percent = _d(getattr(settings, "moms_percent", 0))
+    total_ex_vat = _q(total_sell_raw + materials_total)
+    vat_total = _q(total_ex_vat * (vat_percent / Decimal("100")))
+    profit = _q(total_sell_raw - total_labour_raw - materials_total)
+    margin = Decimal("0.00") if total_sell_raw <= 0 else _q((profit / total_sell_raw) * Decimal("100"))
+    totals = Totals(total_hours=_q(total_hours_raw, HOURS_Q), sell_ex_vat=_q(total_sell_raw), labour_cost_ex_vat=_q(total_labour_raw), materials_ex_vat=materials_total, vat_total=vat_total, total_ex_vat=total_ex_vat, total_inc_vat=_q(total_ex_vat + vat_total), profit_ex_vat=profit, margin_percent=margin, effective_hourly_ex_vat=(Decimal("0.00") if total_hours_raw <= 0 else _q(total_sell_raw / total_hours_raw)))
     return ProjectEstimate(totals=totals, per_room_hours=per_room_hours, per_category_hours=per_category_hours, mode_comparison=comparison)
 
 

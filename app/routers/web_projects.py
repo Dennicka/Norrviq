@@ -2232,6 +2232,8 @@ async def project_paint_settings_update(project_id: int, request: Request, db: S
 async def project_materials_plan(
     project_id: int,
     request: Request,
+    procurement_strategy: str | None = None,
+    supplier_id: int | None = None,
     db: Session = Depends(get_db),
     lang: str = Depends(get_current_lang),
 ):
@@ -2252,11 +2254,21 @@ async def project_materials_plan(
         project,
         lang,
         bom=report,
+        procurement_strategy=(procurement_strategy or "CHEAPEST"),
+        selected_supplier_id=supplier_id,
         material_settings=material_settings,
         draft_invoice=draft_invoice,
         is_readonly=get_current_user_role(request) not in {ADMIN_ROLE, OPERATOR_ROLE},
     )
     return templates.TemplateResponse(request, "projects/materials_plan.html", context)
+
+
+@router.post("/{project_id}/materials-plan/recalc")
+async def project_materials_plan_recalc(project_id: int, request: Request, db: Session = Depends(get_db)):
+    if not db.get(Project, project_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    compute_project_bom(db, project_id)
+    return RedirectResponse(url=f"/projects/{project_id}/materials-plan", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/{project_id}/materials-plan/apply-costs")
@@ -2419,16 +2431,16 @@ async def project_material_overrides_delete(project_id: int, override_id: int, r
 
 
 @router.get("/{project_id}/shopping-list")
-async def project_shopping_list_page(project_id: int, request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang), supplier_id: int | None = None, group_by_supplier: bool = True, include_items_without_price: bool = True):
+async def project_shopping_list_page(project_id: int, request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang), supplier_id: int | None = None, group_by_supplier: bool = True, include_items_without_price: bool = True, strategy: str | None = None):
     project = db.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    report = compute_project_shopping_list(db, project_id, supplier_id=supplier_id, group_by_supplier=group_by_supplier, include_items_without_price=include_items_without_price)
+    report = compute_project_shopping_list(db, project_id, supplier_id=supplier_id, group_by_supplier=group_by_supplier, include_items_without_price=include_items_without_price, strategy=strategy)
     procurement = get_or_create_procurement_settings(db, project_id)
     suppliers = db.query(Supplier).filter(Supplier.is_active.is_(True)).order_by(Supplier.name.asc()).all()
     draft_invoice = db.query(Invoice).filter(Invoice.project_id == project_id, Invoice.status == "draft").order_by(Invoice.id.desc()).first()
     log_event(db, request, "shopping_list_viewed", entity_type="PROJECT", entity_id=project_id, severity="INFO", metadata={"project_id": project_id, "count": len(report.items), "request_id": getattr(request.state, "request_id", None)})
-    context = build_project_context(db, request, project, lang, shopping_list=report, selected_supplier_id=supplier_id, group_by_supplier=group_by_supplier, include_items_without_price=include_items_without_price, procurement_settings=procurement, suppliers=suppliers, draft_invoice=draft_invoice, rounding_modes=[m.value for m in RoundingMode], is_readonly=get_current_user_role(request) not in {ADMIN_ROLE, OPERATOR_ROLE})
+    context = build_project_context(db, request, project, lang, shopping_list=report, selected_supplier_id=supplier_id, selected_strategy=(strategy or "CHEAPEST"), group_by_supplier=group_by_supplier, include_items_without_price=include_items_without_price, procurement_settings=procurement, suppliers=suppliers, draft_invoice=draft_invoice, rounding_modes=[m.value for m in RoundingMode], is_readonly=get_current_user_role(request) not in {ADMIN_ROLE, OPERATOR_ROLE})
     return templates.TemplateResponse(request, "projects/shopping_list.html", context)
 
 
@@ -2454,10 +2466,10 @@ async def project_shopping_list_settings(project_id: int, request: Request, db: 
 
 
 @router.get("/{project_id}/shopping-list/export.csv")
-async def project_shopping_list_export_csv(project_id: int, request: Request, db: Session = Depends(get_db), supplier_id: int | None = None, group_by_supplier: bool = True, include_items_without_price: bool = True):
+async def project_shopping_list_export_csv(project_id: int, request: Request, db: Session = Depends(get_db), supplier_id: int | None = None, group_by_supplier: bool = True, include_items_without_price: bool = True, strategy: str | None = None):
     if not db.get(Project, project_id):
         raise HTTPException(status_code=404, detail="Project not found")
-    report = compute_project_shopping_list(db, project_id, supplier_id=supplier_id, group_by_supplier=group_by_supplier, include_items_without_price=include_items_without_price)
+    report = compute_project_shopping_list(db, project_id, supplier_id=supplier_id, group_by_supplier=group_by_supplier, include_items_without_price=include_items_without_price, strategy=strategy)
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=["material_name", "planned_qty", "planned_unit", "pack_size", "pack_unit", "packs_needed", "purchase_qty", "supplier", "unit_price", "line_total", "warnings"])
     writer.writeheader()
@@ -2468,11 +2480,11 @@ async def project_shopping_list_export_csv(project_id: int, request: Request, db
 
 
 @router.get("/{project_id}/shopping-list/export.pdf")
-async def project_shopping_list_export_pdf(project_id: int, request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang), supplier_id: int | None = None, group_by_supplier: bool = True, include_items_without_price: bool = True):
+async def project_shopping_list_export_pdf(project_id: int, request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang), supplier_id: int | None = None, group_by_supplier: bool = True, include_items_without_price: bool = True, strategy: str | None = None):
     project = db.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    report = compute_project_shopping_list(db, project_id, supplier_id=supplier_id, group_by_supplier=group_by_supplier, include_items_without_price=include_items_without_price)
+    report = compute_project_shopping_list(db, project_id, supplier_id=supplier_id, group_by_supplier=group_by_supplier, include_items_without_price=include_items_without_price, strategy=strategy)
     context = template_context(request, lang)
     context.update({"project": project, "shopping_list": report, "group_by_supplier": group_by_supplier, "export_date": datetime.now(timezone.utc).date().isoformat()})
     html = templates.get_template("pdf/shopping_list_pdf.html").render(context)
@@ -2487,11 +2499,11 @@ async def project_shopping_list_export_pdf(project_id: int, request: Request, db
 
 
 @router.get("/{project_id}/shopping-list/print")
-async def project_shopping_list_print(project_id: int, request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang), supplier_id: int | None = None, group_by_supplier: bool = True, include_items_without_price: bool = True):
+async def project_shopping_list_print(project_id: int, request: Request, db: Session = Depends(get_db), lang: str = Depends(get_current_lang), supplier_id: int | None = None, group_by_supplier: bool = True, include_items_without_price: bool = True, strategy: str | None = None):
     project = db.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    report = compute_project_shopping_list(db, project_id, supplier_id=supplier_id, group_by_supplier=group_by_supplier, include_items_without_price=include_items_without_price)
+    report = compute_project_shopping_list(db, project_id, supplier_id=supplier_id, group_by_supplier=group_by_supplier, include_items_without_price=include_items_without_price, strategy=strategy)
     context = build_project_context(db, request, project, lang, shopping_list=report, group_by_supplier=group_by_supplier, export_date=datetime.now(timezone.utc).date().isoformat())
     return templates.TemplateResponse(request, "projects/shopping_list_print.html", context)
 

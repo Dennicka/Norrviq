@@ -3,6 +3,7 @@
 <h1>{{ t('materials.planned_materials') }}</h1>
 <p><a href="/projects/{{ project.id }}">← {{ t('projects.detail') }}</a></p>
 <p><a href="/projects/{{ project.id }}/materials-plan">{{ t('materials.recalculate') }}</a> · <a href="/projects/{{ project.id }}/materials/overrides">{{ t('materials.overrides.title') }}</a></p>
+<form method="post" action="/projects/{{ project.id }}/materials-plan/recalc">{{ csrf_input(request) }}<button type="submit">Recalculate BOM</button></form>
 <table>
   <thead>
     <tr>
