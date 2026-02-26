@@ -23,6 +23,9 @@ from app.services.pricing_consistency import DOC_TYPE_OFFER, validate_pricing_co
 from app.services.quality import evaluate_project_quality
 
 
+PRICING_MODE_ORDER = ["HOURLY", "FIXED_TOTAL", "PER_M2", "PER_ROOM", "PIECEWORK"]
+
+
 def _d(value: Decimal | None) -> Decimal:
     return Decimal(str(value or 0))
 
@@ -77,27 +80,50 @@ def build_estimator_workspace(db: Session, project_id: int, lang: str = "ru") ->
     pricing_scenarios: dict[str, dict] = {}
     pricing_warnings: list[str] = []
     policy = get_or_create_pricing_policy(db)
+    active_mode = (pricing.mode or "HOURLY").upper()
     for scenario in scenarios:
         floor = evaluate_floor(baseline=baseline, scenario=scenario, policy=policy)
-        pricing_scenarios[scenario.mode] = {
-            "mode": scenario.mode,
+        mode = (scenario.mode or "").upper()
+        pricing_scenarios[mode] = {
+            "mode": mode,
             "revenue": _d(scenario.price_ex_vat),
             "cost": _d(baseline.internal_total_cost),
             "profit": _d(scenario.profit),
             "margin_pct": _d(scenario.margin_pct),
             "effective_hourly": _d(scenario.effective_hourly_sell_rate),
             "total": _d(scenario.price_inc_vat),
-            "enabled": not scenario.invalid,
+            "enabled": mode == active_mode,
+            "invalid": bool(scenario.invalid),
             "missing_requirements": list(scenario.warnings if scenario.invalid else []),
             "below_margin_floor": bool(floor.is_below_floor),
             "warnings": list(scenario.warnings),
-            "is_selected": scenario.mode == pricing.mode,
+            "is_selected": mode == active_mode,
         }
         if WARNING_LOW_MARGIN in scenario.warnings:
-            pricing_warnings.append(f"{scenario.mode}:LOW_MARGIN")
+            pricing_warnings.append(f"{mode}:LOW_MARGIN")
+
+    for mode in PRICING_MODE_ORDER:
+        pricing_scenarios.setdefault(
+            mode,
+            {
+                "mode": mode,
+                "revenue": Decimal("0.00"),
+                "cost": Decimal("0.00"),
+                "profit": Decimal("0.00"),
+                "margin_pct": Decimal("0.00"),
+                "effective_hourly": Decimal("0.00"),
+                "total": Decimal("0.00"),
+                "enabled": mode == active_mode,
+                "invalid": True,
+                "missing_requirements": ["MISSING_REQUIREMENTS"],
+                "below_margin_floor": False,
+                "warnings": ["MISSING_REQUIREMENTS"],
+                "is_selected": mode == active_mode,
+            },
+        )
 
     # Lightweight hybrid scenario: safe visible compare based on best available mode.
-    enabled_modes = [row for row in pricing_scenarios.values() if row["enabled"]]
+    enabled_modes = [row for row in pricing_scenarios.values() if row["mode"] in PRICING_MODE_ORDER and not row["invalid"]]
     if enabled_modes:
         hybrid = max(enabled_modes, key=lambda row: row["profit"])
         pricing_scenarios["HYBRID"] = {
@@ -108,11 +134,12 @@ def build_estimator_workspace(db: Session, project_id: int, lang: str = "ru") ->
             "margin_pct": hybrid["margin_pct"],
             "effective_hourly": hybrid["effective_hourly"],
             "total": hybrid["total"],
-            "enabled": True,
+            "enabled": "HYBRID" == active_mode,
+            "invalid": False,
             "missing_requirements": [],
             "below_margin_floor": hybrid["below_margin_floor"],
             "warnings": [f"BLEND_FROM:{hybrid['mode']}"] + hybrid["warnings"],
-            "is_selected": pricing.mode == "HYBRID",
+            "is_selected": active_mode == "HYBRID",
         }
 
     bom = compute_project_bom(db, project_id)
@@ -152,7 +179,8 @@ def build_estimator_workspace(db: Session, project_id: int, lang: str = "ru") ->
     compare_rows = []
     project_estimate = build_project_estimate(db, project_id)
     deterministic_modes = {"HOURLY", "PER_M2", "FIXED_TOTAL", "PIECEWORK"}
-    for mode, scenario in pricing_scenarios.items():
+    for mode in PRICING_MODE_ORDER:
+        scenario = pricing_scenarios[mode]
         row = {"mode": mode, **scenario, "missing_requirements": _build_missing_reasons(scenario)}
         if mode in deterministic_modes:
             mode_totals = calculate_project_pricing_totals(db, project_id, mode)
@@ -164,10 +192,9 @@ def build_estimator_workspace(db: Session, project_id: int, lang: str = "ru") ->
                     "margin_pct": mode_totals.margin_percent,
                     "effective_hourly": mode_totals.effective_hourly_ex_vat,
                     "total_hours": project_estimate.totals.total_hours,
-                    "enabled": True,
-                    "missing_requirements": [],
                 }
             )
+        row["enabled"] = mode == (pricing.mode or "HOURLY").upper()
         compare_rows.append(row)
 
     return {
