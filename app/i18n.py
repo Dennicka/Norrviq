@@ -2418,3 +2418,25 @@ TRANSLATIONS_EN.update({
     "projects.documents.company_required.title": "Complete company details for a proper document:",
     "documents.company_required.payment": "Payment details (Bankgiro / Plusgiro / IBAN)",
 })
+
+TRANSLATIONS_RU.update({
+    "common.validation_error": "Ошибка валидации",
+    "projects.workspace.tab.estimator": "Смета",
+    "projects.workspace.tab.materials_plan": "План материалов",
+    "projects.workspace.tab.shopping_list": "Список закупок",
+    "projects.workspace.tab.pricing_settings": "Настройки цен",
+})
+TRANSLATIONS_SV.update({
+    "common.validation_error": "Valideringsfel",
+    "projects.workspace.tab.estimator": "Kalkyl",
+    "projects.workspace.tab.materials_plan": "Materialplan",
+    "projects.workspace.tab.shopping_list": "Inköpslista",
+    "projects.workspace.tab.pricing_settings": "Prisinställningar",
+})
+TRANSLATIONS_EN.update({
+    "common.validation_error": "Validation error",
+    "projects.workspace.tab.estimator": "Estimator",
+    "projects.workspace.tab.materials_plan": "Materials plan",
+    "projects.workspace.tab.shopping_list": "Shopping list",
+    "projects.workspace.tab.pricing_settings": "Pricing settings",
+})

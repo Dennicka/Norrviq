@@ -17,7 +17,10 @@ def help_icon(context, key: str) -> Markup:
     }
     lang_labels = labels.get(lang, labels["en"])
     if not entry:
-        return Markup(f'<span class="help help-missing" title="Missing help: {escape(key)}" aria-label="{lang_labels["help"]}">?</span>')
+        return Markup(
+            f'<span class="help help-tip help-missing" data-help="{escape(key)}" '
+            f'title="Missing help: {escape(key)}" aria-label="{lang_labels["help"]}">?</span>'
+        )
 
     title = escape(entry.get("title", ""))
     body = escape(entry.get("body", ""))
@@ -29,8 +32,8 @@ def help_icon(context, key: str) -> Markup:
         link_html = Markup(f'<a href="{link}" class="help-popover-link">{lang_labels["more"]}</a>')
 
     return Markup(
-        "<details class=\"help-popover\">"
-        f"<summary class=\"help\" aria-label=\"{lang_labels['help']}\" title=\"{lang_labels['help']}\">?</summary>"
+        f"<details class=\"help-popover help-tip\" data-help=\"{escape(key)}\">"
+        f"<summary class=\"help help-tip\" aria-label=\"{lang_labels['help']}\" title=\"{lang_labels['help']}\">?</summary>"
         f"<div class=\"help-popover-card\"><strong>{title}</strong><p>{body}</p><p><em>{example}</em></p>{link_html}</div>"
         "</details>"
     )

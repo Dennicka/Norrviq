@@ -80,7 +80,7 @@ def test_workspace_tabs_render_and_tab_query_works():
     response = client.get(f"/projects/{project_id}?tab=pricing")
     assert response.status_code == 200
     assert "projects.workspace.tab.pricing" not in response.text
-    assert 'class="active">Политика цен<' in response.text
+    assert 'class="active">Настройки цен<' in response.text
     assert 'data-tab="pricing"' in response.text
 
 
