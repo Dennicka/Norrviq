@@ -13,7 +13,7 @@
         <p><strong>VAT:</strong> {{ workspace.totals.vat }}</p>
         <p><strong>Total:</strong> {{ workspace.totals.total }}</p>
         <p><strong>{{ t('estimator.completeness') }}:</strong> {{ workspace.quality.completeness_score }}%</p>
-        <form method="post" action="/projects/{{ project.id }}/estimator/recalc">{{ csrf_input(request) }}<button type="submit">{{ t('estimator.recalculate') }}</button></form>
+        <form method="post" action="/projects/{{ project.id }}/estimator/recalculate">{{ csrf_input(request) }}<button type="submit">{{ t('estimator.recalculate') }}</button></form>
     </section>
 </details>
 
@@ -83,11 +83,12 @@
         <button type="submit">Apply</button>
     </form>
     <table data-testid="pricing_table">
-        <tr><th>Mode</th><th>Revenue</th><th>Cost</th><th>Profit</th><th>Margin%</th><th>Effective hourly</th><th>Status</th><th></th></tr>
+        <tr><th>Mode</th><th>Total hours</th><th>Revenue</th><th>Cost</th><th>Profit</th><th>Margin%</th><th>Effective hourly</th><th>Status</th><th></th></tr>
         {% for row in workspace.pricing.compare_rows %}
             {% if row.mode in visible_modes and (pricing_filter != 'selected' or row.is_selected) %}
             <tr>
                 <td>{{ row.mode }}</td>
+                <td>{{ row.total_hours or workspace.totals.total_hours }}</td>
                 <td>{{ row.revenue }}</td>
                 <td>{{ row.cost }}</td>
                 <td>{{ row.profit }}</td>
@@ -96,7 +97,7 @@
                 <td>{% if row.enabled %}enabled{% else %}disabled: {{ row.missing_requirements|join(', ') }}{% endif %}</td>
                 <td>
                     {% if row.mode != 'HYBRID' %}
-                    <form method="post" action="/projects/{{ project.id }}/estimator/select-pricing">{{ csrf_input(request) }}<input type="hidden" name="mode" value="{{ row.mode }}"><button type="submit" {% if not row.enabled %}disabled{% endif %}>{{ t('estimator.select_pricing_mode') }}</button></form>
+                    <form method="post" action="/projects/{{ project.id }}/estimator/apply-mode">{{ csrf_input(request) }}<input type="hidden" name="mode" value="{{ row.mode }}"><button type="submit" {% if not row.enabled %}disabled{% endif %}>Apply this mode to project</button></form>
                     {% endif %}
                 </td>
             </tr>

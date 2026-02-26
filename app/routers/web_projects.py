@@ -52,6 +52,7 @@ from app.services.project_pricing import build_project_pricing_summary
 from app.services.workflow import build_project_workflow_state
 from app.services.work_scope_apply import apply_work_item_to_scope
 from app.services.estimator_workspace import build_estimator_workspace
+from app.services.estimator_engine import recalculate_project_work_items as recalc_estimator_project
 from app.services.pricing import (
     LOW_MARGIN_WARN_PCT,
     WARNING_LOW_MARGIN,
@@ -1685,6 +1686,7 @@ async def project_estimator_recalc(
     project = db.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+    recalc_estimator_project(db, project_id)
     build_estimator_workspace(db, project_id, lang=lang)
     add_flash_message(request, make_t(lang)("estimator.recalculated"), "success")
     return RedirectResponse(url=f"/projects/{project_id}/estimator", status_code=status.HTTP_303_SEE_OTHER)
@@ -1731,6 +1733,31 @@ async def project_estimator_apply_preset(
 
 @router.post("/{project_id}/estimator/select-pricing")
 async def project_estimator_select_pricing(
+    project_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    pricing = get_or_create_project_pricing(db, project_id)
+    form = await request.form()
+    mode = form.get("mode") or "HOURLY"
+    select_pricing_mode(db, pricing=pricing, mode=mode, user_id=get_current_user_email(request))
+    return RedirectResponse(url=f"/projects/{project_id}/estimator", status_code=status.HTTP_303_SEE_OTHER)
+
+
+
+
+@router.post("/{project_id}/estimator/recalculate")
+async def project_estimator_recalculate_alias(
+    project_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    lang: str = Depends(get_current_lang),
+):
+    return await project_estimator_recalc(project_id=project_id, request=request, db=db, lang=lang)
+
+
+@router.post("/{project_id}/estimator/apply-mode")
+async def project_estimator_apply_mode(
     project_id: int,
     request: Request,
     db: Session = Depends(get_db),
