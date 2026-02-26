@@ -23,7 +23,8 @@ from app.services.pricing_consistency import DOC_TYPE_OFFER, validate_pricing_co
 from app.services.quality import evaluate_project_quality
 
 
-PRICING_MODE_ORDER = ["HOURLY", "FIXED_TOTAL", "PER_M2", "PER_ROOM", "PIECEWORK", "HYBRID"]
+PRICING_MODE_ORDER = ["HOURLY", "FIXED_TOTAL", "PER_M2", "PER_ROOM", "PIECEWORK"]
+SCENARIO_MODE_ORDER = PRICING_MODE_ORDER + ["HYBRID"]
 
 
 def _d(value: Decimal | None) -> Decimal:
@@ -102,7 +103,7 @@ def build_estimator_workspace(db: Session, project_id: int, lang: str = "ru") ->
         if WARNING_LOW_MARGIN in scenario.warnings:
             pricing_warnings.append(f"{mode}:LOW_MARGIN")
 
-    for mode in PRICING_MODE_ORDER:
+    for mode in SCENARIO_MODE_ORDER:
         pricing_scenarios.setdefault(
             mode,
             {
@@ -141,7 +142,7 @@ def build_estimator_workspace(db: Session, project_id: int, lang: str = "ru") ->
             }
         )
 
-    for mode in PRICING_MODE_ORDER:
+    for mode in SCENARIO_MODE_ORDER:
         pricing_scenarios[mode]["enabled"] = mode == active_mode
         pricing_scenarios[mode]["is_selected"] = mode == active_mode
 
