@@ -118,7 +118,22 @@ def _select_price(prices: list[SupplierMaterialPrice], supplier_id: int | None, 
             if price.supplier_id == preferred_supplier_id:
                 return price
     if auto_select_cheapest:
-        return min(prices, key=lambda p: (Decimal(str(p.pack_price_ex_vat or 0)), p.supplier_id, p.id))
+        def _unit_price(p: SupplierMaterialPrice) -> Decimal:
+            pack_size = Decimal(str(p.pack_size or 0))
+            pack_price = Decimal(str(p.pack_price_ex_vat or 0))
+            if pack_size <= 0:
+                return Decimal("Infinity")
+            return pack_price / pack_size
+
+        return min(
+            prices,
+            key=lambda p: (
+                _unit_price(p),
+                Decimal(str(p.pack_price_ex_vat or 0)),
+                p.supplier_id,
+                p.id,
+            ),
+        )
     return min(prices, key=lambda p: (p.supplier_id, p.id))
 
 

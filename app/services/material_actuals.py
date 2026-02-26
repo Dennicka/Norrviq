@@ -141,7 +141,8 @@ def compute_materials_plan_vs_actual(db: Session, project_id: int) -> PlanVsActu
         for key, value in by_material.items():
             if value["material_id"] == s.material_id:
                 value["planned_packs"] = Decimal(str(s.packs_count))
-                value["planned_cost"] = Decimal(str(s.total_ex_vat))
+                if s.unit_price is not None and "NO_SUPPLIER_PRICE" not in s.warnings:
+                    value["planned_cost"] = Decimal(str(s.total_ex_vat))
 
     for line, _purchase in purchases:
         key = (line.material.name_sv if line.material else f"material_{line.material_id}").lower()

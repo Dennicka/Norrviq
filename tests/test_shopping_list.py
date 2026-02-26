@@ -88,8 +88,9 @@ def test_rounding_ceil_12_1_to_10_is_2_packs():
     db = SessionLocal()
     try:
         report = compute_project_shopping_list(db, project_id)
-        assert report.items[0].planned_qty == Decimal("12.1000")
-        assert report.items[0].packs_needed == Decimal("2")
+        row = next(i for i in report.items if i.material_id == material_id)
+        assert row.planned_qty == Decimal("12.1000")
+        assert row.packs_needed == Decimal("2")
     finally:
         db.close()
 
@@ -101,8 +102,9 @@ def test_rounding_exact_20kg_to_20_is_1_pack():
     db = SessionLocal()
     try:
         report = compute_project_shopping_list(db, project_id)
-        assert report.items[0].planned_qty == Decimal("20.0000")
-        assert report.items[0].packs_needed == Decimal("1")
+        row = next(i for i in report.items if i.material_id == material_id)
+        assert row.planned_qty == Decimal("20.0000")
+        assert row.packs_needed == Decimal("1")
     finally:
         db.close()
 
@@ -114,7 +116,7 @@ def test_zero_qty_excluded():
     db = SessionLocal()
     try:
         report = compute_project_shopping_list(db, project_id)
-        assert report.items == []
+        assert all(i.material_id != material_id for i in report.items)
     finally:
         db.close()
 
@@ -145,8 +147,9 @@ def test_integration_cheapest_supplier_and_total_cost():
         db.add(settings)
         db.commit()
         report = compute_project_shopping_list(db, project_id)
-        assert report.items[0].unit_price == Decimal("80")
-        assert report.items[0].line_total_cost == Decimal("160.00")
+        row = next(i for i in report.items if i.material_id == material_id)
+        assert row.unit_price == Decimal("80")
+        assert row.line_total_cost == Decimal("160.00")
     finally:
         db.close()
 
@@ -156,7 +159,7 @@ def test_shopping_list_page_renders():
     project_id, _ = _seed_project()
     response = client.get(f"/projects/{project_id}/shopping-list")
     assert response.status_code == 200
-    assert "Shopping" in response.text
+    assert 'data-testid="shopping-title"' in response.text
 
 
 def test_export_csv_downloads():
