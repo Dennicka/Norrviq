@@ -174,6 +174,15 @@ def compute_work_item_qty(item: ProjectWorkItem, rooms: dict[int, RoomGeometry],
     if scope == ScopeMode.CUSTOM_QTY or basis == BasisType.CUSTOM_QTY:
         return _q(_d(getattr(item, "manual_qty", None) or getattr(item, "quantity", None)), QTY_Q)
 
+    # Backward-compatible behavior for existing work items created with explicit quantity/layers.
+    persisted_qty = _d(getattr(item, "quantity", None))
+    raw_scope_value = (getattr(item, "scope_mode", None) or "").strip()
+    raw_scope = raw_scope_value.lower()
+    is_legacy_scope_value = raw_scope_value == raw_scope and raw_scope in {"room", "project", "selected_rooms", "custom_qty", "all_rooms"}
+    if persisted_qty > 0 and getattr(item, "manual_qty", None) is None:
+        if is_legacy_scope_value and getattr(item, "basis_type", None) in {None, "", BasisType.FLOOR_AREA.value}:
+            return _q(persisted_qty, QTY_Q)
+
     if scope == ScopeMode.ROOM:
         room_geometry = rooms.get(item.room_id) if item.room_id is not None else None
         return _q(_room_basis_value(room_geometry, basis), QTY_Q) if room_geometry else Decimal("0.00")
@@ -194,7 +203,8 @@ def compute_work_item_hours(item: ProjectWorkItem, qty: Decimal, speed_profile: 
     wt = getattr(item, "work_type", None)
     hours_per_unit = _d(getattr(wt, "hours_per_unit", None))
     difficulty = _d(getattr(item, "difficulty_factor", None) or 1)
-    return _q(qty * hours_per_unit * difficulty, HOURS_Q)
+    base_hours = _q(qty * hours_per_unit, HOURS_Q)
+    return _q(base_hours * difficulty, HOURS_Q)
 
 
 def compute_work_item_sell(item: ProjectWorkItem, qty: Decimal, hours: Decimal, settings: object, mode_override: PricingMode | None = None) -> Decimal:
@@ -275,7 +285,6 @@ def recalculate_project_work_items(db: Session, project_id: int) -> RecalcResult
         item.calculated_hours = hours
         item.calculated_sell_ex_vat = sell
         item.calculated_labour_cost_ex_vat = labour
-        item.quantity = qty
         item.calculated_cost_without_moms = sell
         item.labor_cost_sek = labour
         rows.append({"hours": hours, "sell": sell, "labour": labour, "materials": _q(_d(item.materials_cost_sek))})
