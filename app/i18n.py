@@ -1118,6 +1118,7 @@ TRANSLATIONS_RU.update({
     "invoice.include_materials": "Включить материалы",
     "invoice.merge_strategy": "Стратегия объединения",
     "common.optional_note": "Необязательная заметка",
+    "common.save_as_pdf_via_browser": "Сохраните как PDF через печать браузера",
 })
 TRANSLATIONS_SV.update({
     "shopping.title": "Inköpslista",
@@ -1146,6 +1147,7 @@ TRANSLATIONS_SV.update({
     "invoice.include_materials": "Inkludera material",
     "invoice.merge_strategy": "Sammanfogningsstrategi",
     "common.optional_note": "Valfri notering",
+    "common.save_as_pdf_via_browser": "Spara som PDF via webbläsarens utskrift",
 })
 TRANSLATIONS_EN.update({
     "shopping.title": "Shopping list",
@@ -1174,6 +1176,7 @@ TRANSLATIONS_EN.update({
     "invoice.include_materials": "Include materials",
     "invoice.merge_strategy": "Merge strategy",
     "common.optional_note": "Optional note",
+    "common.save_as_pdf_via_browser": "Save as PDF via browser print",
 })
 
 TRANSLATIONS_RU.update({

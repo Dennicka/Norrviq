@@ -1,4 +1,5 @@
 <!doctype html><html><body>
+{% if show_pdf_fallback_hint %}<p>{{ t('invoice.pdf_fallback_mode') }} — {{ t('common.save_as_pdf_via_browser') }}</p>{% endif %}
 <h1>Materials Actuals Report</h1>
 <p>Project: {{ project.name }}</p>
 <p>Planned: {{ plan_actual.planned_cost_ex_vat }} | Actual: {{ plan_actual.actual_cost_ex_vat }} | Delta: {{ plan_actual.delta_cost_ex_vat }}</p>

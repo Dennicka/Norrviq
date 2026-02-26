@@ -10,6 +10,7 @@ from app.config import get_settings
 from app.db import SessionLocal
 from app.main import app
 from app.models.company_profile import get_or_create_company_profile
+from app.services.pdf_engine import is_pdf_engine_available
 from tests.utils.document_factory import create_stable_document_fixture
 from tests.utils.pdf_text import norm_pdf_text
 from tests.utils.snapshot import assert_matches_snapshot, normalize_document_html
@@ -18,7 +19,7 @@ client = TestClient(app)
 settings = get_settings()
 
 pytestmark = pytest.mark.skipif(
-    importlib.util.find_spec("weasyprint") is None or importlib.util.find_spec("pypdf") is None,
+    (not is_pdf_engine_available()) or importlib.util.find_spec("pypdf") is None,
     reason="PDF dependencies are not installed in this environment",
 )
 

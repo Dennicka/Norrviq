@@ -15,6 +15,7 @@ from app.models.invoice import Invoice
 from app.models.invoice_line import InvoiceLine
 from app.models.rot_case import RotCase
 from app.models.project import Project, ProjectWorkItem
+from app.services.pdf_engine import is_pdf_engine_available
 from app.models.worktype import WorkType
 from tests.utils.pdf_text import norm_pdf_text
 
@@ -22,7 +23,7 @@ client = TestClient(app)
 settings = get_settings()
 
 pytestmark = pytest.mark.skipif(
-    importlib.util.find_spec("weasyprint") is None or importlib.util.find_spec("pypdf") is None,
+    (not is_pdf_engine_available()) or importlib.util.find_spec("pypdf") is None,
     reason="PDF dependencies are not installed in this environment",
 )
 

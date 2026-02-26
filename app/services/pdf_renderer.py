@@ -1,23 +1,16 @@
-import importlib
-import importlib.util
 import logging
 from pathlib import Path
 
 from collections.abc import Callable
 
+from app.services.pdf_engine import is_pdf_engine_available
 from app.services.pdf_export import render_pdf_from_html
 
 logger = logging.getLogger("app.pdf")
 
 
 def is_weasyprint_available() -> bool:
-    if importlib.util.find_spec("weasyprint") is None:
-        return False
-    try:
-        importlib.import_module("weasyprint")
-    except Exception:
-        return False
-    return True
+    return is_pdf_engine_available()
 
 
 def invoice_pdf_capability() -> dict[str, str | bool]:

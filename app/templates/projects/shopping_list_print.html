@@ -11,6 +11,9 @@
   </style>
 </head>
 <body>
+  {% if show_pdf_fallback_hint %}
+  <p>{{ t('invoice.pdf_fallback_mode') }} — {{ t('common.save_as_pdf_via_browser') }}</p>
+  {% endif %}
   <h1>{{ project.name }} — {{ t('shopping.title') }}</h1>
   <p>{{ t('shopping.date') }}: {{ export_date }}</p>
   {% if group_by_supplier and shopping_list.grouped_by_supplier %}
