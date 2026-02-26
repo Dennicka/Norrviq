@@ -23,7 +23,7 @@ from app.services.pricing_consistency import DOC_TYPE_OFFER, validate_pricing_co
 from app.services.quality import evaluate_project_quality
 
 
-PRICING_MODE_ORDER = ["HOURLY", "FIXED_TOTAL", "PER_M2", "PER_ROOM", "PIECEWORK"]
+PRICING_MODE_ORDER = ["HOURLY", "FIXED_TOTAL", "PER_M2", "PER_ROOM", "PIECEWORK", "HYBRID"]
 
 
 def _d(value: Decimal | None) -> Decimal:
@@ -113,34 +113,37 @@ def build_estimator_workspace(db: Session, project_id: int, lang: str = "ru") ->
                 "margin_pct": Decimal("0.00"),
                 "effective_hourly": Decimal("0.00"),
                 "total": Decimal("0.00"),
-                "enabled": mode == active_mode,
+                "enabled": False,
                 "invalid": True,
                 "missing_requirements": ["MISSING_REQUIREMENTS"],
                 "below_margin_floor": False,
                 "warnings": ["MISSING_REQUIREMENTS"],
-                "is_selected": mode == active_mode,
+                "is_selected": False,
             },
         )
 
     # Lightweight hybrid scenario: safe visible compare based on best available mode.
-    enabled_modes = [row for row in pricing_scenarios.values() if row["mode"] in PRICING_MODE_ORDER and not row["invalid"]]
+    enabled_modes = [row for mode, row in pricing_scenarios.items() if mode != "HYBRID" and not row["invalid"]]
     if enabled_modes:
         hybrid = max(enabled_modes, key=lambda row: row["profit"])
-        pricing_scenarios["HYBRID"] = {
-            "mode": "HYBRID",
-            "revenue": hybrid["revenue"],
-            "cost": hybrid["cost"],
-            "profit": hybrid["profit"],
-            "margin_pct": hybrid["margin_pct"],
-            "effective_hourly": hybrid["effective_hourly"],
-            "total": hybrid["total"],
-            "enabled": "HYBRID" == active_mode,
-            "invalid": False,
-            "missing_requirements": [],
-            "below_margin_floor": hybrid["below_margin_floor"],
-            "warnings": [f"BLEND_FROM:{hybrid['mode']}"] + hybrid["warnings"],
-            "is_selected": active_mode == "HYBRID",
-        }
+        pricing_scenarios["HYBRID"].update(
+            {
+                "revenue": hybrid["revenue"],
+                "cost": hybrid["cost"],
+                "profit": hybrid["profit"],
+                "margin_pct": hybrid["margin_pct"],
+                "effective_hourly": hybrid["effective_hourly"],
+                "total": hybrid["total"],
+                "invalid": False,
+                "missing_requirements": [],
+                "below_margin_floor": hybrid["below_margin_floor"],
+                "warnings": [f"BLEND_FROM:{hybrid['mode']}"] + hybrid["warnings"],
+            }
+        )
+
+    for mode in PRICING_MODE_ORDER:
+        pricing_scenarios[mode]["enabled"] = mode == active_mode
+        pricing_scenarios[mode]["is_selected"] = mode == active_mode
 
     bom = compute_project_bom(db, project_id)
     material_rows = []
