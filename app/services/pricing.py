@@ -534,8 +534,8 @@ def compute_pricing_scenarios(db: Session, project_id: int, *, request_id: str |
             input_params={"fixed_total_price": str(pricing.fixed_total_price) if pricing.fixed_total_price is not None else None},
             baseline=baseline,
             price_ex_vat=Decimal(str(pricing.fixed_total_price or 0)),
-            warnings=[] if pricing.fixed_total_price is not None else ["Fixed total price is not set"],
-            invalid=pricing.fixed_total_price is None,
+            warnings=[] if pricing.fixed_total_price is not None and Decimal(str(pricing.fixed_total_price)) > 0 else ["Fixed total price is not set"],
+            invalid=pricing.fixed_total_price is None or Decimal(str(pricing.fixed_total_price)) <= 0,
             details_lines=[f"fixed_total_price({pricing.fixed_total_price or Decimal('0.00')})"],
             vat_pct=vat_pct,
         )
@@ -551,7 +551,7 @@ def compute_pricing_scenarios(db: Session, project_id: int, *, request_id: str |
             baseline=baseline,
             price_ex_vat=Decimal(str(pricing.rate_per_m2 or 0)) * baseline.total_m2,
             warnings=([WARNING_MISSING_UNITS_M2] + ([WARNING_MISSING_PERIMETER_HEIGHT] if per_m2_missing_dims else [])) if per_m2_invalid else [],
-            invalid=per_m2_invalid or pricing.rate_per_m2 is None,
+            invalid=per_m2_invalid or pricing.rate_per_m2 is None or Decimal(str(pricing.rate_per_m2)) <= 0,
             details_lines=[f"basis({baseline.m2_basis}) total_m2({baseline.total_m2}) × rate_per_m2({pricing.rate_per_m2 or Decimal('0.00')})"],
             vat_pct=vat_pct,
         )
@@ -564,7 +564,7 @@ def compute_pricing_scenarios(db: Session, project_id: int, *, request_id: str |
             baseline=baseline,
             price_ex_vat=Decimal(str(pricing.rate_per_room or 0)) * Decimal(str(baseline.rooms_count)),
             warnings=[WARNING_MISSING_UNITS_ROOMS] if baseline.rooms_count == 0 else [],
-            invalid=baseline.rooms_count == 0 or pricing.rate_per_room is None,
+            invalid=baseline.rooms_count == 0 or pricing.rate_per_room is None or Decimal(str(pricing.rate_per_room)) <= 0,
             details_lines=[f"rooms_count({baseline.rooms_count}) × rate_per_room({pricing.rate_per_room or Decimal('0.00')})"],
             vat_pct=vat_pct,
         )
@@ -594,7 +594,7 @@ def compute_pricing_scenarios(db: Session, project_id: int, *, request_id: str |
             baseline=baseline,
             price_ex_vat=piece_rate * Decimal(str(baseline.items_count)),
             warnings=piece_warnings,
-            invalid=baseline.items_count == 0 or pricing.rate_per_piece is None,
+            invalid=baseline.items_count == 0 or pricing.rate_per_piece is None or Decimal(str(pricing.rate_per_piece)) <= 0,
             details_lines=piece_details,
             vat_pct=vat_pct,
         )
