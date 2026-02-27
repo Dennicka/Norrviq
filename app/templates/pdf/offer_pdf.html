@@ -1,50 +1,92 @@
 <!doctype html>
-<html>
-<head><meta charset="utf-8"><title>{{ t("offer.title") }}</title></head>
+<html lang="{{ lang }}">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ t("offer.title") }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='css/pdf_document.css') }}">
+    <style>.print-toolbar{margin:10px auto;max-width:210mm;display:flex;justify-content:space-between;align-items:center;gap:8px}.screen-only{display:block}@media print{.screen-only{display:none!important}}</style>
+</head>
 <body>
-    {% if show_pdf_fallback_hint %}
-    <div>{{ t("invoice.pdf_fallback_mode") }} — {{ t("common.save_as_pdf_via_browser") }}</div>
+    {% if show_print_toolbar %}
+    <div class="print-toolbar screen-only"><strong>{{ t("offer.title") }}</strong><button type="button" onclick="window.print()">{{ t("common.print") }}</button></div>
     {% endif %}
-    <h1>{{ t("offer.title") }}</h1>
-    <div>{{ company_profile.legal_name }}</div>
-    <div>{{ t("offer.number") }}: {{ offer_number if offer_number else "DRAFT" }}</div>
-    <div>{{ t("label.status") }}: {{ offer_status|upper }}</div>
-    <div>{{ t("offer.project_no") }} {{ project.id }}</div>
-    <div>{{ offer_date }}</div>
+    {% if show_pdf_fallback_hint %}
+    <div class="print-toolbar screen-only">{{ t("invoice.pdf_fallback_mode") }} — {{ t("common.save_as_pdf_via_browser") }}</div>
+    {% endif %}
 
-    <h2>{{ t("offer.client") }}</h2>
-    <p>{{ client.name if client else '' }}</p>
+    <div class="pdf-page">
+        {% if is_draft %}<div class="watermark">{{ t("invoice.draft_watermark") }}</div>{% endif %}
+        <header class="invoice-header">
+            <div>
+                <h1 class="company-name">{{ company_profile.legal_name }}</h1>
+                <div>{{ company_profile.address_line1 }}{% if company_profile.address_line2 %}, {{ company_profile.address_line2 }}{% endif %}</div>
+                <div>{{ company_profile.postal_code }} {{ company_profile.city }}</div>
+                <div>{{ company_profile.phone }} · {{ company_profile.email }}</div>
+                <div>{{ t("company.org_number") }}: {{ company_profile.org_number }}</div>
+                {% if company_profile.bankgiro %}<div>Bankgiro: {{ company_profile.bankgiro }}</div>{% endif %}
+                {% if company_profile.plusgiro %}<div>Plusgiro: {{ company_profile.plusgiro }}</div>{% endif %}
+            </div>
+            <div>
+                <h2 class="document-title">{{ t("offer.title") }}</h2>
+                <div class="meta-grid">
+                    <span class="key">{{ t("offer.number") }}</span><span>{{ offer_number if offer_number else t("invoice.draft_watermark") }}</span>
+                    <span class="key">{{ t("label.status") }}</span><span>{{ offer_status|upper }}</span>
+                    <span class="key">{{ t("offer.project_no") }}</span><span>{{ project.id }}</span>
+                    <span class="key">{{ t("offer.date") }}</span><span>{{ offer_date }}</span>
+                </div>
+            </div>
+        </header>
 
-    {% for section in commercial.sections or [] %}
-    <h3>{{ section.title }}</h3>
-    <table>
-        <thead>
-            <tr>
-                <th>{{ t("offer.table.header.description") }}</th>
-                <th>{{ t("offer.table.header.unit") }}</th>
-                <th>{{ t("offer.table.header.quantity") }}</th>
-                <th>{{ t("offer.table.header.unit_price") }}</th>
-                <th>{{ t("offer.table.header.total") }}</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for item in section.lines %}
-            {% if item.visible is not defined or item.visible %}
-            <tr>
-                <td>{{ item.description }}</td><td>{{ item.unit }}</td><td>{{ item.qty }}</td><td>{{ item.unit_price }}</td><td>{{ item.total }}</td>
-            </tr>
-            {% endif %}
-            {% endfor %}
-        </tbody>
-    </table>
-    {% endfor %}
+        <section class="invoice-block">
+            <h3 class="block-title">{{ t("offer.client") }}</h3>
+            <div>{{ client.name if client else '' }}</div>
+            <div>{{ client.address if client else '' }}</div>
+            {% if project.address %}<div>{{ project.address }}</div>{% endif %}
+        </section>
 
-    <div><span>{{ t("offer.summary.work_sum") }}</span> {{ commercial.summary.subtotal_ex_vat or commercial.price_ex_vat or 0 }}</div>
-    <div><span>{{ t("offer.summary.moms") }}</span> {{ commercial.summary.vat_amount or commercial.vat_amount or 0 }}</div>
-    <div><span>{{ t("offer.summary.rot") }}</span> {{ commercial.summary.rot_ready_base or project.rot_amount or 0 }}</div>
-    <div><strong>{{ t("offer.summary.total") }}</strong> {{ commercial.summary.total_inc_vat or commercial.price_inc_vat or 0 }}</div>
+        {% for section in commercial.sections or [] %}
+        <section class="invoice-block">
+            {% if section.title %}<h3 class="block-title">{{ section.title }}</h3>{% endif %}
+            <table class="details-table">
+                <thead>
+                    <tr>
+                        <th>{{ t("offer.table.header.description") }}</th>
+                        <th class="text-center">{{ t("offer.table.header.unit") }}</th>
+                        <th class="text-right">{{ t("offer.table.header.quantity") }}</th>
+                        <th class="text-right">{{ t("offer.table.header.unit_price") }}</th>
+                        <th class="text-right">{{ t("offer.table.header.total") }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in section.lines %}
+                    {% if item.visible is not defined or item.visible %}
+                    <tr>
+                        <td>{{ item.description }}</td>
+                        <td class="text-center">{{ item.unit }}</td>
+                        <td class="text-right">{{ item.qty }}</td>
+                        <td class="text-right">{{ item.unit_price }}</td>
+                        <td class="text-right">{{ item.total }}</td>
+                    </tr>
+                    {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </section>
+        {% endfor %}
 
-    <h2>{{ terms_title or "Terms / Villkor" }}</h2>
-    <pre>{{ terms_body }}</pre>
+        <section class="invoice-block">
+            <div class="summary">
+                <div class="summary-row"><span>{{ t("offer.summary.work_sum") }}</span><strong>{{ commercial.summary.subtotal_ex_vat or commercial.price_ex_vat or 0 }}</strong></div>
+                <div class="summary-row"><span>{{ t("offer.summary.moms") }}</span><strong>{{ commercial.summary.vat_amount or commercial.vat_amount or 0 }}</strong></div>
+                <div class="summary-row total"><span>{{ t("offer.summary.total") }}</span><strong>{{ commercial.summary.total_inc_vat or commercial.price_inc_vat or 0 }}</strong></div>
+            </div>
+        </section>
+
+        <section class="invoice-block">
+            <h3 class="block-title">{{ terms_title or "Terms / Villkor" }}</h3>
+            <pre class="terms">{{ terms_body }}</pre>
+        </section>
+    </div>
 </body>
 </html>

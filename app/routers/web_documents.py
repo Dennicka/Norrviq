@@ -132,28 +132,7 @@ def _audit_pdf_download(db: Session, *, request: Request, event_type: str, entit
     )
 
 
-@router.get("/offers/{offer_id}/pdf")
-async def offer_pdf(
-    offer_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-    lang: str = Depends(get_current_lang),
-    _role: str = Depends(require_role("admin", "operator", "viewer")),
-):
-    project = (
-        db.query(Project)
-        .options(
-            selectinload(Project.client),
-            selectinload(Project.work_items).selectinload(ProjectWorkItem.work_type),
-        )
-        .filter(Project.id == offer_id)
-        .first()
-    )
-    if not project:
-        raise HTTPException(status_code=404, detail="Offer not found")
-
-    render_lang = normalize_document_lang(lang, fallback=normalize_document_lang(project.offer_document_lang))
-
+def _build_offer_render_context(*, request: Request, db: Session, project: Project, render_lang: str) -> dict:
     recalculate_project_work_items(db, project)
     calculate_project_totals(db, project)
 
@@ -224,6 +203,31 @@ async def offer_pdf(
             "is_draft": project.offer_status != "issued",
         }
     )
+    return context
+
+
+@router.get("/offers/{offer_id}/pdf")
+async def offer_pdf(
+    offer_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    lang: str = Depends(get_current_lang),
+    _role: str = Depends(require_role("admin", "operator", "viewer")),
+):
+    project = (
+        db.query(Project)
+        .options(
+            selectinload(Project.client),
+            selectinload(Project.work_items).selectinload(ProjectWorkItem.work_type),
+        )
+        .filter(Project.id == offer_id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Offer not found")
+
+    render_lang = normalize_document_lang(lang, fallback=normalize_document_lang(project.offer_document_lang))
+    context = _build_offer_render_context(request=request, db=db, project=project, render_lang=render_lang)
     html = templates.get_template("pdf/offer_pdf.html").render(context)
     try:
         pdf_bytes = render_pdf_from_html(html=html, base_url=PROJECT_ROOT, stylesheet_path=PDF_STYLESHEET)
@@ -247,6 +251,50 @@ async def offer_pdf(
             REQUEST_ID_HEADER: getattr(request.state, "request_id", ""),
         },
     )
+
+
+@router.get("/offers/{offer_id}/print")
+async def offer_print_view(
+    offer_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    lang: str = Depends(get_current_lang),
+    _role: str = Depends(require_role("admin", "operator", "viewer")),
+):
+    project = (
+        db.query(Project)
+        .options(
+            selectinload(Project.client),
+            selectinload(Project.work_items).selectinload(ProjectWorkItem.work_type),
+        )
+        .filter(Project.id == offer_id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Offer not found")
+
+    render_lang = normalize_document_lang(lang, fallback=normalize_document_lang(project.offer_document_lang))
+    context = _build_offer_render_context(request=request, db=db, project=project, render_lang=render_lang)
+    context["show_print_toolbar"] = True
+    return templates.TemplateResponse(request, "pdf/offer_pdf.html", context)
+
+
+@router.get("/offers/{offer_id}")
+async def offer_document_redirect(offer_id: int, lang: str = Depends(get_current_lang)):
+    return RedirectResponse(url=f"/projects/{offer_id}/offer?lang={normalize_document_lang(lang)}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.get("/invoices/{invoice_id}")
+async def invoice_document_redirect(
+    invoice_id: int,
+    db: Session = Depends(get_db),
+    lang: str = Depends(get_current_lang),
+    _role: str = Depends(require_role("admin", "operator", "viewer")),
+):
+    invoice = db.get(Invoice, invoice_id)
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    return RedirectResponse(url=f"/projects/{invoice.project_id}/invoices/{invoice_id}?lang={normalize_document_lang(lang)}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.get("/invoices/{invoice_id}/pdf")
@@ -459,6 +507,17 @@ async def finalize_offer_action(
     return RedirectResponse(url=f"/projects/{project_id}/offer", status_code=status.HTTP_303_SEE_OTHER)
 
 
+@router.post("/offers/{project_id}/issue")
+async def issue_offer_action(
+    project_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _lang: str = Depends(get_current_lang),
+    _role: str = Depends(require_role("admin", "operator")),
+):
+    return await finalize_offer_action(project_id=project_id, request=request, db=db, _lang=_lang, _role=_role)
+
+
 @router.post("/invoices/{invoice_id}/finalize")
 async def finalize_invoice_action(
     invoice_id: int,
@@ -518,3 +577,14 @@ async def finalize_invoice_action(
     response = RedirectResponse(url=f"/projects/{invoice.project_id}/invoices/{invoice_id}", status_code=status.HTTP_303_SEE_OTHER)
     response.headers[REQUEST_ID_HEADER] = getattr(request.state, "request_id", "")
     return response
+
+
+@router.post("/invoices/{invoice_id}/issue")
+async def issue_invoice_action(
+    invoice_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _lang: str = Depends(get_current_lang),
+    _role: str = Depends(require_role("admin", "operator")),
+):
+    return await finalize_invoice_action(invoice_id=invoice_id, request=request, db=db, _lang=_lang, _role=_role)
