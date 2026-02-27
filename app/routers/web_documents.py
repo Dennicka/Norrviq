@@ -229,12 +229,7 @@ async def offer_pdf(
     render_lang = normalize_document_lang(lang, fallback=normalize_document_lang(project.offer_document_lang))
     context = _build_offer_render_context(request=request, db=db, project=project, render_lang=render_lang)
     html = templates.get_template("pdf/offer_pdf.html").render(context)
-    try:
-        pdf_bytes = render_pdf_from_html(html=html, base_url=PROJECT_ROOT, stylesheet_path=PDF_STYLESHEET)
-    except RuntimeError:
-        context["show_pdf_fallback_hint"] = True
-        add_flash_message(request, make_t(render_lang)("invoice.pdf_fallback_mode"), "warning")
-        return templates.TemplateResponse(request, "pdf/offer_pdf.html", context)
+    pdf_bytes = render_pdf_from_html(html=html, base_url=PROJECT_ROOT, stylesheet_path=PDF_STYLESHEET)
     _audit_pdf_download(
         db,
         request=request,
@@ -355,10 +350,6 @@ async def invoice_pdf(
         stylesheet_path=PDF_STYLESHEET,
         render_pdf=render_pdf_from_html,
     )
-    if pdf_bytes is None:
-        add_flash_message(request, make_t(render_lang)("invoice.pdf_fallback_mode"), "warning")
-        context["pdf_capability"] = invoice_pdf_capability()
-        return templates.TemplateResponse(request, "invoices/print.html", context)
     _audit_pdf_download(
         db,
         request=request,

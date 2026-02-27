@@ -89,7 +89,7 @@ def test_invoice_print_returns_200_and_contains_key_fields_sv():
     assert "Totalt" in response.text or "Att betala" in response.text
 
 
-def test_pdf_endpoint_fallback_when_engine_missing(monkeypatch):
+def test_pdf_endpoint_returns_pdf_when_engine_missing(monkeypatch):
     fixture = create_stable_document_fixture(enable_rot=False, issue_documents=False)
     login()
     monkeypatch.setattr("app.services.pdf_renderer.is_weasyprint_available", lambda: False)
@@ -97,8 +97,8 @@ def test_pdf_endpoint_fallback_when_engine_missing(monkeypatch):
     response = client.get(f"/invoices/{fixture.invoice_id}/pdf", follow_redirects=False)
 
     assert response.status_code == 200
-    assert "text/html" in response.headers["content-type"]
-    assert "fallback mode" in response.text or "резервный" in response.text or "reservläge" in response.text
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.content.startswith(b"%PDF")
 
 
 def test_issue_sets_status_issued_and_number_assigned():

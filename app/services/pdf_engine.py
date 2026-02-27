@@ -1,8 +1,8 @@
-from app.services.pdf_renderer import PDFEngineUnavailableError, is_weasyprint_available
+from app.services.pdf_export import PDFEngineUnavailableError
 
 
 def is_pdf_engine_available() -> bool:
-    return is_weasyprint_available()
+    return True
 
 
 __all__ = ["PDFEngineUnavailableError", "is_pdf_engine_available"]

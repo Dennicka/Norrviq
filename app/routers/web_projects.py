@@ -2488,12 +2488,7 @@ async def project_shopping_list_export_pdf(project_id: int, request: Request, db
     context = template_context(request, lang)
     context.update({"project": project, "shopping_list": report, "group_by_supplier": group_by_supplier, "export_date": datetime.now(timezone.utc).date().isoformat()})
     html = templates.get_template("pdf/shopping_list_pdf.html").render(context)
-    try:
-        pdf_bytes = render_pdf_from_html(html=html, base_url=PROJECT_ROOT, stylesheet_path=PDF_STYLESHEET)
-    except RuntimeError as exc:
-        context["pdf_fallback_reason"] = str(exc)
-        context["show_pdf_fallback_hint"] = True
-        return templates.TemplateResponse(request, "projects/shopping_list_print.html", context)
+    pdf_bytes = render_pdf_from_html(html=html, base_url=PROJECT_ROOT, stylesheet_path=PDF_STYLESHEET)
     log_event(db, request, "shopping_list_exported_pdf", entity_type="PROJECT", entity_id=project_id, severity="INFO", metadata={"project_id": project_id, "count": len(report.items), "request_id": getattr(request.state, "request_id", None)})
     return Response(content=pdf_bytes, media_type="application/pdf", headers={"Content-Disposition": 'attachment; filename="shopping_list.pdf"', REQUEST_ID_HEADER: getattr(request.state, "request_id", "")})
 
@@ -2639,12 +2634,7 @@ async def materials_actuals_export_pdf(project_id: int, request: Request, db: Se
     context = template_context(request, lang)
     context.update({"project": project, "plan_actual": report})
     html = templates.get_template("pdf/materials_actuals_pdf.html").render(context)
-    try:
-        pdf_bytes = export_plan_vs_actual_pdf(html=html, base_url=PROJECT_ROOT, stylesheet_path=PDF_STYLESHEET)
-    except RuntimeError as exc:
-        context["pdf_fallback_reason"] = str(exc)
-        context["show_pdf_fallback_hint"] = True
-        return templates.TemplateResponse(request, "pdf/materials_actuals_pdf.html", context)
+    pdf_bytes = export_plan_vs_actual_pdf(html=html, base_url=PROJECT_ROOT, stylesheet_path=PDF_STYLESHEET)
     log_event(db, request, "materials_actuals_exported", entity_type="PROJECT", entity_id=project_id, metadata={"kind": "pdf"})
     return Response(content=pdf_bytes, media_type="application/pdf", headers={"Content-Disposition": 'attachment; filename="materials_actuals.pdf"'})
 
