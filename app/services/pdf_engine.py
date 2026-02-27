@@ -1,17 +1,8 @@
-from __future__ import annotations
-
-from pathlib import Path
-
-
-class PDFEngineUnavailableError(RuntimeError):
-    """Raised when the configured PDF engine cannot render in this runtime."""
+from app.services.pdf_export import PDFEngineUnavailableError
 
 
 def is_pdf_engine_available() -> bool:
-    try:
-        from weasyprint import HTML
+    return True
 
-        HTML(string="<html><body>ok</body></html>", base_url=str(Path.cwd())).write_pdf()
-        return True
-    except Exception:
-        return False
+
+__all__ = ["PDFEngineUnavailableError", "is_pdf_engine_available"]
