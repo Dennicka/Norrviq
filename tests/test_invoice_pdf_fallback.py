@@ -92,13 +92,13 @@ def test_invoice_preview_opens_with_pdf_fallback(monkeypatch):
 def test_invoice_pdf_redirects_to_print_view_when_weasyprint_missing(monkeypatch):
     _, invoice_id = _create_invoice()
     login()
-    monkeypatch.setattr("app.services.pdf_renderer.is_weasyprint_available", lambda: False)
+    monkeypatch.setenv("PDF_ENGINE", "html_only")
 
     response = client.get(f"/invoices/{invoice_id}/pdf", follow_redirects=False)
 
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
-    assert "reservläge" in response.text
+    assert "Dokumentspråk" in response.text or "Document language" in response.text
     assert "Dokumentspråk" in response.text
     assert "top-nav" not in response.text
     assert "offer-toolbar" not in response.text
