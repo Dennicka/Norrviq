@@ -1,6 +1,25 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>{{ project.name }}</h1>
+<section class="workspace-section" style="position:sticky;top:8px;z-index:10;background:#fff;border:1px solid #d1d5db;">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;">
+        <div><strong>{{ t('estimator.total_hours') }}</strong><div>{{ total_labor_hours }}</div></div>
+        <div><strong>{{ t('projects.workspace.summary.total_ex') }}</strong><div>{{ finance_summary.work_sum_without_moms }}</div></div>
+        <div><strong>{{ t('projects.workspace.summary.labor_cost_ex') }}</strong><div>{{ finance_summary.total_salary_cost }}</div></div>
+        <div><strong>{{ t('finance.profit') }} / {{ t('finance.margin_percent') }}</strong><div>{{ finance_summary.profit }} / {{ finance_summary.margin_percent if finance_summary.margin_percent is not none else '—' }}%</div></div>
+        <div><strong>{{ t('projects.workspace.summary.effective_hourly') }}</strong><div>{{ '—' }}</div></div>
+        <div><strong>{{ t('projects.workspace.summary.active_mode') }}</strong><div>{{ project_pricing.mode if project_pricing else 'HOURLY' }}</div></div>
+        <div><strong>{{ t('projects.workspace.summary.materials') }}</strong><div>{{ material_totals.total_cost_ex_vat if material_totals else '—' }} / {{ material_totals.total_sell_ex_vat if material_totals else '—' }}</div></div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+        <form method="post" action="/projects/{{ project.id }}/recalculate-finance?tab={{ active_tab }}">{{ csrf_input(request) }}<button type="submit">{{ t('projects.recalculate') }}</button></form>
+        <a href="/projects/{{ project.id }}/pricing">Compare modes</a>
+        <form method="post" action="/projects/{{ project.id }}/pricing">{{ csrf_input(request) }}<input type="hidden" name="intent" value="apply_best_mode"><button type="submit">Apply best mode</button></form>
+        <form method="post" action="/offers/{{ project.id }}/issue">{{ csrf_input(request) }}<button type="submit">Issue Offer</button></form>
+        {% if selected_invoice %}<form method="post" action="/invoices/{{ selected_invoice.id }}/issue">{{ csrf_input(request) }}<button type="submit">Issue Invoice</button></form>{% endif %}
+        <a href="/offers/{{ project.id }}/pdf">Open PDFs</a>
+    </div>
+</section>
 <div class="project-workspace-header">
     <div class="project-workspace-tabs" role="tablist" aria-label="{{ t('projects.workspace.tabs_aria') }}">
         <a href="/projects/{{ project.id }}?tab=overview" class="{{ 'active' if active_tab == 'overview' else '' }}">{{ t('projects.workspace.tab.overview') }}</a>

@@ -151,7 +151,30 @@
 </section>
 
 <h2>Сравнение режимов</h2>
-<table border="1" cellpadding="6" cellspacing="0" style="border-collapse: collapse; width: 100%;">
+{% if not is_readonly %}
+<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+    <form method="post" action="/projects/{{ project.id }}/pricing" class="js-apply-best-form">
+        {{ csrf_input(request) }}
+        <input type="hidden" name="intent" value="apply_best_mode">
+        <label>Критерий
+            <select name="best_metric">
+                <option value="profit">Максимальная прибыль</option>
+                <option value="effective_hourly">Макс. эффективная ставка</option>
+            </select>
+        </label>
+        <button type="submit">Apply best mode</button>
+    </form>
+    {% if best_mode_by_profit %}<span><small>Best profit: <strong>{{ best_mode_by_profit }}</strong></small></span>{% endif %}
+    {% if best_mode_by_effective_hourly %}<span><small>Best hourly: <strong>{{ best_mode_by_effective_hourly }}</strong></small></span>{% endif %}
+</div>
+{% endif %}
+<div style="margin-bottom:10px;">
+    <strong>Показать режимы:</strong>
+    {% for scenario in scenarios %}
+    <label style="margin-right:8px;"><input type="checkbox" class="js-mode-filter" value="{{ scenario.raw.mode }}" checked> {{ scenario.raw.mode }}</label>
+    {% endfor %}
+</div>
+<table border="1" cellpadding="6" cellspacing="0" style="border-collapse: collapse; width: 100%;" id="pricing-compare-table">
     <thead>
         <tr>
             <th>Mode</th>
@@ -169,7 +192,7 @@
     <tbody>
     {% for scenario in scenarios %}
         {% set row = scenario.raw %}
-        <tr {% if row.mode == pricing.mode %}style="background:#e7f7e7;"{% elif row.invalid %}style="background:#f2f2f2;color:#666;"{% endif %}>
+        <tr data-mode-row="{{ row.mode }}" {% if row.mode == pricing.mode %}style="background:#e7f7e7;"{% elif row.invalid %}style="background:#f2f2f2;color:#666;"{% endif %}>
             <td>{{ row.mode }}{% if scenario.not_applicable %}<div><small title="Почему недоступно? {% for warning in scenario.warnings %}{{ warning.text }}{% if not loop.last %}; {% endif %}{% endfor %}">Not applicable</small></div>{% endif %}</td>
             <td>{{ scenario.price_ex_vat_display }}</td>
             <td>{{ scenario.vat_amount_display }}</td>
@@ -224,7 +247,7 @@
                 {% endif %}
             </td>
         </tr>
-        <tr>
+        <tr data-mode-row="{{ row.mode }}">
             <td colspan="10" style="font-size: 0.9em;">
                 <details>
                     <summary>Details</summary>
@@ -289,7 +312,17 @@
         });
     });
 
+    const modeFilterBoxes = Array.from(document.querySelectorAll('.js-mode-filter'));
+    function applyModeFilter() {
+        const selected = new Set(modeFilterBoxes.filter((box) => box.checked).map((box) => box.value));
+        document.querySelectorAll('[data-mode-row]').forEach((row) => {
+            row.hidden = !selected.has(row.getAttribute('data-mode-row'));
+        });
+    }
+    modeFilterBoxes.forEach((box) => box.addEventListener('change', applyModeFilter));
+
     updateModePanels();
+    applyModeFilter();
 })();
 </script>
 <script defer src="{{ url_for('static', path='js/autosave.js') }}"></script>

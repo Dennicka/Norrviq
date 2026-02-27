@@ -273,6 +273,22 @@ def _conversion_view_model(result):
     }
 
 
+def _pick_best_pricing_mode(scenarios, metric: str = "profit") -> str | None:
+    valid = [scenario for scenario in scenarios if not scenario.invalid]
+    if not valid:
+        return None
+    normalized_metric = (metric or "profit").strip().lower()
+    if normalized_metric == "effective_hourly":
+        ranked = sorted(
+            valid,
+            key=lambda scenario: scenario.effective_hourly_sell_rate if scenario.effective_hourly_sell_rate is not None else Decimal("-1"),
+            reverse=True,
+        )
+        return ranked[0].mode if ranked else None
+    ranked = sorted(valid, key=lambda scenario: scenario.profit, reverse=True)
+    return ranked[0].mode if ranked else None
+
+
 def _parse_conversion_decimal(value: str | None):
     if value in (None, ""):
         return None
@@ -2134,6 +2150,8 @@ async def project_pricing_screen(
         pricing_policy=policy,
         completeness_by_mode=completeness_by_mode,
         selected_completeness=completeness_by_mode.get(pricing.mode),
+        best_mode_by_profit=_pick_best_pricing_mode(scenarios, "profit"),
+        best_mode_by_effective_hourly=_pick_best_pricing_mode(scenarios, "effective_hourly"),
     )
     return templates.TemplateResponse(request, "projects/pricing.html", context)
 
@@ -2768,6 +2786,22 @@ async def update_project_pricing_screen(
         log_event(db, request, "pricing_conversion_applied", entity_type="PROJECT", entity_id=project_id, metadata={"project_id": project_id, "mode": apply_mode, "value": str(apply_value)})
         db.commit()
         add_flash_message(request, make_t(lang)("projects.takeoff.conversion_applied"), "success")
+        return RedirectResponse(url=f"/projects/{project_id}/pricing", status_code=status.HTTP_303_SEE_OTHER)
+
+    if intent == "apply_best_mode":
+        baseline, scenarios = compute_pricing_scenarios(db, project_id, request_id=getattr(request.state, "request_id", None))
+        del baseline
+        best_metric = payload.get("best_metric") or "profit"
+        best_mode = _pick_best_pricing_mode(scenarios, metric=best_metric)
+        if not best_mode:
+            raise HTTPException(status_code=400, detail="No applicable pricing mode")
+        select_pricing_mode(
+            db,
+            pricing=pricing,
+            mode=best_mode,
+            user_id=get_current_user_email(request),
+        )
+        add_flash_message(request, make_t(lang)("projects.pricing.best_mode_applied"), "success")
         return RedirectResponse(url=f"/projects/{project_id}/pricing", status_code=status.HTTP_303_SEE_OTHER)
 
     try:

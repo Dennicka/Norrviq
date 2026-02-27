@@ -2440,3 +2440,25 @@ TRANSLATIONS_EN.update({
     "projects.workspace.tab.shopping_list": "Shopping list",
     "projects.workspace.tab.pricing_settings": "Pricing settings",
 })
+
+TRANSLATIONS_RU.update({
+    "projects.workspace.summary.labor_cost_ex": "Трудозатраты (себестоимость)",
+    "projects.workspace.summary.effective_hourly": "Эффективная ставка",
+    "projects.workspace.summary.active_mode": "Активный режим",
+    "projects.workspace.summary.materials": "Материалы (факт / план)",
+    "projects.pricing.best_mode_applied": "Лучший режим применён к проекту",
+})
+TRANSLATIONS_SV.update({
+    "projects.workspace.summary.labor_cost_ex": "Arbetskostnad (självkostnad)",
+    "projects.workspace.summary.effective_hourly": "Effektiv timtaxa",
+    "projects.workspace.summary.active_mode": "Aktivt prismodus",
+    "projects.workspace.summary.materials": "Material (utfall / plan)",
+    "projects.pricing.best_mode_applied": "Bästa läget har tillämpats",
+})
+TRANSLATIONS_EN.update({
+    "projects.workspace.summary.labor_cost_ex": "Labour cost ex VAT",
+    "projects.workspace.summary.effective_hourly": "Effective hourly",
+    "projects.workspace.summary.active_mode": "Active pricing mode",
+    "projects.workspace.summary.materials": "Materials (actual / planned)",
+    "projects.pricing.best_mode_applied": "Best mode applied to project",
+})
