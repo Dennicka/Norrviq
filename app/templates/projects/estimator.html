@@ -4,107 +4,86 @@
 <p><a href="/projects/{{ project.id }}">← {{ t('projects.detail') }}</a></p>
 
 <section data-testid="totals" style="position:sticky;top:8px;z-index:10;background:#fff;border:1px solid #d1d5db;padding:12px;margin-bottom:12px;">
+  {% if workspace.empty_reason %}<p>{{ t(workspace.empty_reason) }}</p>{% endif %}
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;">
     <div><strong>{{ t('estimator.total_hours') }}</strong><div>{{ workspace.totals.total_hours }}</div></div>
     <div><strong>{{ t('projects.workspace.summary.total_ex') }}</strong><div>{{ workspace.totals.sell_ex_vat }}</div></div>
     <div><strong>{{ t('estimator.labour_cost') }}</strong><div>{{ workspace.totals.labour }}</div></div>
+    <div><strong>{{ t('projects.workspace.summary.materials') }}</strong><div>{{ workspace.materials.total_estimated_cost }}</div></div>
     <div><strong>{{ t('finance.profit') }} / {{ t('finance.margin_percent') }}</strong><div>{{ workspace.totals.profit_ex_vat }} / {{ workspace.totals.margin_percent }}%</div></div>
     <div><strong>{{ t('projects.workspace.summary.effective_hourly') }}</strong><div>{{ workspace.totals.effective_hourly }}</div></div>
     <div><strong>{{ t('projects.workspace.summary.active_mode') }}</strong><div>{{ workspace.active_mode }}</div></div>
-    <div><strong>{{ t('projects.workspace.summary.materials') }}</strong><div>{{ workspace.materials.total_estimated_cost }} / {{ workspace.materials.actual_total_cost }}</div></div>
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
     <form method="post" action="/projects/{{ project.id }}/estimator/recalculate">{{ csrf_input(request) }}<button type="submit">{{ t('estimator.recalculate') }}</button></form>
-    <a href="#compare">Compare modes <span class="help" title="{{ t('estimator.help.compare') }}">?</span></a>
-    <a href="/projects/{{ project.id }}/materials-plan">{{ t('estimator.materials_plan') }}</a>
-    <a href="/projects/{{ project.id }}/shopping-list">{{ t('estimator.shopping_list') }}</a>
+    <a href="#compare"><button type="button">Compare modes</button></a>
+    <form method="post" action="/projects/{{ project.id }}/estimator/apply-best-mode">{{ csrf_input(request) }}<button type="submit">Apply best mode</button></form>
+    <a href="/projects/{{ project.id }}/offer"><button type="button">Issue Offer</button></a>
+    <a href="/projects/{{ project.id }}/invoices/new"><button type="button">Issue Invoice</button></a>
+    <a href="/projects/{{ project.id }}"><button type="button">Open PDFs</button></a>
   </div>
 </section>
+
 
 <section><h2>{{ t('estimator.geometry') }}</h2><p>{{ t('estimator.rooms') }}: {{ workspace.geometry.rooms_count }} · {{ t('estimator.floor_area') }}: {{ workspace.geometry.total_floor_area }} · {{ t('estimator.wall_area') }}: {{ workspace.geometry.total_wall_area }} · {{ t('estimator.ceiling_area') }}: {{ workspace.geometry.total_ceiling_area }}</p></section>
 
 <section>
   <h2>{{ t('estimator.work_items') }}</h2>
-  <form method="post" action="/projects/{{ project.id }}/estimator/items/add" style="margin-bottom:8px;">{{ csrf_input(request) }}
+  <form method="post" action="/projects/{{ project.id }}/estimator/work-items/add" style="margin-bottom:8px;">{{ csrf_input(request) }}
     <label>{{ t('label.name') }}
-      <select name="work_type_id">{% for wt in worktypes %}<option value="{{ wt.id }}">{{ wt.name_ru if lang == 'ru' else (wt.name_en if lang == 'en' else wt.name_sv) }}</option>{% endfor %}</select>
+      <select name="work_type_id">{% for wt in worktypes %}<option value="{{ wt.id }}">{{ wt.name_ru if lang == 'ru' else wt.name_sv }}</option>{% endfor %}</select>
     </label>
-    <button type="submit">Add item</button>
+    <button type="submit">Add</button>
   </form>
+
+  <h3>{{ t('estimator.bulk_actions') }}</h3>
+  <form method="post" action="/projects/{{ project.id }}/estimator/packages/add" style="margin-bottom:8px;">{{ csrf_input(request) }}
+    <label>Add package
+      <select name="package_code">{% for p in workspace.packages %}<option value="{{ p.code }}">{{ p.label }}</option>{% endfor %}</select>
+    </label>
+    <button type="submit">Add package</button>
+  </form>
+
   <table>
-    <tr><th>Work type</th><th>Scope mode <span class="help" title="{{ t('estimator.help.scope') }}">?</span></th><th>Room(s)</th><th>Basis <span class="help" title="{{ t('estimator.help.basis') }}">?</span></th><th>Qty</th><th>Hours</th><th>Pricing mode</th><th>Sell ex VAT</th><th>Status</th><th>Actions</th></tr>
+    <tr><th>Work type</th><th>Scope <span class="help" title="{{ t('estimator.help.scope') }}">?</span></th><th>Basis <span class="help" title="{{ t('estimator.help.basis') }}">?</span></th><th>Rooms</th><th>Qty</th><th>Hours</th><th>Pricing <span class="help" title="{{ t('estimator.help.pricing') }}">?</span></th><th>Sell ex VAT</th><th>Materials</th><th>Actions</th></tr>
     {% for item in workspace.work_items.rows %}
     <tr>
-      <form method="post" action="/projects/{{ project.id }}/estimator/items/{{ item.id }}/update">{{ csrf_input(request) }}
-      <td>{{ item.work_type_name }}</td>
-      <td data-testid="scope_badge">
-        <select name="scope_mode">
-          {% for mode in ['ROOM','SELECTED_ROOMS','PROJECT','CUSTOM_QTY'] %}<option value="{{ mode }}" {% if item.scope_mode == mode %}selected{% endif %}>{{ mode }}</option>{% endfor %}
-        </select>
-      </td>
-      <td>
-        {% if item.scope_mode == 'PROJECT' %}
-          All rooms
-        {% else %}
-          {% for room in workspace.rooms %}<label><input type="checkbox" name="selected_room_ids" value="{{ room.id }}" {% if room.id in item.selected_room_ids %}checked{% endif %}>{{ room.name }}</label>{% endfor %}
-        {% endif %}
-      </td>
-      <td><select name="basis_type">{% for basis in ['floor_area_m2','wall_area_m2','ceiling_area_m2','perimeter_m','openings_count','custom_qty'] %}<option value="{{ basis }}" {% if item.basis_type == basis %}selected{% endif %}>{{ basis }}</option>{% endfor %}</select></td>
-      <td>{% if item.scope_mode == 'CUSTOM_QTY' or item.basis_type == 'custom_qty' %}<input name="manual_qty" value="{{ item.manual_qty }}">{% else %}{{ item.qty }}{% endif %}</td>
+      <form method="post" action="/projects/{{ project.id }}/estimator/work-items/{{ item.id }}/update">{{ csrf_input(request) }}
+      <td>{{ item.work_type_name }} ({{ item.work_type_code }})<details><summary>?</summary><small>{{ item.explain.formula }} · norm={{ item.explain.norm_hours_per_unit }} · {{ item.explain.result }}</small></details></td>
+      <td data-testid="scope_badge"><select name="scope_mode">{% for mode in ['ROOM','PROJECT','SELECTED_ROOMS','CUSTOM_QTY'] %}<option value="{{ mode }}" {% if item.scope_mode == mode %}selected{% endif %}>{{ mode }}</option>{% endfor %}</select></td>
+      <td><select name="basis_type">{% for basis in ['wall_area_m2','ceiling_area_m2','floor_area_m2','perimeter_m','openings_count','custom_qty'] %}<option value="{{ basis }}" {% if item.basis_type == basis %}selected{% endif %}>{{ basis }}</option>{% endfor %}</select></td>
+      <td>{% for room in workspace.rooms %}<label><input type="checkbox" name="selected_room_ids" value="{{ room.id }}" {% if room.id in item.selected_room_ids %}checked{% endif %}>{{ room.name }}</label>{% endfor %}</td>
+      <td>{% if item.scope_mode == 'CUSTOM_QTY' or item.basis_type == 'custom_qty' %}<input name="manual_qty" value="{{ item.manual_qty }}" style="width:90px;">{% else %}{{ item.qty }}{% endif %}</td>
       <td>{{ item.hours }}</td>
-      <td><select name="pricing_mode">{% for mode in ['HOURLY','PER_M2','FIXED_TOTAL','PER_ROOM','PIECEWORK'] %}<option value="{{ mode }}" {% if item.pricing_mode == mode %}selected{% endif %}>{{ mode }}</option>{% endfor %}</select></td>
-      <td>{{ item.sell_ex_vat }} <input name="fixed_total_ex_vat" placeholder="fixed_total" value="{{ item.fixed_total_ex_vat }}" style="width:90px;"><input name="unit_rate_ex_vat" placeholder="unit_rate" value="{{ item.unit_rate_ex_vat }}" style="width:90px;"><input name="hourly_rate_ex_vat" placeholder="hourly_rate" value="{{ item.hourly_rate_ex_vat }}" style="width:90px;"></td>
-      <td>{% if item.invalid %}invalid: {{ item.reasons|join(', ') }}{% else %}ok{% endif %}</td>
-      <td><button type="submit">Save</button></form><form method="post" action="/projects/{{ project.id }}/estimator/items/{{ item.id }}/delete" style="display:inline;">{{ csrf_input(request) }}<button type="submit">Delete</button></form></td>
+      <td><select name="pricing_mode">{% for mode in ['HOURLY','PER_M2','FIXED_TOTAL','PIECEWORK','PER_ROOM'] %}<option value="{{ mode }}" {% if item.pricing_mode == mode %}selected{% endif %}>{{ mode }}</option>{% endfor %}</select>
+        <input name="hourly_rate_ex_vat" value="{{ item.hourly_rate_ex_vat }}" placeholder="hourly" style="width:70px;">
+        <input name="unit_rate_ex_vat" value="{{ item.unit_rate_ex_vat }}" placeholder="unit" style="width:70px;">
+        <input name="fixed_total_ex_vat" value="{{ item.fixed_total_ex_vat }}" placeholder="fixed" style="width:70px;"></td>
+      <td>{{ item.sell_ex_vat }}</td>
+      <td>{{ workspace.materials.total_estimated_cost }} {% if workspace.materials.warnings %}⚠{% endif %}</td>
+      <td><button type="submit">Save</button></form>
+        <form method="post" action="/projects/{{ project.id }}/estimator/items/{{ item.id }}/duplicate" style="display:inline;">{{ csrf_input(request) }}<button type="submit">Duplicate</button></form>
+        <form method="post" action="/projects/{{ project.id }}/estimator/work-items/{{ item.id }}/delete" style="display:inline;">{{ csrf_input(request) }}<button type="submit">Delete</button></form>
+      </td>
     </tr>
     {% endfor %}
   </table>
 </section>
 
+<section><h3>Breakdown by rooms</h3><table><tr><th>Room</th><th>Hours</th><th>Sell</th></tr>{% for row in workspace.work_items.breakdown_by_rooms %}<tr><td>{{ row.room }}</td><td>{{ row.hours }}</td><td>{{ row.sell }}</td></tr>{% endfor %}</table></section>
+<section><h3>Breakdown by categories</h3><table><tr><th>Category</th><th>Hours</th><th>Sell</th></tr>{% for row in workspace.work_items.breakdown_by_categories %}<tr><td>{{ row.category }}</td><td>{{ row.hours }}</td><td>{{ row.sell }}</td></tr>{% endfor %}</table></section>
+
+
 <section>
-  <h2>{{ t('estimator.bulk_actions') }}</h2>
-  <h3>Presets</h3>
-  <form method="post" action="/projects/{{ project.id }}/estimator/presets/add">{{ csrf_input(request) }}
-    <select name="preset">
-      <option value="wall_paint">Покраска стен + потолков (2 слоя)</option>
-      <option value="wall_putty">Шпаклевка (2 слоя) + шлифовка</option>
-      <option value="floor_protection">Укрывка пола (вся квартира)</option>
-      <option value="baseboard_paint">Покраска плинтусов</option>
-    </select>
-    <input type="hidden" name="scope_mode" value="all_rooms">
-    <input type="hidden" name="coats" value="2">
-    <button type="submit">Add preset</button>
-  </form>
+  <h2>{{ t('estimator.materials_plan') }}</h2>
+  <table data-testid="materials_plan"><tr><th>{{ t('label.name') }}</th><th>{{ t('label.quantity') }}</th><th>{{ t('label.unit') }}</th><th>{{ t('label.price') }}</th></tr>
+  {% for row in workspace.materials.rows %}<tr><td>{{ row.name }}</td><td>{{ row.quantity }}</td><td>{{ row.unit }}</td><td>{{ row.estimated_cost }}</td></tr>{% endfor %}</table>
 </section>
 
 <section id="compare">
   <h2>Compare modes</h2>
-  <form method="get" style="margin-bottom:8px;" data-testid="pricing_filter">
-    <input type="hidden" name="lang" value="{{ lang }}">
-    {% for row in workspace.pricing.compare_rows %}
-    <label><input type="checkbox" name="show_modes" value="{{ row.mode }}" {% if row.mode in visible_modes %}checked{% endif %}> {{ row.mode }}</label>
-    {% endfor %}
-    <button type="submit">Apply</button>
-  </form>
-  <table data-testid="pricing_table">
-    <tr><th>Mode</th><th>Total hours</th><th>Sell ex VAT</th><th>Labour cost ex VAT</th><th>Profit ex VAT</th><th>Margin %</th><th>Effective hourly</th><th>Valid/Invalid</th><th></th></tr>
-    {% for row in workspace.pricing.compare_rows %}
-    {% if row.mode in visible_modes %}
-    <tr>
-      <td>{{ row.mode }}</td><td>{{ row.total_hours or workspace.totals.total_hours }}</td><td>{{ row.revenue }}</td><td>{{ row.cost }}</td><td>{{ row.profit }}</td><td>{{ row.margin_pct }}</td><td>{{ row.effective_hourly }}</td>
-      <td>{% if row.invalid %}Invalid: {{ row.reasons|join(', ') }}{% else %}Valid{% endif %}</td>
-      <td><form method="post" action="/projects/{{ project.id }}/estimator/apply-mode">{{ csrf_input(request) }}<input type="hidden" name="mode" value="{{ row.mode }}"><button type="submit">Apply this mode</button></form></td>
-    </tr>
-    {% endif %}
-    {% endfor %}
-  </table>
-</section>
-
-<section>
-  <h2>{{ t('estimator.materials_plan') }}</h2>
-  <table data-testid="materials_plan">
-    <tr><th>{{ t('label.name') }}</th><th>{{ t('label.quantity') }}</th><th>{{ t('label.unit') }}</th><th>{{ t('label.price') }}</th></tr>
-    {% for row in workspace.materials.rows %}<tr><td>{{ row.name }}</td><td>{{ row.quantity }}</td><td>{{ row.unit }}</td><td>{{ row.estimated_cost }}</td></tr>{% endfor %}
+  <table data-testid="pricing_table"><tr><th>Mode</th><th>Hours</th><th>Sell</th><th>Cost</th><th>Profit</th><th>Margin</th><th></th></tr>
+  {% for row in workspace.pricing.compare_rows %}<tr><td>{{ row.mode }}</td><td>{{ row.total_hours or workspace.totals.total_hours }}</td><td>{{ row.revenue }}</td><td>{{ row.cost }}</td><td>{{ row.profit }}</td><td>{{ row.margin_pct }}</td><td><form method="post" action="/projects/{{ project.id }}/estimator/apply-mode">{{ csrf_input(request) }}<input type="hidden" name="mode" value="{{ row.mode }}"><button type="submit">Apply</button></form></td></tr>{% endfor %}
   </table>
 </section>
 {% endblock %}

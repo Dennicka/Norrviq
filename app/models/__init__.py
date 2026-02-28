@@ -38,6 +38,7 @@ from .material_norm import MaterialConsumptionNorm
 from .material_actual_entry import ProjectMaterialActualEntry
 from .material_catalog_item import MaterialCatalogItem
 from .material_consumption_override import MaterialConsumptionOverride
+from .work_package import WorkPackageTemplate, WorkPackageTemplateItem
 
 __all__ = [
     "Client",
@@ -91,4 +92,6 @@ __all__ = [
     "ProjectMaterialActualEntry",
     "MaterialCatalogItem",
     "MaterialConsumptionOverride",
+    "WorkPackageTemplate",
+    "WorkPackageTemplateItem",
 ]

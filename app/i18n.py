@@ -2489,3 +2489,19 @@ TRANSLATIONS_EN.update({
     "projects.workspace.summary.materials": "Materials (actual / planned)",
     "projects.pricing.best_mode_applied": "Best mode applied to project",
 })
+
+TRANSLATIONS_RU.update({
+    "estimator.help.pricing": "Режим цены: HOURLY требует ставку/час, PER_M2 и PIECEWORK требуют ставку за единицу, FIXED_TOTAL требует фиксированную сумму.",
+    "estimator.empty.no_items": "Нет позиций работ — добавьте хотя бы одну строку.",
+    "estimator.empty.no_geometry": "Нет геометрии — добавьте комнаты и площади.",
+})
+TRANSLATIONS_SV.update({
+    "estimator.help.pricing": "Prisläge: HOURLY kräver timtaxa, PER_M2/PIECEWORK kräver enhetspris, FIXED_TOTAL kräver fast summa.",
+    "estimator.empty.no_items": "Inga arbetsrader — lägg till minst en rad.",
+    "estimator.empty.no_geometry": "Ingen geometri — lägg till rum och ytor.",
+})
+TRANSLATIONS_EN.update({
+    "estimator.help.pricing": "Pricing mode: HOURLY needs hourly rate, PER_M2/PIECEWORK need unit rate, FIXED_TOTAL needs fixed total.",
+    "estimator.empty.no_items": "No work items yet — add at least one item.",
+    "estimator.empty.no_geometry": "No geometry yet — add rooms and areas.",
+})
