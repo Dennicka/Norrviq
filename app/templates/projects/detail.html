@@ -61,6 +61,12 @@
         <button type="submit" onclick="return confirm('{{ t("label.delete") }}?');">{{ t('label.delete') }}</button>
     </form>
 </p>
+<p>
+    <a href="/projects/{{ project.id }}/estimator">Открыть Estimator</a> |
+    <a href="/projects/{{ project.id }}/materials-plan">Материалы план</a> |
+    <a href="/projects/{{ project.id }}/shopping-list">Список покупок</a> |
+    <a href="/projects/{{ project.id }}?tab=documents">Документы</a>
+</p>
 <section class="workspace-section" data-tab="overview"{% if active_tab != "overview" %} hidden{% endif %}>
     <h2>{{ t("projects.detail") }}</h2>
     <p><strong>{{ t("label.client") }}:</strong> {{ project.client.name if project.client else "" }}</p>

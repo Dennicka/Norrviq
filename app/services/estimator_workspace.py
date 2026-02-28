@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections import defaultdict
 from decimal import Decimal
 
@@ -23,8 +24,8 @@ from app.services.pricing_consistency import DOC_TYPE_OFFER, validate_pricing_co
 from app.services.quality import evaluate_project_quality
 
 
-PRICING_MODE_ORDER = ["HOURLY", "FIXED_TOTAL", "PER_M2", "PER_ROOM", "PIECEWORK"]
-SCENARIO_MODE_ORDER = PRICING_MODE_ORDER + ["HYBRID"]
+PRICING_MODE_ORDER = ["HOURLY", "PER_M2", "FIXED_TOTAL", "PER_ROOM", "PIECEWORK"]
+SCENARIO_MODE_ORDER = PRICING_MODE_ORDER
 
 
 def _d(value: Decimal | None) -> Decimal:
@@ -44,6 +45,32 @@ def _build_missing_reasons(scenario: dict) -> list[str]:
     if not scenario.get("enabled", True) and not reasons:
         reasons.append("MISSING_REQUIREMENTS")
     return reasons
+
+
+def _basis_value(item: ProjectWorkItem, geometry: dict) -> Decimal:
+    basis_map = {
+        "floor_area_m2": _d(geometry.get("total_floor_area")),
+        "wall_area_m2": _d(geometry.get("total_wall_area")),
+        "ceiling_area_m2": _d(geometry.get("total_ceiling_area")),
+    }
+    return basis_map.get((item.basis_type or "").lower(), _d(item.calculated_qty))
+
+
+def _build_item_warnings(item: ProjectWorkItem, rooms_count: int, geometry: dict) -> list[str]:
+    warnings: list[str] = []
+    if (item.scope_mode or "").upper() == "SELECTED_ROOMS" and not (item.selected_room_ids_json or "").strip():
+        warnings.append("estimator.invalid.no_rooms_selected")
+    if (item.scope_mode or "").upper() == "CUSTOM_QTY" and _d(item.manual_qty) <= 0:
+        warnings.append("estimator.invalid.manual_qty_missing")
+    if _d(item.norm_hours_per_unit) <= 0 and _d(getattr(item.work_type, "hours_per_unit", None)) <= 0:
+        warnings.append("estimator.invalid.norm_hours_missing")
+    if (item.pricing_mode or "").upper() == "FIXED_TOTAL" and _d(item.fixed_total_ex_vat or item.fixed_price_sek) <= 0:
+        warnings.append("estimator.invalid.fixed_total_missing")
+    if (item.pricing_mode or "").upper() in {"PER_M2", "PIECEWORK"} and _d(item.unit_rate_ex_vat or item.area_rate_sek) <= 0:
+        warnings.append("estimator.invalid.unit_rate_missing")
+    if rooms_count > 0 and (item.basis_type or "").lower() != "custom_qty" and _basis_value(item, geometry) <= 0:
+        warnings.append("estimator.invalid.no_geometry")
+    return list(dict.fromkeys(warnings))
 
 
 def build_estimator_workspace(db: Session, project_id: int, lang: str = "ru") -> dict:
@@ -123,25 +150,6 @@ def build_estimator_workspace(db: Session, project_id: int, lang: str = "ru") ->
             },
         )
 
-    # Lightweight hybrid scenario: safe visible compare based on best available mode.
-    enabled_modes = [row for mode, row in pricing_scenarios.items() if mode != "HYBRID" and not row["invalid"]]
-    if enabled_modes:
-        hybrid = max(enabled_modes, key=lambda row: row["profit"])
-        pricing_scenarios["HYBRID"].update(
-            {
-                "revenue": hybrid["revenue"],
-                "cost": hybrid["cost"],
-                "profit": hybrid["profit"],
-                "margin_pct": hybrid["margin_pct"],
-                "effective_hourly": hybrid["effective_hourly"],
-                "total": hybrid["total"],
-                "invalid": False,
-                "missing_requirements": [],
-                "below_margin_floor": hybrid["below_margin_floor"],
-                "warnings": [f"BLEND_FROM:{hybrid['mode']}"] + hybrid["warnings"],
-            }
-        )
-
     for mode in SCENARIO_MODE_ORDER:
         pricing_scenarios[mode]["enabled"] = mode == active_mode
         pricing_scenarios[mode]["is_selected"] = mode == active_mode
@@ -199,7 +207,35 @@ def build_estimator_workspace(db: Session, project_id: int, lang: str = "ru") ->
                 }
             )
         row["enabled"] = mode == (pricing.mode or "HOURLY").upper()
+        row["invalid"] = bool(row.get("invalid") or row.get("missing_requirements"))
+        row["reasons"] = row.get("missing_requirements", [])
         compare_rows.append(row)
+
+    room_options = [{"id": room.id, "name": room.name} for room in rooms]
+    work_item_rows = []
+    for item in project.work_items:
+        item_warnings = _build_item_warnings(item, len(rooms), {
+            "total_floor_area": geometry.total_floor_area_m2,
+            "total_wall_area": geometry.total_wall_area_net_m2,
+            "total_ceiling_area": geometry.total_ceiling_area_m2,
+        })
+        work_item_rows.append({
+            "id": item.id,
+            "work_type_name": item.work_type.name_ru if item.work_type else "-",
+            "scope_mode": (item.scope_mode or "ROOM").upper(),
+            "basis_type": (item.basis_type or "floor_area_m2").lower(),
+            "selected_room_ids": [int(v) for v in json.loads(item.selected_room_ids_json)] if item.selected_room_ids_json else [],
+            "qty": _d(item.calculated_qty),
+            "manual_qty": _d(item.manual_qty),
+            "hours": _d(item.calculated_hours),
+            "pricing_mode": (item.pricing_mode or "HOURLY").upper(),
+            "sell_ex_vat": _d(item.calculated_sell_ex_vat),
+            "fixed_total_ex_vat": _d(item.fixed_total_ex_vat),
+            "unit_rate_ex_vat": _d(item.unit_rate_ex_vat),
+            "hourly_rate_ex_vat": _d(item.hourly_rate_ex_vat),
+            "invalid": bool(item_warnings),
+            "reasons": item_warnings,
+        })
 
     return {
         "project": project,
@@ -212,6 +248,7 @@ def build_estimator_workspace(db: Session, project_id: int, lang: str = "ru") ->
         },
         "work_items": {
             "grouped": grouped_items,
+            "rows": work_item_rows,
             "total_hours": project_estimate.totals.total_hours,
             "hours_by_room": {rooms_index.get(k).name if k in rooms_index else "project": v for k, v in hours_by_room.items()},
             "hours_by_work_type": dict(hours_by_work_type),
@@ -223,6 +260,10 @@ def build_estimator_workspace(db: Session, project_id: int, lang: str = "ru") ->
             "vat": totals.vat,
             "total": totals.total,
             "total_hours": project_estimate.totals.total_hours,
+            "sell_ex_vat": project_estimate.totals.sell_ex_vat,
+            "profit_ex_vat": project_estimate.totals.profit_ex_vat,
+            "margin_percent": project_estimate.totals.margin_percent,
+            "effective_hourly": project_estimate.totals.effective_hourly_ex_vat,
         },
         "pricing": {
             "selected_mode": pricing.mode,
@@ -233,9 +274,12 @@ def build_estimator_workspace(db: Session, project_id: int, lang: str = "ru") ->
         "materials": {
             "rows": material_rows,
             "total_estimated_cost": _d(bom.total_cost_ex_vat),
+            "actual_total_cost": Decimal("0.00"),
             "override_applied": bool(source_badges - {"default"}),
             "warnings": list(bom.warnings),
         },
+        "rooms": room_options,
+        "active_mode": active_mode,
         "quality": {
             "completeness_score": completeness.score,
             "sanity_warnings": [issue.message for issue in quality.issues],
