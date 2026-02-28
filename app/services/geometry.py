@@ -6,6 +6,7 @@ from decimal import Decimal, InvalidOperation
 from sqlalchemy.orm import Session
 
 from app.models.room import Room
+from app.services.request_cache import RequestCache, cache_key
 
 
 @dataclass
@@ -165,7 +166,13 @@ def geometry_completeness(geom: GeometryResult) -> dict[str, bool]:
     }
 
 
-def aggregate_project_geometry(db: Session, project_id: int) -> GeometrySummary:
+def aggregate_project_geometry(db: Session, project_id: int, *, cache: RequestCache | None = None) -> GeometrySummary:
+    key = cache_key("project_geometry", project_id)
+    if cache is not None:
+        cached = cache.get(key)
+        if cached is not None:
+            return cached
+
     rooms = db.query(Room).filter(Room.project_id == project_id).all()
     summary = GeometrySummary(rooms_count=len(rooms))
     for room in rooms:
@@ -191,6 +198,8 @@ def aggregate_project_geometry(db: Session, project_id: int) -> GeometrySummary:
     summary.total_wall_area_gross_m2 = _q(summary.total_wall_area_gross_m2) or Decimal("0.00")
     summary.total_perimeter_m = _q(summary.total_perimeter_m) or Decimal("0.00")
     summary.total_openings_area_m2 = _q(summary.total_openings_area_m2) or Decimal("0.00")
+    if cache is not None:
+        cache.set(key, summary)
     return summary
 
 

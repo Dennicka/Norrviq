@@ -24,6 +24,7 @@ from app.services.pricing_sanity import (
 from app.services.buffer_rules import resolve_effective_buffer
 from app.services.materials_bom import compute_project_bom, get_or_create_project_material_settings
 from app.services.takeoff import compute_project_areas, get_or_create_project_takeoff_settings
+from app.services.request_cache import RequestCache, cache_key
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -243,7 +244,19 @@ def compute_project_baseline(
     include_materials: bool,
     include_travel_setup_buffers: bool,
     request_id: str | None = None,
+    cache: RequestCache | None = None,
 ) -> ProjectBaseline:
+    key = cache_key(
+        "pricing_baseline",
+        project_id,
+        include_materials,
+        include_travel_setup_buffers,
+    )
+    if cache is not None:
+        cached = cache.get(key)
+        if cached is not None:
+            return cached
+
     project = (
         db.query(Project)
         .options(
@@ -311,7 +324,7 @@ def compute_project_baseline(
             actuals = db.query(ProjectMaterialActuals).filter(ProjectMaterialActuals.project_id == project_id).first()
             materials_cost_internal = Decimal(str(actuals.actual_cost_ex_vat if actuals else 0))
         else:
-            bom = compute_project_bom(db, project_id)
+            bom = compute_project_bom(db, project_id, cache=cache)
             if bom.items:
                 materials_cost_internal = bom.total_cost_ex_vat
 
@@ -428,7 +441,7 @@ def compute_project_baseline(
     rooms_count = len(project.rooms)
     items_count = len(project.work_items)
 
-    return ProjectBaseline(
+    baseline_result = ProjectBaseline(
         raw_labor_hours_total=raw_labor_hours_total,
         speed_profile_code=speed_profile.code,
         speed_multiplier=speed_multiplier,
@@ -454,6 +467,10 @@ def compute_project_baseline(
         buffers=breakdown,
         effective_buffer=effective_meta,
     )
+    if cache is not None:
+        cache.set(key, baseline_result)
+    return baseline_result
+
 
 
 def _build_scenario(
@@ -512,14 +529,27 @@ def _build_scenario(
     )
 
 
-def compute_pricing_scenarios(db: Session, project_id: int, *, request_id: str | None = None) -> tuple[ProjectBaseline, list[PricingScenario]]:
+def compute_pricing_scenarios(
+    db: Session,
+    project_id: int,
+    *,
+    request_id: str | None = None,
+    cache: RequestCache | None = None,
+) -> tuple[ProjectBaseline, list[PricingScenario]]:
     pricing = get_or_create_project_pricing(db, project_id)
+    scenarios_key = cache_key("pricing_scenarios", project_id, request_id or "", pricing.include_materials, pricing.include_travel_setup_buffers)
+    if cache is not None:
+        cached = cache.get(scenarios_key)
+        if cached is not None:
+            return cached
+
     baseline = compute_project_baseline(
         db,
         project_id,
         include_materials=pricing.include_materials,
         include_travel_setup_buffers=pricing.include_travel_setup_buffers,
         request_id=request_id,
+        cache=cache,
     )
     settings = get_or_create_settings(db)
     vat_pct = Decimal(str(settings.moms_percent if settings.moms_percent is not None else DEFAULT_VAT_PCT))
@@ -621,7 +651,10 @@ def compute_pricing_scenarios(db: Session, project_id: int, *, request_id: str |
 
     scenario_order = {"HOURLY": 0, "PER_M2": 1, "FIXED_TOTAL": 2, "PER_ROOM": 3, "PIECEWORK": 4}
     scenarios = sorted(scenarios, key=lambda scenario: scenario_order.get(scenario.mode, 999))
-    return baseline, scenarios
+    result = (baseline, scenarios)
+    if cache is not None:
+        cache.set(scenarios_key, result)
+    return result
 
 
 def compute_conversions(db: Session, project_id: int, desired: DesiredInput) -> ConversionResult:

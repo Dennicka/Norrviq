@@ -13,6 +13,7 @@ from app.models.project_procurement_settings import ProjectProcurementSettings
 from app.services.invoice_lines import recalculate_invoice_totals
 from app.services.materials_bom import ProcurementStrategy, compute_procurement_plan
 from app.services.procurement_rounding import ProcurementRoundingPolicy
+from app.services.request_cache import RequestCache, cache_key
 
 MONEY_Q = Decimal("0.01")
 
@@ -113,9 +114,16 @@ def compute_project_shopping_list(
     include_items_without_price: bool = True,
     strategy: str | None = None,
     policy: ProcurementRoundingPolicy | None = None,
+    cache: RequestCache | None = None,
 ) -> ShoppingListReport:
     settings = get_or_create_procurement_settings(db, project_id)
     strategy_mode = (strategy or ("PREFERRED_FIRST" if settings.preferred_supplier_id else "CHEAPEST")).upper()
+    cache_token = f"{supplier_id}:{group_by_supplier}:{include_items_without_price}:{strategy_mode}:{policy}"
+    key = cache_key("shopping_list", project_id, cache_token)
+    if cache is not None:
+        cached = cache.get(key)
+        if cached is not None:
+            return cached
     if strategy_mode == "FIXED_SUPPLIER" and not supplier_id:
         supplier_id = settings.preferred_supplier_id
     plan = compute_procurement_plan(
@@ -124,15 +132,20 @@ def compute_project_shopping_list(
         strategy=ProcurementStrategy(strategy_mode if strategy_mode in {"CHEAPEST", "PREFERRED_FIRST", "FIXED_SUPPLIER"} else "CHEAPEST"),
         supplier_id=supplier_id or settings.preferred_supplier_id,
         policy=policy,
+        cache=cache,
     )
     warnings: list[str] = list(plan.warnings)
     items: list[ShoppingListItem] = []
+
+    material_ids = [line.material_id for line in plan.lines]
+    materials = db.query(Material).filter(Material.id.in_(material_ids)).all() if material_ids else []
+    materials_by_id = {material.id: material for material in materials}
 
     for line in plan.lines:
         planned_qty = Decimal(str(line.qty or 0))
         if planned_qty <= 0:
             continue
-        material = db.get(Material, line.material_id)
+        material = materials_by_id.get(line.material_id)
         pack_size = None
         pack_unit = line.unit
         if material and material.pack_size is not None:
@@ -173,8 +186,8 @@ def compute_project_shopping_list(
     grouped: dict[str, list[ShoppingListItem]] = {}
     if group_by_supplier:
         for item in items:
-            key = item.supplier_name or "Unassigned"
-            grouped.setdefault(key, []).append(item)
+            supplier_key = item.supplier_name or "Unassigned"
+            grouped.setdefault(supplier_key, []).append(item)
 
     total_packs = _qm(sum(((item.packs_needed or Decimal("0")) for item in items), start=Decimal("0")))
     total_cost = _qm(sum((item.line_total_cost for item in items), start=Decimal("0")))
@@ -187,7 +200,10 @@ def compute_project_shopping_list(
         "totals": {"packs": str(total_packs), "cost": str(total_cost)},
     }
     source_hash = hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()
-    return ShoppingListReport(project_id=project_id, source_hash=source_hash, items=items, total_packs=total_packs, total_cost_sek=total_cost, grouped_by_supplier=grouped, warnings=sorted(set(warnings)))
+    result = ShoppingListReport(project_id=project_id, source_hash=source_hash, items=items, total_packs=total_packs, total_cost_sek=total_cost, grouped_by_supplier=grouped, warnings=sorted(set(warnings)))
+    if cache is not None:
+        cache.set(key, result)
+    return result
 
 
 def apply_shopping_list_to_project_cost_items(db: Session, project_id: int, report: ShoppingListReport) -> int:

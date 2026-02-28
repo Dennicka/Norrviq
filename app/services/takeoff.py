@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.models.project import Project
 from app.models.project_takeoff_settings import DEFAULT_M2_BASIS, M2_BASIS_CHOICES, ProjectTakeoffSettings
+from app.services.request_cache import RequestCache, cache_key
 
 AREA_QUANT = Decimal("0.01")
 
@@ -61,7 +62,13 @@ def get_or_create_project_takeoff_settings(db: Session, project_id: int) -> Proj
     return settings
 
 
-def compute_project_areas(db: Session, project_id: int) -> AreasBreakdown:
+def compute_project_areas(db: Session, project_id: int, *, cache: RequestCache | None = None) -> AreasBreakdown:
+    key = cache_key("takeoff_totals", project_id)
+    if cache is not None:
+        cached = cache.get(key)
+        if cached is not None:
+            return cached
+
     project = db.get(Project, project_id)
     if not project:
         raise ValueError("Project not found")
@@ -117,13 +124,16 @@ def compute_project_areas(db: Session, project_id: int) -> AreasBreakdown:
     total_floor = _quantize(total_floor)
     total_ceiling = _quantize(total_ceiling)
     total_wall = _quantize(total_wall)
-    return AreasBreakdown(
+    result = AreasBreakdown(
         rooms=rooms,
         total_floor_m2=total_floor,
         total_ceiling_m2=total_ceiling,
         total_wall_m2=total_wall,
         total_paintable_m2=_quantize(total_wall + total_ceiling),
     )
+    if cache is not None:
+        cache.set(key, result)
+    return result
 
 
 def validate_m2_basis(value: str | None) -> str:
