@@ -22,6 +22,7 @@ from app.services.materials_bom import compute_project_bom
 from app.services.pricing import WARNING_LOW_MARGIN, compute_pricing_scenarios, evaluate_floor, get_or_create_project_pricing
 from app.services.pricing_consistency import DOC_TYPE_OFFER, validate_pricing_consistency
 from app.services.quality import evaluate_project_quality
+from app.services.work_packages import list_active_packages, package_label
 
 
 PRICING_MODE_ORDER = ["HOURLY", "PER_M2", "FIXED_TOTAL", "PER_ROOM", "PIECEWORK"]
@@ -96,12 +97,20 @@ def build_estimator_workspace(db: Session, project_id: int, lang: str = "ru") ->
     grouped_items: dict[int | None, list[ProjectWorkItem]] = defaultdict(list)
     hours_by_room: dict[int | None, Decimal] = defaultdict(lambda: Decimal("0"))
     hours_by_work_type: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
+    hours_by_category: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
+    sell_by_room: dict[int | None, Decimal] = defaultdict(lambda: Decimal("0"))
+    sell_by_category: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
     for item in project.work_items:
         grouped_items[item.room_id].append(item)
         item_hours = _d(item.calculated_hours)
+        item_sell = _d(item.calculated_sell_ex_vat)
         hours_by_room[item.room_id] += item_hours
+        sell_by_room[item.room_id] += item_sell
         wt_key = (item.work_type.name_ru if item.work_type else "-")
         hours_by_work_type[wt_key] += item_hours
+        cat = (item.work_type.category if item.work_type else "other") or "other"
+        hours_by_category[cat] += item_hours
+        sell_by_category[cat] += item_sell
 
     baseline, scenarios = compute_pricing_scenarios(db, project_id)
     pricing = get_or_create_project_pricing(db, project_id)
@@ -219,23 +228,41 @@ def build_estimator_workspace(db: Session, project_id: int, lang: str = "ru") ->
             "total_wall_area": geometry.total_wall_area_net_m2,
             "total_ceiling_area": geometry.total_ceiling_area_m2,
         })
+        norm = _d(item.norm_hours_per_unit or getattr(item.work_type, "hours_per_unit", 0))
+        qty = _d(item.calculated_qty)
+        hours = _d(item.calculated_hours)
+        sell = _d(item.calculated_sell_ex_vat)
         work_item_rows.append({
             "id": item.id,
             "work_type_name": item.work_type.name_ru if item.work_type else "-",
+            "work_type_code": item.work_type.code if item.work_type else "-",
             "scope_mode": (item.scope_mode or "ROOM").upper(),
             "basis_type": (item.basis_type or "floor_area_m2").lower(),
             "selected_room_ids": [int(v) for v in json.loads(item.selected_room_ids_json)] if item.selected_room_ids_json else [],
-            "qty": _d(item.calculated_qty),
+            "qty": qty,
             "manual_qty": _d(item.manual_qty),
-            "hours": _d(item.calculated_hours),
+            "hours": hours,
             "pricing_mode": (item.pricing_mode or "HOURLY").upper(),
-            "sell_ex_vat": _d(item.calculated_sell_ex_vat),
+            "sell_ex_vat": sell,
             "fixed_total_ex_vat": _d(item.fixed_total_ex_vat),
             "unit_rate_ex_vat": _d(item.unit_rate_ex_vat),
             "hourly_rate_ex_vat": _d(item.hourly_rate_ex_vat),
             "invalid": bool(item_warnings),
             "reasons": item_warnings,
+            "explain": {
+                "formula": f"{(item.scope_mode or 'ROOM').upper()} + {(item.basis_type or 'floor_area_m2').lower()}",
+                "norm_hours_per_unit": norm,
+                "multipliers": [f"difficulty={_d(item.difficulty_factor or 1)}", item.comment or ""],
+                "result": f"{qty} -> {hours}h -> {sell}",
+            },
         })
+
+    packages = [{"code": p.code, "label": package_label(p, lang)} for p in list_active_packages(db)]
+    empty_reason = None
+    if not project.work_items:
+        empty_reason = "estimator.empty.no_items"
+    elif len(rooms) == 0:
+        empty_reason = "estimator.empty.no_geometry"
 
     return {
         "project": project,
@@ -252,6 +279,8 @@ def build_estimator_workspace(db: Session, project_id: int, lang: str = "ru") ->
             "total_hours": project_estimate.totals.total_hours,
             "hours_by_room": {rooms_index.get(k).name if k in rooms_index else "project": v for k, v in hours_by_room.items()},
             "hours_by_work_type": dict(hours_by_work_type),
+            "breakdown_by_rooms": [{"room": rooms_index.get(k).name if k in rooms_index else "project", "hours": v, "sell": sell_by_room.get(k, Decimal("0"))} for k, v in hours_by_room.items()],
+            "breakdown_by_categories": [{"category": k, "hours": v, "sell": sell_by_category.get(k, Decimal("0"))} for k, v in hours_by_category.items()],
         },
         "totals": {
             "labour": totals.labour,
@@ -280,6 +309,8 @@ def build_estimator_workspace(db: Session, project_id: int, lang: str = "ru") ->
         },
         "rooms": room_options,
         "active_mode": active_mode,
+        "packages": packages,
+        "empty_reason": empty_reason,
         "quality": {
             "completeness_score": completeness.score,
             "sanity_warnings": [issue.message for issue in quality.issues],
