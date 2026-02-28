@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from decimal import Decimal, ROUND_CEILING, ROUND_HALF_UP
+from decimal import Decimal, ROUND_HALF_UP
 from enum import Enum
 
 from sqlalchemy.orm import Session, joinedload
@@ -18,6 +18,7 @@ from app.models.project_material_settings import ProjectMaterialSettings
 from app.models.room import Room
 from app.models.supplier_material_price import SupplierMaterialPrice
 from app.services.takeoff import compute_project_areas, get_or_create_project_takeoff_settings
+from app.services.procurement_rounding import ProcurementRoundingPolicy, compute_packs_needed, normalize_policy
 
 UNIT_Q = Decimal("0.0001")
 MONEY_Q = Decimal("0.01")
@@ -641,8 +642,15 @@ def _select_supplier_price(*, prices: list[SupplierMaterialPrice], strategy: Pro
     return sorted_prices[0]
 
 
-def compute_procurement_plan(db: Session, project_id: int, strategy: ProcurementStrategy = ProcurementStrategy.CHEAPEST, supplier_id: int | None = None) -> ProcurementPlan:
+def compute_procurement_plan(
+    db: Session,
+    project_id: int,
+    strategy: ProcurementStrategy = ProcurementStrategy.CHEAPEST,
+    supplier_id: int | None = None,
+    policy: ProcurementRoundingPolicy | None = None,
+) -> ProcurementPlan:
     bom = compute_project_bom(db, project_id)
+    resolved_policy = normalize_policy(policy)
     lines: list[ProcurementLine] = []
     warnings: list[str] = []
     for item in bom.items:
@@ -686,7 +694,7 @@ def compute_procurement_plan(db: Session, project_id: int, strategy: Procurement
                     if qty_in_pack_unit is None:
                         line_warnings.append(f"CONVERSION_{item.unit}_TO_{catalog_selected.package_unit}_UNAVAILABLE")
                     else:
-                        packs_needed = (qty_in_pack_unit / pack_size).to_integral_value(rounding=ROUND_CEILING)
+                        packs_needed = compute_packs_needed(qty_in_pack_unit, pack_size, resolved_policy)
                         purchase_qty = packs_needed * pack_size
                         unit_price = Decimal(str(catalog_selected.price_ex_vat or 0))
                         price_unit = "PACK"
@@ -704,7 +712,7 @@ def compute_procurement_plan(db: Session, project_id: int, strategy: Procurement
                 if qty_in_pack_unit is None:
                     line_warnings.append(f"CONVERSION_{item.unit}_TO_{selected.pack_unit}_UNAVAILABLE")
                 else:
-                    packs_needed = (qty_in_pack_unit / pack_size).to_integral_value(rounding=ROUND_CEILING)
+                    packs_needed = compute_packs_needed(qty_in_pack_unit, pack_size, resolved_policy)
                     purchase_qty = packs_needed * pack_size
                     unit_price = Decimal(str(selected.pack_price_ex_vat or 0))
                     price_unit = "PACK"
