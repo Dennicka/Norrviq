@@ -24,6 +24,9 @@ _BLACKLIST_LINES = {
     "Issue",
     "Issuing...",
     "Finalizing...",
+    "PDF-motorns reservläge är aktivt",
+    "PDF engine fallback mode active",
+    "Активирован резервный режим PDF-движка",
 }
 
 
