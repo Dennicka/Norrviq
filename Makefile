@@ -1,4 +1,4 @@
-.PHONY: check lint test migrate run preflight doctor bootstrap bootstrap-local run-local i18n-audit test-acceptance acceptance reset-db alembic-check pdf-install
+.PHONY: check lint test migrate run preflight doctor bootstrap bootstrap-local run-local i18n-audit test-acceptance acceptance release-check reset-db alembic-check pdf-install
 
 check: lint test alembic-check
 
@@ -51,3 +51,6 @@ test-acceptance:
 
 acceptance:
 	pytest -q -m acceptance
+
+release-check:
+	python scripts/release_check.py

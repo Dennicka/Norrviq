@@ -5,7 +5,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 
-from app.services.pdf_renderer import is_playwright_available, is_weasyprint_available
+from app.services.pdf_renderer import invoice_pdf_capability
 
 
 @dataclass
@@ -38,13 +38,26 @@ def main() -> int:
         )
     )
 
-    weasy_ok = is_weasyprint_available()
-    checks.append(Check("PDF WeasyPrint", weasy_ok, "available" if weasy_ok else "unavailable", "Install cairo/pango system libs or use Playwright backend."))
-    playwright_ok = is_playwright_available()
+    pdf_capability = invoice_pdf_capability()
+    configured_engine = str(pdf_capability["configured_engine"])
+    active_engine = str(pdf_capability["active_engine"])
+    weasy_ok = bool(pdf_capability["weasyprint_available"])
+    playwright_ok = bool(pdf_capability["playwright_available"])
+
+    weasy_required = configured_engine == "weasyprint"
+    checks.append(
+        Check(
+            "PDF WeasyPrint",
+            weasy_ok or not weasy_required,
+            "available" if weasy_ok else "unavailable",
+            "Install cairo/pango system libs or use Playwright backend.",
+        )
+    )
+    playwright_required = configured_engine == "playwright"
     checks.append(
         Check(
             "PDF Playwright+Chromium",
-            playwright_ok,
+            playwright_ok or not playwright_required,
             "available" if playwright_ok else "unavailable",
             "Run `make pdf-install` (or `python -m playwright install chromium`).",
         )
@@ -56,6 +69,10 @@ def main() -> int:
         print(f"[{marker}] {item.name}: {item.detail}")
         if not item.ok and item.hint:
             print(f"       hint: {item.hint}")
+    print(
+        "PDF: configured=%s active=%s weasyprint=%s playwright=%s"
+        % (configured_engine, active_engine, int(weasy_ok), int(playwright_ok))
+    )
 
     failed = [c for c in checks if not c.ok]
     return 1 if failed else 0
