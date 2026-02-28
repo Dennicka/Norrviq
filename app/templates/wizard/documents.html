@@ -1,0 +1,16 @@
+{% extends "wizard/layout.html" %}
+{% block wizard_step_content %}
+<h2>{{ t('wizard.step.documents') }}</h2>
+<h3>Offer</h3>
+<ul>
+  <li><a href="/offers/{{ project.id }}/print?lang={{ lang }}">/offers/{{ project.id }}/print?lang={{ lang }}</a></li>
+  <li><a href="/offers/{{ project.id }}/pdf?lang={{ lang }}">/offers/{{ project.id }}/pdf?lang={{ lang }}</a></li>
+</ul>
+{% if latest_invoice %}
+<h3>Invoice #{{ latest_invoice.id }}</h3>
+<ul>
+  <li><a href="/invoices/{{ latest_invoice.id }}/print?lang={{ lang }}">/invoices/{{ latest_invoice.id }}/print?lang={{ lang }}</a></li>
+  <li><a href="/invoices/{{ latest_invoice.id }}/pdf?lang={{ lang }}">/invoices/{{ latest_invoice.id }}/pdf?lang={{ lang }}</a></li>
+</ul>
+{% endif %}
+{% endblock %}

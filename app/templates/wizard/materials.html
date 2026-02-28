@@ -1,0 +1,10 @@
+{% extends "wizard/layout.html" %}
+{% block wizard_step_content %}
+<h2>{{ t('wizard.step.materials') }}</h2>
+<p>
+  <a href="/projects/{{ project.id }}/materials-plan?lang={{ lang }}">BOM details</a> ·
+  <a href="/projects/{{ project.id }}/shopping-list?lang={{ lang }}">Shopping list</a>
+</p>
+<p>BOM items: {{ bom.items|length }} · Total: {{ bom.total_cost_ex_vat }}</p>
+<p>Shopping items: {{ shopping_list.items|length }} · Total: {{ shopping_list.total_cost_sek }}</p>
+{% endblock %}

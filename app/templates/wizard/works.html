@@ -1,0 +1,13 @@
+{% extends "wizard/layout.html" %}
+{% block wizard_step_content %}
+<h2>{{ t('wizard.step.works') }}</h2>
+<p><a href="/projects/{{ project.id }}/estimator?lang={{ lang }}">Open estimator workspace</a></p>
+<table>
+  <tr><th>Work type</th><th>Qty</th><th>Hours</th><th>Sell ex VAT</th></tr>
+  {% for item in workspace.work_items.rows %}
+  <tr><td>{{ item.work_type_name }}</td><td>{{ item.qty }}</td><td>{{ item.hours }}</td><td>{{ item.sell_ex_vat }}</td></tr>
+  {% else %}
+  <tr><td colspan="4">—</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

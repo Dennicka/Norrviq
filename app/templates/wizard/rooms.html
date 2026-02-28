@@ -1,0 +1,13 @@
+{% extends "wizard/layout.html" %}
+{% block wizard_step_content %}
+<h2>{{ t('wizard.step.rooms') }}</h2>
+<p><a href="/projects/{{ project.id }}/rooms/?lang={{ lang }}">Open full rooms editor</a></p>
+<table>
+  <tr><th>{{ t('label.name') }}</th><th>{{ t('rooms.field.floor_area') }}</th><th>{{ t('rooms.field.wall_area') }}</th></tr>
+  {% for room in rooms %}
+  <tr><td>{{ room.name }}</td><td>{{ room.floor_area_m2 or 0 }}</td><td>{{ room.wall_area_m2 or 0 }}</td></tr>
+  {% else %}
+  <tr><td colspan="3">—</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}
