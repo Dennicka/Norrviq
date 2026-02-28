@@ -18,6 +18,7 @@ from app.models.project_material_settings import ProjectMaterialSettings
 from app.models.room import Room
 from app.models.supplier_material_price import SupplierMaterialPrice
 from app.services.takeoff import compute_project_areas, get_or_create_project_takeoff_settings
+from app.services.request_cache import RequestCache, cache_key
 from app.services.procurement_rounding import ProcurementRoundingPolicy, compute_packs_needed, normalize_policy
 from app.services.unit_conversion import UnitConversionError, convert_qty, normalize_unit
 
@@ -537,7 +538,13 @@ def _compute_bom_from_legacy_recipes(db: Session, project: Project, settings: Pr
     return items
 
 
-def compute_project_bom(db: Session, project_id: int) -> BOMReport:
+def compute_project_bom(db: Session, project_id: int, *, cache: RequestCache | None = None) -> BOMReport:
+    key = cache_key("materials_bom", project_id)
+    if cache is not None:
+        cached = cache.get(key)
+        if cached is not None:
+            return cached
+
     project = (
         db.query(Project)
         .options(joinedload(Project.work_items).joinedload(ProjectWorkItem.work_type), joinedload(Project.work_items).joinedload(ProjectWorkItem.room))
@@ -548,7 +555,7 @@ def compute_project_bom(db: Session, project_id: int) -> BOMReport:
         raise ValueError("Project not found")
 
     takeoff = get_or_create_project_takeoff_settings(db, project_id)
-    areas = compute_project_areas(db, project_id)
+    areas = compute_project_areas(db, project_id, cache=cache)
     settings = get_or_create_project_material_settings(db, project_id)
     warnings: list[str] = []
 
@@ -560,7 +567,7 @@ def compute_project_bom(db: Session, project_id: int) -> BOMReport:
 
     total_cost = sum((item.cost_ex_vat for item in items), start=Decimal("0"))
     total_sell = sum((item.sell_ex_vat for item in items), start=Decimal("0"))
-    return BOMReport(
+    result = BOMReport(
         basis_used=takeoff.m2_basis,
         total_floor_m2=Decimal(str(areas.total_floor_m2)),
         total_wall_m2=Decimal(str(areas.total_wall_m2)),
@@ -571,6 +578,9 @@ def compute_project_bom(db: Session, project_id: int) -> BOMReport:
         total_sell_ex_vat=_qm(total_sell),
         warnings=sorted(set(warnings)),
     )
+    if cache is not None:
+        cache.set(key, result)
+    return result
 
 
 def apply_bom_to_project_cost_items(db: Session, project_id: int, report: BOMReport) -> int:
@@ -624,14 +634,45 @@ def compute_procurement_plan(
     strategy: ProcurementStrategy = ProcurementStrategy.CHEAPEST,
     supplier_id: int | None = None,
     policy: ProcurementRoundingPolicy | None = None,
+    cache: RequestCache | None = None,
 ) -> ProcurementPlan:
-    bom = compute_project_bom(db, project_id)
+    bom = compute_project_bom(db, project_id, cache=cache)
     resolved_policy = normalize_policy(policy)
     lines: list[ProcurementLine] = []
     warnings: list[str] = []
+
+    material_ids = [item.material_id for item in bom.items]
+    supplier_prices = (
+        db.query(SupplierMaterialPrice)
+        .options(joinedload(SupplierMaterialPrice.supplier))
+        .filter(SupplierMaterialPrice.material_id.in_(material_ids))
+        .all()
+        if material_ids
+        else []
+    )
+    prices_by_material: dict[int, list[SupplierMaterialPrice]] = {}
+    for price in supplier_prices:
+        prices_by_material.setdefault(price.material_id, []).append(price)
+
+    materials = db.query(Material).filter(Material.id.in_(material_ids)).all() if material_ids else []
+    materials_by_id = {material.id: material for material in materials}
+    material_codes = sorted({(material.code or "").strip() for material in materials if (material.code or "").strip()})
+    catalog_items = (
+        db.query(MaterialCatalogItem)
+        .filter(MaterialCatalogItem.material_code.in_(material_codes), MaterialCatalogItem.is_active.is_(True))
+        .all()
+        if material_codes
+        else []
+    )
+    catalog_by_code: dict[str, list[MaterialCatalogItem]] = {}
+    for catalog in catalog_items:
+        code = (catalog.material_code or "").strip()
+        if code:
+            catalog_by_code.setdefault(code, []).append(catalog)
+
     for item in bom.items:
         line_warnings: list[str] = []
-        prices = db.query(SupplierMaterialPrice).filter(SupplierMaterialPrice.material_id == item.material_id).all()
+        prices = prices_by_material.get(item.material_id, [])
         selected = _select_supplier_price(prices=prices, strategy=strategy, supplier_id=supplier_id)
         qty = Decimal(str(item.qty_final_unit or 0))
         packs_needed: Decimal | None = Decimal("0")
@@ -641,13 +682,10 @@ def compute_procurement_plan(
         price_unit = None
         supplier_name = selected.supplier.name if selected else None
         if selected is None:
-            material = db.get(Material, item.material_id)
+            material = materials_by_id.get(item.material_id)
             catalog_selected: MaterialCatalogItem | None = None
             if material is not None:
-                catalog_prices = db.query(MaterialCatalogItem).filter(
-                    MaterialCatalogItem.material_code == material.code,
-                    MaterialCatalogItem.is_active.is_(True),
-                ).all()
+                catalog_prices = catalog_by_code.get((material.code or "").strip(), [])
                 default_prices = [catalog for catalog in catalog_prices if catalog.is_default_for_material]
                 price_pool = default_prices or catalog_prices
                 if price_pool:

@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
+from app.services.request_cache import RequestCache, cache_key
+
 from app.services.pdf_export import render_pdf_from_html as export_render_pdf_from_html
 from app.services.pdf_fallback import render_pdf_fallback_from_html
 
@@ -61,7 +63,13 @@ def is_playwright_available() -> bool:
         return False
 
 
-def invoice_pdf_capability() -> dict[str, str | bool]:
+def invoice_pdf_capability(*, cache: RequestCache | None = None) -> dict[str, str | bool]:
+    key = cache_key("documents_pdf_capability")
+    if cache is not None:
+        cached = cache.get(key)
+        if cached is not None:
+            return cached
+
     mode = get_pdf_engine_mode()
     weasy = is_weasyprint_available()
     playwright = is_playwright_available()
@@ -73,12 +81,19 @@ def invoice_pdf_capability() -> dict[str, str | bool]:
         active = "fallback_pdf"
     else:
         active = "weasyprint" if weasy else ("playwright" if playwright else "fallback_pdf")
-    return {
+    result = {
         "weasyprint_available": weasy,
         "playwright_available": playwright,
         "configured_engine": mode,
         "active_engine": active,
     }
+    if cache is not None:
+        cache.set(key, result)
+    return result
+
+
+def offer_pdf_capability(*, cache: RequestCache | None = None) -> dict[str, str | bool]:
+    return invoice_pdf_capability(cache=cache)
 
 
 def _render_with_weasyprint(*, html: str, base_url: str | Path, stylesheet_path: str | Path | None = None) -> bytes:

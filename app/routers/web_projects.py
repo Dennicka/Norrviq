@@ -89,6 +89,7 @@ from app.services.materials_consumption import calculate_material_needs_for_proj
 from app.services.material_norms import build_project_material_bom
 from app.services.material_costing import cost_project_materials
 from app.services.pdf_renderer import invoice_pdf_capability, render_pdf_from_html_with_engine
+from app.services.request_cache import RequestCache, get_request_cache
 from app.services.invoice_lines import MERGE_REPLACE_ALL, generate_invoice_lines_from_project
 from app.services.correctness_lock import validate_estimate_invariants, validate_offer_invariants, validate_pricing_invariants, validate_invoice_invariants
 from app.services.shopping_list import (
@@ -515,6 +516,7 @@ async def project_detail(
     lang: str = Depends(get_current_lang),
     room_ids: list[int] = Query(default=[]),
     tab: str = Query("overview"),
+    cache: RequestCache = Depends(get_request_cache),
 ):
     project = (
         db.query(Project)
@@ -539,11 +541,11 @@ async def project_detail(
     rooms = sorted(project.rooms, key=lambda room: room.name.lower() if room.name else "")
     settings = get_or_create_settings(db)
     finance_summary = compute_project_finance(db, project, settings=settings)
-    baseline = compute_project_baseline(db, project.id, include_materials=True, include_travel_setup_buffers=True)
+    baseline = compute_project_baseline(db, project.id, include_materials=True, include_travel_setup_buffers=True, cache=cache)
     recent_invoices = sorted(
         project.invoices, key=lambda inv: inv.issue_date or inv.created_at or date.min, reverse=True
     )[:2]
-    geometry_summary = aggregate_project_geometry(db, project.id)
+    geometry_summary = aggregate_project_geometry(db, project.id, cache=cache)
     pricing = get_or_create_project_pricing(db, project.id)
     estimator_mode_map = {"HOURLY": "hourly", "PER_M2": "sqm", "FIXED_TOTAL": "fixed"}
     estimator_summary = build_project_estimate_summary(
@@ -642,7 +644,7 @@ async def project_detail(
         documents_selected_invoice=selected_invoice,
         documents_segment=segment,
         documents_company_missing_fields=company_missing_fields,
-        documents_pdf_capability=invoice_pdf_capability(),
+        documents_pdf_capability=invoice_pdf_capability(cache=cache),
     )
     return templates.TemplateResponse(request, "projects/detail.html", context)
 
@@ -654,6 +656,7 @@ async def project_wizard(
     step: str = Query("rooms"),
     db: Session = Depends(get_db),
     lang: str = Depends(get_current_lang),
+    cache: RequestCache = Depends(get_request_cache),
 ):
     resolved_step = _resolve_wizard_step(step)
     if resolved_step is None:
@@ -666,6 +669,8 @@ async def project_wizard(
             selectinload(Project.work_items).selectinload(ProjectWorkItem.work_type),
             selectinload(Project.pricing),
             selectinload(Project.invoices),
+            selectinload(Project.cost_items).selectinload(ProjectCostItem.category),
+            selectinload(Project.worker_assignments).selectinload(ProjectWorkerAssignment.worker),
         )
         .filter(Project.id == project_id)
         .first()
@@ -689,7 +694,7 @@ async def project_wizard(
     elif resolved_step == "works":
         context["workspace"] = build_estimator_workspace(db, project_id)
     elif resolved_step == "pricing":
-        baseline, scenarios = compute_pricing_scenarios(db, project_id, request_id=getattr(request.state, "request_id", None))
+        baseline, scenarios = compute_pricing_scenarios(db, project_id, request_id=getattr(request.state, "request_id", None), cache=cache)
         context.update(
             {
                 "pricing": get_or_create_project_pricing(db, project_id),
@@ -700,8 +705,8 @@ async def project_wizard(
     elif resolved_step == "materials":
         context.update(
             {
-                "bom": compute_project_bom(db, project_id),
-                "shopping_list": compute_project_shopping_list(db, project_id),
+                "bom": compute_project_bom(db, project_id, cache=cache),
+                "shopping_list": compute_project_shopping_list(db, project_id, cache=cache),
             }
         )
     elif resolved_step == "documents":
@@ -807,6 +812,7 @@ async def workflow_recalculate(
     request: Request,
     db: Session = Depends(get_db),
     lang: str = Depends(get_current_lang),
+    cache: RequestCache = Depends(get_request_cache),
 ):
     project = db.get(Project, project_id)
     if not project:
@@ -1019,6 +1025,7 @@ async def edit_project_form(
     request: Request,
     db: Session = Depends(get_db),
     lang: str = Depends(get_current_lang),
+    cache: RequestCache = Depends(get_request_cache),
 ):
     project = db.get(Project, project_id)
     if not project:
@@ -2320,13 +2327,14 @@ async def project_pricing_screen(
     request: Request,
     db: Session = Depends(get_db),
     lang: str = Depends(get_current_lang),
+    cache: RequestCache = Depends(get_request_cache),
 ):
     project = db.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
     pricing = get_or_create_project_pricing(db, project_id)
-    baseline, scenarios = compute_pricing_scenarios(db, project_id, request_id=getattr(request.state, "request_id", None))
+    baseline, scenarios = compute_pricing_scenarios(db, project_id, request_id=getattr(request.state, "request_id", None), cache=cache)
     policy = get_or_create_pricing_policy(db)
     scenario_views = [_scenario_view_model(scenario, evaluate_floor(baseline, scenario, policy)) for scenario in scenarios]
     segment = (project.client.client_segment if project.client and project.client.client_segment else "ANY")
@@ -2926,6 +2934,7 @@ async def update_project_pricing_screen(
     request: Request,
     db: Session = Depends(get_db),
     lang: str = Depends(get_current_lang),
+    cache: RequestCache = Depends(get_request_cache),
 ):
     project = db.get(Project, project_id)
     if not project:
@@ -2972,7 +2981,7 @@ async def update_project_pricing_screen(
         )
         db.commit()
 
-        baseline, scenarios = compute_pricing_scenarios(db, project_id, request_id=getattr(request.state, "request_id", None))
+        baseline, scenarios = compute_pricing_scenarios(db, project_id, request_id=getattr(request.state, "request_id", None), cache=cache)
         policy = get_or_create_pricing_policy(db)
         scenario_views = [_scenario_view_model(scenario, evaluate_floor(baseline, scenario, policy)) for scenario in scenarios]
         segment = (project.client.client_segment if project.client and project.client.client_segment else "ANY")
@@ -3010,7 +3019,7 @@ async def update_project_pricing_screen(
 
     if intent == "apply_recommended":
         apply_mode = (payload.get("apply_mode") or "").upper()
-        baseline, scenarios = compute_pricing_scenarios(db, project_id, request_id=getattr(request.state, "request_id", None))
+        baseline, scenarios = compute_pricing_scenarios(db, project_id, request_id=getattr(request.state, "request_id", None), cache=cache)
         policy = get_or_create_pricing_policy(db)
         selected = next((sc for sc in scenarios if sc.mode == apply_mode), None)
         if selected is None:
@@ -3052,7 +3061,7 @@ async def update_project_pricing_screen(
         return RedirectResponse(url=f"/projects/{project_id}/pricing", status_code=status.HTTP_303_SEE_OTHER)
 
     if intent == "apply_best_mode":
-        baseline, scenarios = compute_pricing_scenarios(db, project_id, request_id=getattr(request.state, "request_id", None))
+        baseline, scenarios = compute_pricing_scenarios(db, project_id, request_id=getattr(request.state, "request_id", None), cache=cache)
         del baseline
         best_metric = payload.get("best_metric") or "profit"
         best_mode = _pick_best_pricing_mode(scenarios, metric=best_metric)
@@ -3084,7 +3093,7 @@ async def update_project_pricing_screen(
                 user_id=get_current_user_email(request),
             )
     except PricingValidationError as exc:
-        baseline, scenarios = compute_pricing_scenarios(db, project_id, request_id=getattr(request.state, "request_id", None))
+        baseline, scenarios = compute_pricing_scenarios(db, project_id, request_id=getattr(request.state, "request_id", None), cache=cache)
         policy = get_or_create_pricing_policy(db)
         scenario_views = [_scenario_view_model(scenario, evaluate_floor(baseline, scenario, policy)) for scenario in scenarios]
         segment = (project.client.client_segment if project.client and project.client.client_segment else "ANY")
