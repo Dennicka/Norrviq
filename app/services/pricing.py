@@ -16,6 +16,11 @@ from app.models.project_pricing import ProjectPricing
 from app.models.material_actuals import ProjectMaterialActuals
 from app.models.pricing_policy import PricingPolicy
 from app.models.settings import get_or_create_settings
+from app.services.pricing_sanity import (
+    safe_effective_hourly_rate,
+    safe_margin_pct,
+    validate_pricing_scenario,
+)
 from app.services.buffer_rules import resolve_effective_buffer
 from app.services.materials_bom import compute_project_bom, get_or_create_project_material_settings
 from app.services.takeoff import compute_project_areas, get_or_create_project_takeoff_settings
@@ -100,6 +105,8 @@ class PricingScenario:
     warnings: list[str]
     invalid: bool
     details_lines: list[str]
+    sanity_issues: list[dict[str, str]]
+    is_valid: bool
 
 
 @dataclass
@@ -463,13 +470,9 @@ def _build_scenario(
     price_ex_vat = _quantize_money(price_ex_vat)
     vat_amount = _quantize_money(price_ex_vat * vat_pct / Decimal("100"))
     price_inc_vat = _quantize_money(price_ex_vat + vat_amount)
-    effective_hourly_sell_rate = None
-    if baseline.labor_hours_total > 0:
-        effective_hourly_sell_rate = _quantize_money(price_ex_vat / baseline.labor_hours_total)
+    effective_hourly_sell_rate, hourly_issues = safe_effective_hourly_rate(price_ex_vat, baseline.labor_hours_total)
     profit = _quantize_money(price_ex_vat - baseline.internal_total_cost)
-    margin_pct = None
-    if price_ex_vat > 0:
-        margin_pct = _quantize_money(profit / price_ex_vat * Decimal("100"))
+    margin_pct, margin_issues = safe_margin_pct(profit, price_ex_vat)
     warning_codes = list(warnings)
     if baseline.labor_hours_total <= 0:
         warning_codes.append(WARNING_MISSING_BASELINE)
@@ -477,6 +480,20 @@ def _build_scenario(
         warning_codes.append(WARNING_NEGATIVE_MARGIN)
     elif margin_pct is not None and margin_pct < LOW_MARGIN_WARN_PCT:
         warning_codes.append(WARNING_LOW_MARGIN)
+
+    sanity_result = validate_pricing_scenario(
+        {
+            "total_hours": baseline.labor_hours_total,
+            "sell_ex_vat": price_ex_vat,
+            "labour_cost_ex_vat": baseline.labor_cost_internal,
+            "materials_cost_ex_vat": baseline.materials_cost_internal,
+            "profit_ex_vat": profit,
+            "margin_pct": margin_pct,
+            "effective_hourly_rate": effective_hourly_sell_rate,
+            "sanity_issues": [*hourly_issues, *margin_issues],
+        }
+    )
+    scenario_invalid = invalid or not sanity_result.is_valid
 
     return PricingScenario(
         mode=mode,
@@ -488,8 +505,10 @@ def _build_scenario(
         profit=profit,
         margin_pct=margin_pct,
         warnings=warning_codes,
-        invalid=invalid,
+        invalid=scenario_invalid,
         details_lines=details_lines,
+        sanity_issues=[{"code": issue.code, "severity": issue.severity, "message": issue.message} for issue in sanity_result.issues],
+        is_valid=sanity_result.is_valid,
     )
 
 
@@ -600,6 +619,8 @@ def compute_pricing_scenarios(db: Session, project_id: int, *, request_id: str |
         )
     )
 
+    scenario_order = {"HOURLY": 0, "PER_M2": 1, "FIXED_TOTAL": 2, "PER_ROOM": 3, "PIECEWORK": 4}
+    scenarios = sorted(scenarios, key=lambda scenario: scenario_order.get(scenario.mode, 999))
     return baseline, scenarios
 
 

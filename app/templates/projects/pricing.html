@@ -210,6 +210,13 @@
                 {% else %}
                     —
                 {% endif %}
+                {% if scenario.sanity_warnings %}
+                    <div><small>
+                        {% for issue in scenario.sanity_warnings %}
+                            <code>{{ issue.code }}</code>{% if not loop.last %}, {% endif %}
+                        {% endfor %}
+                    </small></div>
+                {% endif %}
             </td>
             <td>
                 <div><strong>{{ scenario.floor_badge }}</strong></div>
