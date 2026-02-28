@@ -43,7 +43,6 @@ from app.services.commercial_snapshot import DOC_TYPE_OFFER as SNAP_OFFER, read_
 from app.services.finance import calculate_project_financials, compute_project_finance
 from app.services.terms_templates import DOC_TYPE_OFFER, resolve_terms_template
 from app.services.invoice_documents import normalize_document_lang
-from app.services.pdf_renderer import invoice_pdf_capability
 from app.services.buffer_audit import log_buffer_audit
 from app.services.quality import evaluate_project_quality
 from app.services.completeness import compute_completeness
@@ -88,7 +87,7 @@ from app.services.materials_bom import (
 from app.services.materials_consumption import calculate_material_needs_for_project
 from app.services.material_norms import build_project_material_bom
 from app.services.material_costing import cost_project_materials
-from app.services.pdf_export import render_pdf_from_html
+from app.services.pdf_renderer import invoice_pdf_capability, render_pdf_from_html_with_engine
 from app.services.invoice_lines import MERGE_REPLACE_ALL, generate_invoice_lines_from_project
 from app.services.correctness_lock import validate_estimate_invariants, validate_offer_invariants, validate_pricing_invariants, validate_invoice_invariants
 from app.services.shopping_list import (
@@ -2642,9 +2641,9 @@ async def project_shopping_list_export_pdf(project_id: int, request: Request, db
     context = template_context(request, lang)
     context.update({"project": project, "shopping_list": report, "group_by_supplier": group_by_supplier, "export_date": datetime.now(timezone.utc).date().isoformat()})
     html = templates.get_template("pdf/shopping_list_pdf.html").render(context)
-    pdf_bytes = render_pdf_from_html(html=html, base_url=PROJECT_ROOT, stylesheet_path=PDF_STYLESHEET)
+    pdf_result = render_pdf_from_html_with_engine(html=html, base_url=PROJECT_ROOT, stylesheet_path=PDF_STYLESHEET)
     log_event(db, request, "shopping_list_exported_pdf", entity_type="PROJECT", entity_id=project_id, severity="INFO", metadata={"project_id": project_id, "count": len(report.items), "request_id": getattr(request.state, "request_id", None)})
-    return Response(content=pdf_bytes, media_type="application/pdf", headers={"Content-Disposition": 'attachment; filename="shopping_list.pdf"', REQUEST_ID_HEADER: getattr(request.state, "request_id", "")})
+    return Response(content=pdf_result.pdf_bytes, media_type="application/pdf", headers={"Content-Disposition": 'attachment; filename="shopping_list.pdf"', REQUEST_ID_HEADER: getattr(request.state, "request_id", ""), "X-PDF-Engine": pdf_result.engine})
 
 
 @router.get("/{project_id}/shopping-list/print")

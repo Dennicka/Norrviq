@@ -27,8 +27,7 @@ from app.services.document_numbering import (
     finalize_invoice,
     finalize_offer,
 )
-from app.services.pdf_export import render_pdf_from_html
-from app.services.pdf_renderer import invoice_pdf_capability, render_invoice_pdf
+from app.services.pdf_renderer import invoice_pdf_capability, render_invoice_pdf, render_pdf_from_html_with_engine
 from app.services.completeness import compute_completeness
 from app.services.quality import evaluate_project_quality
 from app.services.terms_templates import DOC_TYPE_OFFER, resolve_terms_template
@@ -229,7 +228,7 @@ async def offer_pdf(
     render_lang = normalize_document_lang(lang, fallback=normalize_document_lang(project.offer_document_lang))
     context = _build_offer_render_context(request=request, db=db, project=project, render_lang=render_lang)
     html = templates.get_template("pdf/offer_pdf.html").render(context)
-    pdf_bytes = render_pdf_from_html(html=html, base_url=PROJECT_ROOT, stylesheet_path=PDF_STYLESHEET)
+    pdf_result = render_pdf_from_html_with_engine(html=html, base_url=PROJECT_ROOT, stylesheet_path=PDF_STYLESHEET)
     _audit_pdf_download(
         db,
         request=request,
@@ -239,11 +238,12 @@ async def offer_pdf(
         status_value=project.offer_status,
     )
     return Response(
-        content=pdf_bytes,
+        content=pdf_result.pdf_bytes,
         media_type="application/pdf",
         headers={
             "Content-Disposition": f'attachment; filename="{_filename(kind="Offer", number=project.offer_number, fallback="DRAFT")}"',
             REQUEST_ID_HEADER: getattr(request.state, "request_id", ""),
+            "X-PDF-Engine": pdf_result.engine,
         },
     )
 
@@ -342,13 +342,12 @@ async def invoice_pdf(
         }
     )
     html = templates.get_template("pdf/invoice_pdf.html").render(context)
-    pdf_bytes = render_invoice_pdf(
+    pdf_result = render_invoice_pdf(
         invoice.id,
         render_lang,
         html=html,
         base_url=PROJECT_ROOT,
         stylesheet_path=PDF_STYLESHEET,
-        render_pdf=render_pdf_from_html,
     )
     _audit_pdf_download(
         db,
@@ -359,11 +358,12 @@ async def invoice_pdf(
         status_value=invoice.status,
     )
     return Response(
-        content=pdf_bytes,
+        content=pdf_result.pdf_bytes,
         media_type="application/pdf",
         headers={
             "Content-Disposition": f'attachment; filename="{_filename(kind="Invoice", number=invoice.invoice_number, fallback="DRAFT")}"',
             REQUEST_ID_HEADER: getattr(request.state, "request_id", ""),
+            "X-PDF-Engine": pdf_result.engine,
         },
     )
 
