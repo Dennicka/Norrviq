@@ -19,6 +19,7 @@ from app.models.room import Room
 from app.models.supplier_material_price import SupplierMaterialPrice
 from app.services.takeoff import compute_project_areas, get_or_create_project_takeoff_settings
 from app.services.procurement_rounding import ProcurementRoundingPolicy, compute_packs_needed, normalize_policy
+from app.services.unit_conversion import UnitConversionError, convert_qty, normalize_unit
 
 UNIT_Q = Decimal("0.0001")
 MONEY_Q = Decimal("0.01")
@@ -86,7 +87,7 @@ class ProcurementLine:
     supplier_name: str | None
     price_unit: str | None
     unit_price_ex_vat: Decimal | None
-    packs_needed: Decimal
+    packs_needed: Decimal | None
     purchase_qty: Decimal
     line_total_cost_ex_vat: Decimal
     warnings: list[str]
@@ -604,31 +605,6 @@ def apply_bom_to_invoice_material_lines(db: Session, project_id: int, report: BO
     return len(report.items)
 
 
-def _convert_qty(value: Decimal, from_unit: str | None, to_unit: str | None, *, density_kg_per_l: Decimal | None = None, pack_size: Decimal | None = None, pack_unit: str | None = None) -> Decimal | None:
-    source = (from_unit or "").strip().upper()
-    target = (to_unit or "").strip().upper()
-    if source == target:
-        return value
-    if {source, target} == {"L", "KG"}:
-        if density_kg_per_l is None or density_kg_per_l <= 0:
-            return None
-        if source == "L":
-            return value * density_kg_per_l
-        return value / density_kg_per_l
-    if source == "PACK":
-        if pack_size is None or pack_size <= 0 or not pack_unit:
-            return None
-        return _convert_qty(value * pack_size, pack_unit, target, density_kg_per_l=density_kg_per_l, pack_size=pack_size, pack_unit=pack_unit)
-    if target == "PACK":
-        if pack_size is None or pack_size <= 0 or not pack_unit:
-            return None
-        in_pack_unit = _convert_qty(value, source, pack_unit, density_kg_per_l=density_kg_per_l, pack_size=pack_size, pack_unit=pack_unit)
-        if in_pack_unit is None:
-            return None
-        return in_pack_unit / pack_size
-    return None
-
-
 def _select_supplier_price(*, prices: list[SupplierMaterialPrice], strategy: ProcurementStrategy, supplier_id: int | None) -> SupplierMaterialPrice | None:
     if not prices:
         return None
@@ -658,7 +634,7 @@ def compute_procurement_plan(
         prices = db.query(SupplierMaterialPrice).filter(SupplierMaterialPrice.material_id == item.material_id).all()
         selected = _select_supplier_price(prices=prices, strategy=strategy, supplier_id=supplier_id)
         qty = Decimal(str(item.qty_final_unit or 0))
-        packs_needed = Decimal("0")
+        packs_needed: Decimal | None = Decimal("0")
         purchase_qty = qty
         line_total = Decimal("0")
         unit_price = None
@@ -690,10 +666,8 @@ def compute_procurement_plan(
                     line_warnings.append("INVALID_PACK_SIZE")
                     line_total = _qm(Decimal(str(item.cost_ex_vat or 0)))
                 else:
-                    qty_in_pack_unit = _convert_qty(qty, item.unit, catalog_selected.package_unit)
-                    if qty_in_pack_unit is None:
-                        line_warnings.append(f"CONVERSION_{item.unit}_TO_{catalog_selected.package_unit}_UNAVAILABLE")
-                    else:
+                    try:
+                        qty_in_pack_unit = convert_qty(qty, item.unit, catalog_selected.package_unit)
                         packs_needed = compute_packs_needed(qty_in_pack_unit, pack_size, resolved_policy)
                         purchase_qty = packs_needed * pack_size
                         unit_price = Decimal(str(catalog_selected.price_ex_vat or 0))
@@ -701,6 +675,14 @@ def compute_procurement_plan(
                         line_total = _qm(packs_needed * unit_price)
                         supplier_name = (catalog_selected.supplier_name or "Catalog").strip() or "Catalog"
                         line_warnings.append("CATALOG_PRICE_USED")
+                    except UnitConversionError as exc:
+                        packs_needed = None
+                        purchase_qty = Decimal("0")
+                        unit_price = None
+                        line_total = Decimal("0")
+                        source_unit = normalize_unit(item.unit) or (item.unit or "")
+                        target_unit = normalize_unit(catalog_selected.package_unit) or (catalog_selected.package_unit or "")
+                        line_warnings.append(f"{exc.code}:{source_unit}->{target_unit}")
         else:
             pack_size = Decimal(str(selected.pack_size or 0))
             if pack_size <= 0:
@@ -708,15 +690,22 @@ def compute_procurement_plan(
                 line_warnings.append("INVALID_PACK_SIZE")
                 line_total = _qm(Decimal(str(item.cost_ex_vat or 0)))
             else:
-                qty_in_pack_unit = _convert_qty(qty, item.unit, selected.pack_unit)
-                if qty_in_pack_unit is None:
-                    line_warnings.append(f"CONVERSION_{item.unit}_TO_{selected.pack_unit}_UNAVAILABLE")
-                else:
+                try:
+                    qty_in_pack_unit = convert_qty(qty, item.unit, selected.pack_unit)
                     packs_needed = compute_packs_needed(qty_in_pack_unit, pack_size, resolved_policy)
                     purchase_qty = packs_needed * pack_size
                     unit_price = Decimal(str(selected.pack_price_ex_vat or 0))
                     price_unit = "PACK"
                     line_total = _qm(packs_needed * unit_price)
+                except UnitConversionError as exc:
+                    packs_needed = None
+                    purchase_qty = Decimal("0")
+                    unit_price = None
+                    line_total = Decimal("0")
+                    source_unit = normalize_unit(item.unit) or (item.unit or "")
+                    target_unit = normalize_unit(selected.pack_unit) or (selected.pack_unit or "")
+                    line_warnings.append(f"{exc.code}:{source_unit}->{target_unit}")
+        line_warnings = sorted(set(line_warnings))
         if line_warnings:
             warnings.extend([f"material:{item.material_id}:{code}" for code in line_warnings])
         lines.append(
