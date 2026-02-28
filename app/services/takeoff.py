@@ -65,6 +65,7 @@ def compute_project_areas(db: Session, project_id: int) -> AreasBreakdown:
     project = db.get(Project, project_id)
     if not project:
         raise ValueError("Project not found")
+    takeoff_settings = get_or_create_project_takeoff_settings(db, project_id)
 
     rooms: list[RoomAreaBreakdown] = []
     total_floor = Decimal("0")
@@ -73,14 +74,27 @@ def compute_project_areas(db: Session, project_id: int) -> AreasBreakdown:
 
     for room in project.rooms:
         floor_area = _to_decimal(room.floor_area_m2)
-        ceiling_area = floor_area
+        if room.ceiling_area_m2 is not None:
+            ceiling_area = _to_decimal(room.ceiling_area_m2)
+        else:
+            ceiling_area = floor_area
         warnings: list[str] = []
 
-        if room.wall_perimeter_m is None or room.wall_height_m is None:
-            wall_area = Decimal("0")
-            warnings.append("MISSING_PERIMETER_OR_HEIGHT")
+        room_wall_area = _to_decimal(room.wall_area_m2)
+        if room.wall_area_m2 is not None and room_wall_area > 0:
+            wall_area = room_wall_area
         else:
-            wall_area = _to_decimal(room.wall_perimeter_m) * _to_decimal(room.wall_height_m)
+            if room.wall_perimeter_m is None or room.wall_height_m is None:
+                wall_area = Decimal("0")
+                warnings.append("MISSING_PERIMETER_OR_HEIGHT")
+            else:
+                wall_area = _to_decimal(room.wall_perimeter_m) * _to_decimal(room.wall_height_m)
+
+            if takeoff_settings.include_openings_subtraction:
+                wall_area -= _to_decimal(room.openings_area_m2)
+                if wall_area < 0:
+                    wall_area = Decimal("0")
+                    warnings.append("OPENINGS_EXCEED_WALLS")
 
         floor_area = _quantize(floor_area)
         ceiling_area = _quantize(ceiling_area)
