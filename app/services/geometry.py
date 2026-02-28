@@ -13,6 +13,9 @@ class GeometryResult:
     floor_area_m2: Decimal | None = None
     ceiling_area_m2: Decimal | None = None
     perimeter_m: Decimal | None = None
+    wall_perimeter_m: Decimal | None = None
+    wall_height_m: Decimal | None = None
+    wall_area_m2: Decimal | None = None
     wall_area_gross_m2: Decimal | None = None
     openings_area_m2: Decimal = Decimal("0")
     wall_area_net_m2: Decimal | None = None
@@ -97,6 +100,9 @@ def compute_room_geometry(
     if result.perimeter_m is not None:
         result.baseboard_lm = result.perimeter_m
         result.cornice_lm = result.perimeter_m
+        result.wall_perimeter_m = result.perimeter_m
+
+    result.wall_height_m = ceiling_height
 
     if result.perimeter_m is not None and ceiling_height is not None and ceiling_height > 0:
         result.wall_area_gross_m2 = result.perimeter_m * ceiling_height
@@ -105,10 +111,14 @@ def compute_room_geometry(
             wall_net = Decimal("0")
             result.warnings.append("Площадь проемов больше площади стен: wall_area_net ограничена до 0")
         result.wall_area_net_m2 = wall_net
+        result.wall_area_m2 = wall_net
 
     result.floor_area_m2 = _q(result.floor_area_m2)
     result.ceiling_area_m2 = _q(result.ceiling_area_m2)
     result.perimeter_m = _q(result.perimeter_m)
+    result.wall_perimeter_m = _q(result.wall_perimeter_m)
+    result.wall_height_m = _q(result.wall_height_m)
+    result.wall_area_m2 = _q(result.wall_area_m2)
     result.wall_area_gross_m2 = _q(result.wall_area_gross_m2)
     result.wall_area_net_m2 = _q(result.wall_area_net_m2)
     result.baseboard_lm = _q(result.baseboard_lm)
@@ -118,7 +128,7 @@ def compute_room_geometry(
 
 
 def compute_room_geometry_from_model(room: Room) -> GeometryResult:
-    return compute_room_geometry(
+    result = compute_room_geometry(
         length_m=room.length_m,
         width_m=room.width_m,
         floor_area_m2=room.floor_area_m2,
@@ -126,6 +136,33 @@ def compute_room_geometry_from_model(room: Room) -> GeometryResult:
         ceiling_height_m=room.wall_height_m,
         openings_area_m2=room.openings_area_m2,
     )
+    room_wall_area = _to_decimal(room.wall_area_m2, "wall_area_m2")
+    if (result.wall_area_m2 is None or result.wall_area_m2 <= 0) and room_wall_area is not None and room_wall_area > 0:
+        result.wall_area_m2 = _q(room_wall_area)
+        result.wall_area_net_m2 = result.wall_area_m2
+    return result
+
+
+def is_geometry_complete_for_walls(geom: GeometryResult) -> bool:
+    perimeter = geom.wall_perimeter_m if geom.wall_perimeter_m is not None else geom.perimeter_m
+    height = geom.wall_height_m
+    wall_area = geom.wall_area_m2 if geom.wall_area_m2 is not None else (geom.wall_area_net_m2 or geom.wall_area_gross_m2)
+    if wall_area is not None and wall_area > 0:
+        return True
+    return bool(perimeter is not None and perimeter > 0 and height is not None and height > 0)
+
+
+def is_geometry_complete_for_ceiling(geom: GeometryResult) -> bool:
+    return bool((geom.ceiling_area_m2 is not None and geom.ceiling_area_m2 > 0) or (geom.floor_area_m2 is not None and geom.floor_area_m2 > 0))
+
+
+def geometry_completeness(geom: GeometryResult) -> dict[str, bool]:
+    floor_complete = bool(geom.floor_area_m2 is not None and geom.floor_area_m2 > 0)
+    return {
+        "walls": is_geometry_complete_for_walls(geom),
+        "ceiling": is_geometry_complete_for_ceiling(geom),
+        "floor": floor_complete,
+    }
 
 
 def aggregate_project_geometry(db: Session, project_id: int) -> GeometrySummary:
