@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t('wizard.title') }} — {{ project.name }}</h1>
+<p><a href="/projects/{{ project.id }}">{{ t('wizard.expert_mode') }}</a></p>
+
+{% if wizard_warning_text %}
+<div style="padding:10px;border:1px solid #f59e0b;background:#fffbeb;margin-bottom:12px;">⚠ {{ t(wizard_warning_text) }}</div>
+{% endif %}
+
+<nav style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+  {% for item in wizard_steps %}
+    <a href="/projects/{{ project.id }}/wizard?step={{ item }}&lang={{ lang }}" style="padding:6px 10px;border:1px solid #d1d5db;{% if item == wizard_step %}background:#111827;color:#fff;{% endif %}">
+      {{ loop.index }}. {{ t('wizard.step.' ~ item) }}
+    </a>
+  {% endfor %}
+</nav>
+
+{% block wizard_step_content %}{% endblock %}
+
+<div style="display:flex;gap:8px;margin-top:16px;">
+  {% if wizard_step != wizard_steps[0] %}
+  <form method="post" action="/projects/{{ project.id }}/wizard/back">
+    {{ csrf_input(request) }}
+    <input type="hidden" name="step" value="{{ wizard_step }}">
+    <input type="hidden" name="lang" value="{{ lang }}">
+    <button type="submit">{{ t('wizard.back') }}</button>
+  </form>
+  {% endif %}
+
+  {% if wizard_step != wizard_steps[-1] %}
+  <form method="post" action="/projects/{{ project.id }}/wizard/next">
+    {{ csrf_input(request) }}
+    <input type="hidden" name="step" value="{{ wizard_step }}">
+    <input type="hidden" name="lang" value="{{ lang }}">
+    <button type="submit">{{ t('wizard.next') }}</button>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

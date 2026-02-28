@@ -1,0 +1,12 @@
+{% extends "wizard/layout.html" %}
+{% block wizard_step_content %}
+<h2>{{ t('wizard.step.pricing') }}</h2>
+<p><a href="/projects/{{ project.id }}/pricing?lang={{ lang }}">Open pricing screen</a></p>
+<table>
+  <tr><th>Mode</th><th>Price ex VAT</th><th>Profit</th><th>Margin</th></tr>
+  {% for row in scenarios %}
+  <tr><td>{{ row.mode }}</td><td>{{ row.price_ex_vat_display }}</td><td>{{ row.profit_display }}</td><td>{{ row.margin_pct_display }}</td></tr>
+  {% endfor %}
+</table>
+<form method="post" action="/projects/{{ project.id }}/estimator/apply-best-mode?lang={{ lang }}">{{ csrf_input(request) }}<button type="submit">Apply best mode</button></form>
+{% endblock %}

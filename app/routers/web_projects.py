@@ -427,6 +427,17 @@ PROJECT_WORKSPACE_TABS = {
     "audit",
 }
 
+WIZARD_STEPS = ["rooms", "works", "pricing", "materials", "documents"]
+WIZARD_NEXT_STEP = {current: WIZARD_STEPS[index + 1] for index, current in enumerate(WIZARD_STEPS[:-1])}
+WIZARD_PREV_STEP = {current: WIZARD_STEPS[index - 1] for index, current in enumerate(WIZARD_STEPS[1:], start=1)}
+
+
+def _resolve_wizard_step(raw_step: str | None) -> str | None:
+    candidate = (raw_step or "").strip().lower()
+    if candidate in WIZARD_STEPS:
+        return candidate
+    return None
+
 
 def _resolve_project_tab(raw_tab: str | None) -> str:
     candidate = (raw_tab or "overview").strip().lower()
@@ -634,6 +645,119 @@ async def project_detail(
         documents_pdf_capability=invoice_pdf_capability(),
     )
     return templates.TemplateResponse(request, "projects/detail.html", context)
+
+
+@router.get("/{project_id}/wizard", response_class=HTMLResponse)
+async def project_wizard(
+    project_id: int,
+    request: Request,
+    step: str = Query("rooms"),
+    db: Session = Depends(get_db),
+    lang: str = Depends(get_current_lang),
+):
+    resolved_step = _resolve_wizard_step(step)
+    if resolved_step is None:
+        return RedirectResponse(url=f"/projects/{project_id}/wizard?step=rooms&lang={lang}", status_code=status.HTTP_303_SEE_OTHER)
+
+    project = (
+        db.query(Project)
+        .options(
+            selectinload(Project.rooms),
+            selectinload(Project.work_items).selectinload(ProjectWorkItem.work_type),
+            selectinload(Project.pricing),
+            selectinload(Project.invoices),
+        )
+        .filter(Project.id == project_id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    context = build_project_context(
+        db,
+        request,
+        project,
+        lang,
+        wizard_steps=WIZARD_STEPS,
+        wizard_step=resolved_step,
+        wizard_warning=request.query_params.get("warning"),
+        wizard_warning_text=request.query_params.get("warning_text"),
+    )
+
+    if resolved_step == "rooms":
+        context["rooms"] = sorted(project.rooms, key=lambda room: room.name.lower() if room.name else "")
+    elif resolved_step == "works":
+        context["workspace"] = build_estimator_workspace(db, project_id)
+    elif resolved_step == "pricing":
+        baseline, scenarios = compute_pricing_scenarios(db, project_id, request_id=getattr(request.state, "request_id", None))
+        context.update(
+            {
+                "pricing": get_or_create_project_pricing(db, project_id),
+                "baseline": baseline,
+                "scenarios": [_scenario_view_model(scenario) for scenario in scenarios],
+            }
+        )
+    elif resolved_step == "materials":
+        context.update(
+            {
+                "bom": compute_project_bom(db, project_id),
+                "shopping_list": compute_project_shopping_list(db, project_id),
+            }
+        )
+    elif resolved_step == "documents":
+        latest_invoice = (
+            db.query(Invoice)
+            .filter(Invoice.project_id == project_id)
+            .order_by(Invoice.id.desc())
+            .first()
+        )
+        context.update({"latest_invoice": latest_invoice})
+
+    return templates.TemplateResponse(request, f"wizard/{resolved_step}.html", context)
+
+
+@router.post("/{project_id}/wizard/next")
+async def project_wizard_next(project_id: int, request: Request, db: Session = Depends(get_db)):
+    if not db.get(Project, project_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    form = await request.form()
+    step = _resolve_wizard_step(str(form.get("step") or "rooms")) or "rooms"
+    lang = str(form.get("lang") or request.query_params.get("lang") or "sv")
+    next_step = WIZARD_NEXT_STEP.get(step, step)
+    warning = None
+    warning_text = None
+
+    if step == "rooms":
+        rooms_count = db.query(Room).filter(Room.project_id == project_id).count()
+        if rooms_count == 0:
+            warning = "rooms_empty"
+            warning_text = "wizard.warning.rooms_empty"
+    elif step == "works":
+        items_count = db.query(ProjectWorkItem).filter(ProjectWorkItem.project_id == project_id).count()
+        if items_count == 0:
+            warning = "works_empty"
+            warning_text = "wizard.warning.works_empty"
+    elif step == "pricing":
+        pricing = get_or_create_project_pricing(db, project_id)
+        if not pricing.mode:
+            warning = "pricing_missing"
+            warning_text = "wizard.warning.pricing_missing"
+
+    redirect_url = f"/projects/{project_id}/wizard?step={next_step}&lang={lang}"
+    if warning and warning_text:
+        redirect_url = f"{redirect_url}&warning={warning}&warning_text={warning_text}"
+    return RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{project_id}/wizard/back")
+async def project_wizard_back(project_id: int, request: Request, db: Session = Depends(get_db)):
+    if not db.get(Project, project_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    form = await request.form()
+    step = _resolve_wizard_step(str(form.get("step") or "rooms")) or "rooms"
+    lang = str(form.get("lang") or request.query_params.get("lang") or "sv")
+    prev_step = WIZARD_PREV_STEP.get(step, step)
+    return RedirectResponse(url=f"/projects/{project_id}/wizard?step={prev_step}&lang={lang}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/{project_id}/documents/preferences")

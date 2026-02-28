@@ -2523,3 +2523,46 @@ TRANSLATIONS_EN.update({
     "estimator.empty.no_items": "No work items yet — add at least one item.",
     "estimator.empty.no_geometry": "No geometry yet — add rooms and areas.",
 })
+
+TRANSLATIONS_RU.update({
+    "wizard.title": "Мастер сметы",
+    "wizard.step.rooms": "Комнаты",
+    "wizard.step.works": "Работы",
+    "wizard.step.pricing": "Цены",
+    "wizard.step.materials": "Материалы",
+    "wizard.step.documents": "Документы",
+    "wizard.next": "Далее",
+    "wizard.back": "Назад",
+    "wizard.expert_mode": "Открыть экспертный режим",
+    "wizard.warning.rooms_empty": "В проекте пока нет комнат. Можно продолжить и задать фиксированную цену позже.",
+    "wizard.warning.works_empty": "В проекте пока нет работ. Можно продолжить и задать фиксированную цену.",
+    "wizard.warning.pricing_missing": "Параметры ценообразования не заполнены.",
+})
+TRANSLATIONS_SV.update({
+    "wizard.title": "Offertguide",
+    "wizard.step.rooms": "Rum",
+    "wizard.step.works": "Arbete",
+    "wizard.step.pricing": "Prissättning",
+    "wizard.step.materials": "Material",
+    "wizard.step.documents": "Dokument",
+    "wizard.next": "Nästa",
+    "wizard.back": "Tillbaka",
+    "wizard.expert_mode": "Öppna expertläge",
+    "wizard.warning.rooms_empty": "Projektet har inga rum ännu. Du kan fortsätta och sätta fast pris senare.",
+    "wizard.warning.works_empty": "Projektet har inga arbetsrader ännu. Du kan fortsätta och sätta fast pris.",
+    "wizard.warning.pricing_missing": "Prisinställningar saknas.",
+})
+TRANSLATIONS_EN.update({
+    "wizard.title": "Estimator wizard",
+    "wizard.step.rooms": "Rooms",
+    "wizard.step.works": "Works",
+    "wizard.step.pricing": "Pricing",
+    "wizard.step.materials": "Materials",
+    "wizard.step.documents": "Documents",
+    "wizard.next": "Next",
+    "wizard.back": "Back",
+    "wizard.expert_mode": "Open expert mode",
+    "wizard.warning.rooms_empty": "No rooms yet. You can continue and set a fixed total later.",
+    "wizard.warning.works_empty": "No work items yet. You can continue and set a fixed total.",
+    "wizard.warning.pricing_missing": "Pricing configuration is missing.",
+})
