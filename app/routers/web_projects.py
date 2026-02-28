@@ -76,6 +76,7 @@ from app.services.pricing import (
     update_project_pricing,
     evaluate_floor,
 )
+from app.services.pricing_sanity import NO_VALID_PRICING_SCENARIO
 from app.services.takeoff import compute_project_areas, get_or_create_project_takeoff_settings, validate_m2_basis
 from app.services.materials_bom import (
     apply_bom_to_invoice_material_lines,
@@ -235,6 +236,7 @@ M2_BASIS_LABELS_RU = {
 
 def _scenario_view_model(scenario, floor_result=None):
     warning_codes = list(dict.fromkeys(scenario.warnings))
+    sanity_warns = [issue for issue in getattr(scenario, "sanity_issues", []) if issue.get("severity") == "WARN"]
     critical_codes = [code for code in warning_codes if code in CRITICAL_WARNING_CODES]
     floor_reasons = []
     if floor_result is not None:
@@ -250,6 +252,7 @@ def _scenario_view_model(scenario, floor_result=None):
         "margin_pct_display": _format_margin_pct(scenario.margin_pct),
         "warning_codes": warning_codes,
         "warnings": [{"code": code, "text": _warning_text(code)} for code in warning_codes],
+        "sanity_warnings": sanity_warns,
         "critical_warnings": critical_codes,
         "not_applicable": scenario.invalid and bool(critical_codes),
         "floor": floor_result,
@@ -276,7 +279,7 @@ def _conversion_view_model(result):
 
 
 def _pick_best_pricing_mode(scenarios, metric: str = "profit") -> str | None:
-    valid = [scenario for scenario in scenarios if not scenario.invalid]
+    valid = [scenario for scenario in scenarios if not scenario.invalid and getattr(scenario, "is_valid", True)]
     if not valid:
         return None
     normalized_metric = (metric or "profit").strip().lower()
@@ -1787,8 +1790,9 @@ async def project_estimator_apply_best_mode(
 ):
     workspace = build_estimator_workspace(db, project_id)
     compare_rows = workspace.get("pricing", {}).get("compare_rows", [])
-    valid_rows = [r for r in compare_rows if not r.get("invalid")]
+    valid_rows = [r for r in compare_rows if not r.get("invalid") and r.get("is_valid", True)]
     if not valid_rows:
+        add_flash_message(request, NO_VALID_PRICING_SCENARIO, "warning")
         return RedirectResponse(url=f"/projects/{project_id}/estimator", status_code=status.HTTP_303_SEE_OTHER)
     best = max(valid_rows, key=lambda row: Decimal(str(row.get("profit") or 0)))
     pricing = get_or_create_project_pricing(db, project_id)
@@ -2929,7 +2933,8 @@ async def update_project_pricing_screen(
         best_metric = payload.get("best_metric") or "profit"
         best_mode = _pick_best_pricing_mode(scenarios, metric=best_metric)
         if not best_mode:
-            raise HTTPException(status_code=400, detail="No applicable pricing mode")
+            add_flash_message(request, NO_VALID_PRICING_SCENARIO, "warning")
+            return RedirectResponse(url=f"/projects/{project_id}/pricing", status_code=status.HTTP_303_SEE_OTHER)
         select_pricing_mode(
             db,
             pricing=pricing,
