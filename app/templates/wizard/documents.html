@@ -1,6 +1,11 @@
 {% extends "wizard/layout.html" %}
 {% block wizard_step_content %}
+{% from "_macros/help.html" import help_icon %}
 <h2>{{ t('wizard.step.documents') }}</h2>
+<p>
+  Issue policy{{ help_icon('documents.issue_freeze_explained', lang) }} ·
+  Print vs PDF{{ help_icon('documents.print_vs_pdf', lang) }}
+</p>
 <h3>Offer</h3>
 <ul>
   <li><a href="/offers/{{ project.id }}/print?lang={{ lang }}">/offers/{{ project.id }}/print?lang={{ lang }}</a></li>
