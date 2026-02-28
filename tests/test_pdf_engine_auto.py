@@ -1,10 +1,11 @@
 from tests.test_invoice_pdf_fallback import _create_invoice, login, client
 
 
-def test_invoice_pdf_html_only_mode_still_returns_pdf(monkeypatch):
+def test_invoice_pdf_reportlab_mode_still_returns_pdf(monkeypatch):
     _, invoice_id = _create_invoice()
     login()
-    monkeypatch.setenv("PDF_ENGINE", "html_only")
+    monkeypatch.setenv("PDF_BACKEND", "reportlab")
+    monkeypatch.delenv("PDF_ENGINE", raising=False)
 
     response = client.get(f"/invoices/{invoice_id}/pdf")
 
@@ -16,7 +17,8 @@ def test_invoice_pdf_html_only_mode_still_returns_pdf(monkeypatch):
 def test_invoice_pdf_auto_mode_returns_pdf(monkeypatch):
     _, invoice_id = _create_invoice()
     login()
-    monkeypatch.setenv("PDF_ENGINE", "auto")
+    monkeypatch.setenv("PDF_BACKEND", "auto")
+    monkeypatch.delenv("PDF_ENGINE", raising=False)
 
     response = client.get(f"/invoices/{invoice_id}/pdf")
 

@@ -279,6 +279,29 @@ async def offer_document_redirect(offer_id: int, lang: str = Depends(get_current
     return RedirectResponse(url=f"/projects/{offer_id}/offer?lang={normalize_document_lang(lang)}", status_code=status.HTTP_303_SEE_OTHER)
 
 
+@router.get("/projects/{project_id}/documents")
+async def project_documents_page(project_id: int):
+    return RedirectResponse(url=f"/projects/{project_id}?tab=documents", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.get("/projects/{project_id}/offers/new")
+async def project_offer_wizard(project_id: int):
+    return RedirectResponse(url=f"/projects/{project_id}?tab=documents&doc_type=offer", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.get("/offers/{project_id}/preview")
+async def offer_preview(
+    project_id: int,
+    mode: str = "html",
+    lang: str = Depends(get_current_lang),
+):
+    render_lang = normalize_document_lang(lang)
+    preview_mode = (mode or "html").strip().lower()
+    if preview_mode == "pdf":
+        return RedirectResponse(url=f"/offers/{project_id}/pdf?lang={render_lang}", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(url=f"/projects/{project_id}/offer?lang={render_lang}", status_code=status.HTTP_303_SEE_OTHER)
+
+
 @router.get("/invoices/{invoice_id}")
 async def invoice_document_redirect(
     invoice_id: int,
@@ -290,6 +313,24 @@ async def invoice_document_redirect(
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
     return RedirectResponse(url=f"/projects/{invoice.project_id}/invoices/{invoice_id}?lang={normalize_document_lang(lang)}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.get("/invoices/{invoice_id}/preview")
+async def invoice_preview(
+    invoice_id: int,
+    db: Session = Depends(get_db),
+    mode: str = "html",
+    lang: str = Depends(get_current_lang),
+    _role: str = Depends(require_role("admin", "operator", "viewer")),
+):
+    invoice = db.get(Invoice, invoice_id)
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    render_lang = normalize_document_lang(lang)
+    preview_mode = (mode or "html").strip().lower()
+    if preview_mode == "pdf":
+        return RedirectResponse(url=f"/invoices/{invoice_id}/pdf?lang={render_lang}", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(url=f"/projects/{invoice.project_id}/invoices/{invoice_id}?lang={render_lang}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.get("/invoices/{invoice_id}/pdf")
@@ -348,7 +389,6 @@ async def invoice_pdf(
         html=html,
         base_url=PROJECT_ROOT,
         stylesheet_path=PDF_STYLESHEET,
-        render_pdf=render_pdf_from_html,
     )
     _audit_pdf_download(
         db,
@@ -500,6 +540,17 @@ async def finalize_offer_action(
 
 @router.post("/offers/{project_id}/issue")
 async def issue_offer_action(
+    project_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _lang: str = Depends(get_current_lang),
+    _role: str = Depends(require_role("admin", "operator")),
+):
+    return await finalize_offer_action(project_id=project_id, request=request, db=db, _lang=_lang, _role=_role)
+
+
+@router.post("/projects/{project_id}/offers/issue")
+async def issue_offer_action_projects_path(
     project_id: int,
     request: Request,
     db: Session = Depends(get_db),
