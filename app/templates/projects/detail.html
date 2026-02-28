@@ -182,14 +182,15 @@
         <a href="/settings/company">{{ t("projects.documents.open_company") }}</a>
     </div>
     {% endif %}
-    {% if not documents_pdf_capability.weasyprint_available %}
+    {% if documents_pdf_capability.active_engine == "fallback_pdf" %}
     <div class="flash" style="background:#fffbeb;border-color:#f59e0b;">{{ t("projects.documents.pdf_unavailable") }}</div>
     {% endif %}
+    <div class="muted">PDF engine: {{ documents_pdf_capability.active_engine }}</div>
 
     {% if documents_doc_type == 'offer' %}
     {% set preview_url = '/projects/' ~ project.id ~ '/offer?lang=' ~ documents_selected_lang %}
     {% set pdf_url = '/offers/' ~ project.id ~ '/pdf?lang=' ~ documents_selected_lang %}
-    {% set print_url = preview_url %}
+    {% set print_url = '/offers/' ~ project.id ~ '/print?lang=' ~ documents_selected_lang %}
     {% else %}
     {% if documents_selected_invoice %}
     {% set preview_url = '/projects/' ~ project.id ~ '/invoices/' ~ documents_selected_invoice.id ~ '?lang=' ~ documents_selected_lang %}

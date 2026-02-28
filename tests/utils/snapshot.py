@@ -64,6 +64,12 @@ def normalize_document_html(html: str) -> str:
             continue
         if "Download PDF" in line or "onsubmit=" in line or line == '">':
             continue
+        if re.search(r"/offer\?lang=(ru|sv|en)&view=", line):
+            continue
+        if re.search(r"/invoices/.*\?lang=(ru|sv|en)", line):
+            continue
+        if line in {"Dokumentspråk:", "Document language:", "Язык документа:"}:
+            continue
         lines.append(line)
 
     return "\n".join(lines) + "\n"

@@ -453,7 +453,12 @@ async def finalize_offer_action(
     profile = get_or_create_company_profile(db)
     user_id = request.session.get("user_email") if hasattr(request, "session") else None
     form = await request.form()
-    terms_lang = form.get("terms_lang")
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    terms_lang = normalize_document_lang(
+        form.get("terms_lang") or request.query_params.get("lang") or project.offer_document_lang or _lang
+    )
 
     can_issue, score, reasons = _check_fixed_mode_completeness(db, project_id=project_id, lang=_lang)
     if not can_issue:

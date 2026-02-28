@@ -10,7 +10,7 @@
 <body>
 <div class="print-toolbar screen-only"><strong>{{ t("invoice.print_view") }}</strong><button type="button" onclick="window.print()">{{ t("common.print") }}</button></div>
 {% if terms_fallback %}<div class="print-toolbar screen-only"><span>{{ t("invoice.terms_fallback_warning") }} ({{ terms_requested_lang|upper }} → {{ terms_resolved_lang|upper }})</span></div>{% endif %}
-{% if not pdf_capability.weasyprint_available %}<div class="print-toolbar screen-only"><span>{{ t("invoice.pdf_fallback_mode") }} — {{ t("common.save_as_pdf_via_browser") }}</span></div>{% endif %}
+{% if pdf_capability.active_engine == "fallback_pdf" %}<div class="print-toolbar screen-only"><span>{{ t("invoice.pdf_fallback_mode") }} — {{ t("common.save_as_pdf_via_browser") }}</span></div>{% endif %}
 {% include "invoices/_document_body.html" %}
 </body>
 </html>
