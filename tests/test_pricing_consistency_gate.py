@@ -12,6 +12,7 @@ from app.services.commercial_snapshot import DOC_TYPE_INVOICE, write_commercial_
 from app.services.invoice_commercial import compute_invoice_commercial
 from app.services.invoice_lines import generate_invoice_lines_from_project, recalculate_invoice_totals
 from app.services.pricing_consistency import validate_pricing_consistency
+from app.services.pdf_renderer import PdfRenderResult
 
 client = TestClient(app)
 settings = get_settings()
@@ -140,7 +141,7 @@ def test_pdf_issued_renders_snapshot_even_if_project_data_changes(monkeypatch):
         captured['html'] = html
         return b'%PDF-1.4 fake'
 
-    monkeypatch.setattr('app.routers.web_documents.render_pdf_from_html', _fake_render)
+    monkeypatch.setattr('app.routers.web_documents.render_invoice_pdf', lambda *_args, **kwargs: PdfRenderResult(pdf_bytes=_fake_render(**kwargs), engine='weasyprint'))
 
     db = SessionLocal()
     try:

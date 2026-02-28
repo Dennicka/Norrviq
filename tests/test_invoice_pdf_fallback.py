@@ -11,6 +11,7 @@ from app.models.client import Client
 from app.models.invoice import Invoice
 from app.models.invoice_line import InvoiceLine
 from app.models.project import Project
+from app.services.pdf_renderer import PdfRenderResult
 
 client = TestClient(app)
 settings = get_settings()
@@ -111,7 +112,7 @@ def test_invoice_pdf_keeps_legacy_html_render_contract(monkeypatch):
         return b"%PDF-1.4 fake"
 
     monkeypatch.setattr("app.services.pdf_renderer.is_weasyprint_available", lambda: True)
-    monkeypatch.setattr("app.routers.web_documents.render_pdf_from_html", _fake_render)
+    monkeypatch.setattr("app.routers.web_documents.render_invoice_pdf", lambda *_args, **kwargs: PdfRenderResult(pdf_bytes=_fake_render(**kwargs), engine="weasyprint"))
 
     response = client.get(f"/invoices/{invoice_id}/pdf")
 
@@ -124,7 +125,7 @@ def test_invoice_pdf_keeps_legacy_html_render_contract(monkeypatch):
 def test_offer_pdf_returns_pdf_when_renderer_falls_back(monkeypatch):
     project_id = _create_offer_project()
     login()
-    monkeypatch.setattr("app.routers.web_documents.render_pdf_from_html", lambda **_: b"%PDF-1.4 fallback")
+    monkeypatch.setattr("app.routers.web_documents.render_pdf_from_html_with_engine", lambda **_: PdfRenderResult(pdf_bytes=b"%PDF-1.4 fallback", engine="fallback_pdf"))
 
     response = client.get(f"/offers/{project_id}/pdf")
 
