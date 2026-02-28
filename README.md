@@ -69,6 +69,7 @@
 - `ALLOW_DEV_DEFAULTS` — legacy-флаг совместимости; не используется для задания секретов.
 - `LOG_FORMAT` — формат логов: `pretty` (dev) или `json` (production).
 - `LOG_LEVEL` — уровень логирования (`INFO`, `WARN`, `ERROR`).
+- `PDF_BACKEND` — backend рендера PDF: `auto` (по умолчанию), `weasyprint`, `reportlab` (portable fallback без системных lib).
 
 
 ## Bootstrap first admin
@@ -119,6 +120,17 @@ Detailed policy: `docs/DB_MIGRATIONS.md`.
 Before start, run `make doctor`.
 
 See also: `docs/READY_TO_WORK.md`.
+
+### macOS: portable PDF fallback
+
+Если на macOS 12/13 WeasyPrint не запускается из-за `pango/gtk` библиотек, добавьте в `.env`:
+
+```env
+PDF_BACKEND=reportlab
+```
+
+После этого PDF-эндпоинты продолжают отдавать настоящий PDF без установки brew-зависимостей для WeasyPrint.
+
 
 ## Run locally
 

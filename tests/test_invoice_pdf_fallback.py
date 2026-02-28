@@ -92,7 +92,8 @@ def test_invoice_preview_opens_with_pdf_fallback(monkeypatch):
 def test_invoice_pdf_returns_pdf_when_weasyprint_missing(monkeypatch):
     _, invoice_id = _create_invoice()
     login()
-    monkeypatch.setenv("PDF_ENGINE", "html_only")
+    monkeypatch.setenv("PDF_BACKEND", "reportlab")
+    monkeypatch.delenv("PDF_ENGINE", raising=False)
 
     response = client.get(f"/invoices/{invoice_id}/pdf", follow_redirects=False)
 
@@ -106,12 +107,11 @@ def test_invoice_pdf_keeps_legacy_html_render_contract(monkeypatch):
     login()
     captured = {}
 
-    def _fake_render(*, html, base_url, stylesheet_path):
+    def _fake_render(html, base_url, stylesheet_path=None):
         captured["html"] = html
         return b"%PDF-1.4 fake"
 
-    monkeypatch.setattr("app.services.pdf_renderer.is_weasyprint_available", lambda: True)
-    monkeypatch.setattr("app.routers.web_documents.render_pdf_from_html", _fake_render)
+    monkeypatch.setattr("app.services.pdf_renderer.render_pdf", _fake_render)
 
     response = client.get(f"/invoices/{invoice_id}/pdf")
 
