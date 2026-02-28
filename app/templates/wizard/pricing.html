@@ -1,12 +1,15 @@
 {% extends "wizard/layout.html" %}
 {% block wizard_step_content %}
+{% from "_macros/help.html" import help_icon %}
 <h2>{{ t('wizard.step.pricing') }}</h2>
 <p><a href="/projects/{{ project.id }}/pricing?lang={{ lang }}">Open pricing screen</a></p>
+<p><strong>Pricing modes</strong>{{ help_icon('pricing.modes', lang) }}</p>
 <table>
-  <tr><th>Mode</th><th>Price ex VAT</th><th>Profit</th><th>Margin</th></tr>
+  <tr><th>Mode</th><th>Price ex VAT</th><th>Profit{{ help_icon('pricing.margin_profit_explained', lang) }}</th><th>Margin</th></tr>
   {% for row in scenarios %}
   <tr><td>{{ row.mode }}</td><td>{{ row.price_ex_vat_display }}</td><td>{{ row.profit_display }}</td><td>{{ row.margin_pct_display }}</td></tr>
   {% endfor %}
 </table>
-<form method="post" action="/projects/{{ project.id }}/estimator/apply-best-mode?lang={{ lang }}">{{ csrf_input(request) }}<button type="submit">Apply best mode</button></form>
+<p>Floor policy: minimum effective hourly check{{ help_icon('pricing.floor_min_effective_hourly', lang) }}</p>
+<form method="post" action="/projects/{{ project.id }}/estimator/apply-best-mode?lang={{ lang }}">{{ csrf_input(request) }}<button type="submit">Apply best mode</button>{{ help_icon('pricing.apply_best_mode', lang) }}</form>
 {% endblock %}

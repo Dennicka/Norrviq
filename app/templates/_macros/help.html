@@ -1,0 +1,6 @@
+{% macro help_icon(key, lang) %}
+  {% set txt = get_help(key, lang) %}
+  {% if txt %}
+    <span class="help-icon" title="{{ txt|e }}" aria-label="help" data-help-key="{{ key }}">?</span>
+  {% endif %}
+{% endmacro %}
