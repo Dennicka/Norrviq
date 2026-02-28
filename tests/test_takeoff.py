@@ -123,3 +123,117 @@ def test_new_takeoff_regression_case_paintable_total():
     per_m2 = next(s for s in scenarios if s.mode == "PER_M2")
     assert baseline.total_m2 == Decimal("65.00")
     assert per_m2.price_ex_vat == Decimal("6500.00")
+
+
+def test_takeoff_prefers_room_wall_area_when_present():
+    db = SessionLocal()
+    try:
+        p = Project(name=f"Takeoff {uuid4().hex[:6]}")
+        db.add(p)
+        db.flush()
+        db.add(
+            Room(
+                project_id=p.id,
+                name="Room",
+                floor_area_m2=Decimal("20.00"),
+                wall_perimeter_m=Decimal("18.00"),
+                wall_height_m=Decimal("2.50"),
+                openings_area_m2=Decimal("5.00"),
+                wall_area_m2=Decimal("40.00"),
+            )
+        )
+        db.commit()
+        areas = compute_project_areas(db, p.id)
+    finally:
+        db.close()
+
+    assert areas.total_wall_m2 == Decimal("40.00")
+
+
+def test_takeoff_prefers_room_ceiling_area_when_present():
+    db = SessionLocal()
+    try:
+        p = Project(name=f"Takeoff {uuid4().hex[:6]}")
+        db.add(p)
+        db.flush()
+        db.add(
+            Room(
+                project_id=p.id,
+                name="Room",
+                floor_area_m2=Decimal("20.00"),
+                wall_perimeter_m=Decimal("18.00"),
+                wall_height_m=Decimal("2.50"),
+                wall_area_m2=Decimal("40.00"),
+                ceiling_area_m2=Decimal("22.50"),
+            )
+        )
+        db.commit()
+        areas = compute_project_areas(db, p.id)
+    finally:
+        db.close()
+
+    assert areas.total_ceiling_m2 == Decimal("22.50")
+    assert areas.total_paintable_m2 == Decimal("62.50")
+
+
+def test_takeoff_subtracts_openings_when_enabled_and_wall_area_missing():
+    db = SessionLocal()
+    try:
+        p = Project(name=f"Takeoff {uuid4().hex[:6]}")
+        db.add(p)
+        db.flush()
+        db.add(
+            Room(
+                project_id=p.id,
+                name="Room",
+                floor_area_m2=Decimal("20.00"),
+                wall_perimeter_m=Decimal("18.00"),
+                wall_height_m=Decimal("2.50"),
+                openings_area_m2=Decimal("5.00"),
+                wall_area_m2=None,
+            )
+        )
+        db.commit()
+
+        takeoff = get_or_create_project_takeoff_settings(db, p.id)
+        takeoff.include_openings_subtraction = True
+        db.add(takeoff)
+        db.commit()
+
+        areas = compute_project_areas(db, p.id)
+    finally:
+        db.close()
+
+    assert areas.total_wall_m2 == Decimal("40.00")
+
+
+def test_per_m2_uses_net_wall_area_when_room_wall_area_provided():
+    db = SessionLocal()
+    try:
+        p = Project(name=f"Takeoff {uuid4().hex[:6]}")
+        db.add(p)
+        db.flush()
+        db.add(
+            Room(
+                project_id=p.id,
+                name="Room",
+                floor_area_m2=Decimal("20.00"),
+                wall_area_m2=Decimal("40.00"),
+                ceiling_area_m2=Decimal("20.00"),
+            )
+        )
+        db.commit()
+
+        pricing = get_or_create_project_pricing(db, p.id)
+        pricing.rate_per_m2 = Decimal("100.00")
+        takeoff = get_or_create_project_takeoff_settings(db, p.id)
+        takeoff.m2_basis = "PAINTABLE_TOTAL"
+        db.add_all([pricing, takeoff])
+        db.commit()
+        baseline, scenarios = compute_pricing_scenarios(db, p.id)
+    finally:
+        db.close()
+
+    per_m2 = next(s for s in scenarios if s.mode == "PER_M2")
+    assert baseline.total_m2 == Decimal("60.00")
+    assert per_m2.price_ex_vat == Decimal("6000.00")
