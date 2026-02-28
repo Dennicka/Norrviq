@@ -6,7 +6,10 @@
 <div class="offer-wrapper">
     <div class="offer-toolbar">
         <span class="doc-status">{{ t("label.status") }}: {{ offer_status|upper }}</span>
-        <a href="/offers/{{ project.id }}/pdf">Download PDF</a>
+        <a href="/offers/{{ project.id }}/pdf?lang={{ lang }}">Download PDF</a>
+        <a href="/projects/{{ project.id }}/offer?lang=ru&view={{ offer_view }}">RU</a>
+        <a href="/projects/{{ project.id }}/offer?lang=sv&view={{ offer_view }}">SV</a>
+        <a href="/projects/{{ project.id }}/offer?lang=en&view={{ offer_view }}">EN</a>
         {% if offer_status != 'issued' %}
         <form method="post" action="/offers/{{ project.id }}/finalize" onsubmit="finalizeOffer(this)">
             {{ csrf_input(request) }}

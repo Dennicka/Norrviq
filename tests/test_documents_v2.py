@@ -89,6 +89,28 @@ def test_invoice_print_returns_200_and_contains_key_fields_sv():
     assert "Totalt" in response.text or "Att betala" in response.text
 
 
+def test_offer_print_returns_200_and_contains_key_fields_en():
+    fixture = create_stable_document_fixture(enable_rot=False, issue_documents=False)
+    login()
+
+    response = client.get(f"/offers/{fixture.project_id}/print?lang=en")
+
+    assert response.status_code == 200
+    assert "Offer" in response.text
+    assert "VAT" in response.text
+    assert "Total" in response.text
+
+
+def test_project_documents_tab_offer_print_link_uses_offers_print():
+    fixture = create_stable_document_fixture(enable_rot=False, issue_documents=False)
+    login()
+
+    response = client.get(f"/projects/{fixture.project_id}?tab=documents&doc_type=offer")
+
+    assert response.status_code == 200
+    assert f"/offers/{fixture.project_id}/print?lang=" in response.text
+
+
 def test_pdf_endpoint_returns_pdf_when_engine_missing(monkeypatch):
     fixture = create_stable_document_fixture(enable_rot=False, issue_documents=False)
     login()

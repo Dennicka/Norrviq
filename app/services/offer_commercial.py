@@ -39,6 +39,12 @@ def _q(value: Decimal) -> Decimal:
 
 def _basis_label(lang: str, basis: str) -> str:
     labels = {
+        "en": {
+            "FLOOR_AREA": "floor area",
+            "CEILING_AREA": "ceiling area",
+            "WALL_AREA": "wall area",
+            "PAINTABLE_TOTAL": "paintable area",
+        },
         "sv": {
             "FLOOR_AREA": "golvyta",
             "CEILING_AREA": "takyta",
@@ -56,15 +62,42 @@ def _basis_label(lang: str, basis: str) -> str:
 
 
 def _internal_line_items(mode: str, selected, baseline, lang: str) -> list[dict]:
+    description_by_lang = {
+        "HOURLY": {
+            "en": "Work (time & materials)",
+            "sv": "Arbete (löpande räkning)",
+            "ru": "Работы (почасово и материалы)",
+        },
+        "FIXED_TOTAL": {
+            "en": "Fixed price painting work (as agreed)",
+            "sv": "Fast pris för målning enligt överenskommelse",
+            "ru": "Фиксированная цена на малярные работы",
+        },
+        "PER_ROOM": {
+            "en": "Painting per room",
+            "sv": "Målning per rum",
+            "ru": "Покраска по комнате",
+        },
+        "PIECEWORK": {
+            "en": "Work by unit price",
+            "sv": "Arbete enligt styckpris",
+            "ru": "Работы по сдельной цене",
+        },
+    }
+
+    def _desc(mode_key: str) -> str:
+        mapping = description_by_lang[mode_key]
+        return mapping.get(lang, mapping["sv"])
+
     if mode == "FIXED_TOTAL":
-        return [{"source_ref": "generated:fixed", "description": "Fast pris för målning enligt överenskommelse" if lang == "sv" else "Фиксированная цена на малярные работы", "qty": Decimal("1.00"), "unit": "st", "unit_price": selected.price_ex_vat, "total": selected.price_ex_vat, "category": "painting", "split": "labour", "visible": True}]
+        return [{"source_ref": "generated:fixed", "description": _desc("FIXED_TOTAL"), "qty": Decimal("1.00"), "unit": "st", "unit_price": selected.price_ex_vat, "total": selected.price_ex_vat, "category": "painting", "split": "labour", "visible": True}]
     if mode == "PER_M2":
-        return [{"source_ref": f"generated:m2:{baseline.m2_basis}", "description": f"Målning {_basis_label(lang, baseline.m2_basis)}", "qty": baseline.total_m2, "unit": "m²", "unit_price": _q(Decimal(str(selected.input_params.get('rate_per_m2') or 0))), "total": selected.price_ex_vat, "category": "painting", "split": "labour", "visible": True}]
+        return [{"source_ref": f"generated:m2:{baseline.m2_basis}", "description": f"Painting {_basis_label(lang, baseline.m2_basis)}" if lang == "en" else f"Målning {_basis_label(lang, baseline.m2_basis)}" if lang == "sv" else f"Покраска {_basis_label(lang, baseline.m2_basis)}", "qty": baseline.total_m2, "unit": "m²", "unit_price": _q(Decimal(str(selected.input_params.get('rate_per_m2') or 0))), "total": selected.price_ex_vat, "category": "painting", "split": "labour", "visible": True}]
     if mode == "PER_ROOM":
-        return [{"source_ref": "generated:per_room", "description": "Målning per rum", "qty": Decimal(str(baseline.rooms_count)), "unit": "rum", "unit_price": _q(Decimal(str(selected.input_params.get('rate_per_room') or 0))), "total": selected.price_ex_vat, "category": "painting", "split": "labour", "visible": True}]
+        return [{"source_ref": "generated:per_room", "description": _desc("PER_ROOM"), "qty": Decimal(str(baseline.rooms_count)), "unit": "rum", "unit_price": _q(Decimal(str(selected.input_params.get('rate_per_room') or 0))), "total": selected.price_ex_vat, "category": "painting", "split": "labour", "visible": True}]
     if mode == "PIECEWORK":
-        return [{"source_ref": "generated:piecework", "description": "Arbete enligt styckpris", "qty": Decimal(str(baseline.items_count)), "unit": "st", "unit_price": _q(Decimal(str(selected.input_params.get('rate_per_piece') or 0))), "total": selected.price_ex_vat, "category": "painting", "split": "labour", "visible": True}]
-    return [{"source_ref": "generated:hourly", "description": "Arbete (löpande räkning)", "qty": baseline.labor_hours_total, "unit": "h", "unit_price": _q(Decimal(str(selected.input_params.get('hourly_rate') or 0))), "total": selected.price_ex_vat, "category": "painting", "split": "labour", "visible": True}]
+        return [{"source_ref": "generated:piecework", "description": _desc("PIECEWORK"), "qty": Decimal(str(baseline.items_count)), "unit": "st", "unit_price": _q(Decimal(str(selected.input_params.get('rate_per_piece') or 0))), "total": selected.price_ex_vat, "category": "painting", "split": "labour", "visible": True}]
+    return [{"source_ref": "generated:hourly", "description": _desc("HOURLY"), "qty": baseline.labor_hours_total, "unit": "h", "unit_price": _q(Decimal(str(selected.input_params.get('hourly_rate') or 0))), "total": selected.price_ex_vat, "category": "painting", "split": "labour", "visible": True}]
 
 
 

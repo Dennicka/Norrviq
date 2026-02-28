@@ -188,7 +188,8 @@ def finalize_offer(db: Session, project_id: int, user_id: str | None, profile: C
         selected_mode = project.pricing.mode if project.pricing else "HOURLY"
         _check_completeness_for_project(db, project_id=project.id, mode=selected_mode, user_id=user_id, doc_type="project", doc_id=project.id)
         _check_floor_policy_for_project(db, project_id=project.id, user_id=user_id, doc_type="project", doc_id=project.id)
-        commercial = compute_offer_commercial(db, project.id, lang=lang or "sv")
+        resolved_lang = normalize_document_lang(lang or project.offer_document_lang or "sv")
+        commercial = compute_offer_commercial(db, project.id, lang=resolved_lang)
         consistency = validate_pricing_consistency(db, project.id, "OFFER", project.id)
         if not consistency.ok:
             _create_audit_event(
@@ -219,7 +220,7 @@ def finalize_offer(db: Session, project_id: int, user_id: str | None, profile: C
                 profile=profile,
                 client=project.client,
                 doc_type=DOC_TYPE_OFFER,
-                lang=lang,
+                lang=resolved_lang,
             )
             project.offer_terms_snapshot_title = template.title
             project.offer_terms_snapshot_body = template.body_text
@@ -232,6 +233,7 @@ def finalize_offer(db: Session, project_id: int, user_id: str | None, profile: C
                 details={"template_id": template.id, "version": template.version},
             )
         project.offer_commercial_snapshot = serialize_offer_commercial(commercial)
+        project.offer_document_lang = resolved_lang
         project.offer_status = STATUS_ISSUED
         db.add(project)
 

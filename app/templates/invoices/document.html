@@ -9,6 +9,10 @@
         <span class="doc-status">{{ t("label.status") }}: {{ t('invoice.status.' ~ invoice.status) }} · {{ t("invoice.field.language") }}: {{ document_lang|upper }}</span>
         <a href="/invoices/{{ invoice.id }}/print?lang={{ document_lang }}">{{ t("common.print") }}</a>
         <a href="/invoices/{{ invoice.id }}/pdf?lang={{ document_lang }}">{{ t("label.download") }} PDF</a>
+        <span class="muted">{{ t("invoice.field.language") }}:</span>
+        <a href="/projects/{{ invoice.project_id }}/invoices/{{ invoice.id }}?lang=ru">RU</a>
+        <a href="/projects/{{ invoice.project_id }}/invoices/{{ invoice.id }}?lang=sv">SV</a>
+        <a href="/projects/{{ invoice.project_id }}/invoices/{{ invoice.id }}?lang=en">EN</a>
         {% if invoice.status != 'issued' %}
         <form method="post" action="/invoices/{{ invoice.id }}/finalize" onsubmit="finalizeInvoice(this)">
             {{ csrf_input(request) }}
@@ -18,7 +22,7 @@
         {% endif %}
     </div>
     {% if terms_fallback %}<div class="alert alert-warning">{{ t("invoice.terms_fallback_warning") }} ({{ terms_requested_lang|upper }} → {{ terms_resolved_lang|upper }})</div>{% endif %}
-    {% if not pdf_capability.weasyprint_available %}<div class="alert alert-warning">{{ t("invoice.pdf_fallback_mode") }}</div>{% endif %}
+    {% if pdf_capability.active_engine == "fallback_pdf" %}<div class="alert alert-warning">{{ t("invoice.pdf_fallback_mode") }}</div>{% endif %}
     <div class="offer-page">
         {% include "invoices/_document_body.html" %}
     </div>
