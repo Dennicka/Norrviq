@@ -737,6 +737,19 @@ def _floor_reason_text(code: str, policy: PricingPolicy) -> str:
     return code
 
 
+def _effective_hourly_for_floor(scenario: PricingScenario) -> Decimal | None:
+    if scenario.mode != "HOURLY":
+        return scenario.effective_hourly_sell_rate
+
+    raw_hourly = scenario.input_params.get("hourly_rate")
+    try:
+        if raw_hourly is None:
+            raise InvalidOperation
+        return Decimal(str(raw_hourly)).quantize(MONEY_QUANT)
+    except (InvalidOperation, TypeError, ValueError):
+        return scenario.effective_hourly_sell_rate
+
+
 def evaluate_floor(baseline: ProjectBaseline, scenario: PricingScenario, policy: PricingPolicy) -> FloorResult:
     min_margin_pct = Decimal(str(policy.min_margin_pct or 0))
     min_profit_sek = Decimal(str(policy.min_profit_sek or 0))
@@ -749,7 +762,8 @@ def evaluate_floor(baseline: ProjectBaseline, scenario: PricingScenario, policy:
         reasons.append(FLOOR_REASON_MARGIN_BELOW_MIN)
     if scenario.profit < min_profit_sek:
         reasons.append(FLOOR_REASON_PROFIT_BELOW_MIN)
-    if scenario.effective_hourly_sell_rate is None or scenario.effective_hourly_sell_rate < min_hourly:
+    floor_hourly = _effective_hourly_for_floor(scenario)
+    if floor_hourly is None or floor_hourly < min_hourly:
         reasons.append(FLOOR_REASON_EFFECTIVE_HOURLY_BELOW_MIN)
 
     margin_constraint = Decimal('0')

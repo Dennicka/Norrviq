@@ -624,6 +624,49 @@ def test_floor_below_when_negative_profit():
         db.close()
 
 
+def test_floor_hourly_uses_hourly_rate_not_inflated_effective_when_materials_present():
+    db = SessionLocal()
+    try:
+        project_id = _make_golden_project()
+        materials = db.query(CostCategory).filter(CostCategory.code == "MATERIALS").first()
+        assert materials is not None
+        db.add(
+            ProjectCostItem(
+                project_id=project_id,
+                cost_category_id=materials.id,
+                title="ExtraM",
+                amount=Decimal("2000.00"),
+                is_material=True,
+            )
+        )
+
+        pricing = get_or_create_project_pricing(db, project_id)
+        pricing.include_materials = True
+        pricing.hourly_rate_override = Decimal("600.00")
+        db.add(pricing)
+        db.commit()
+
+        baseline, scenarios = compute_pricing_scenarios(db, project_id)
+        hourly = next(sc for sc in scenarios if sc.mode == "HOURLY")
+
+        assert hourly.effective_hourly_sell_rate is not None
+        assert hourly.effective_hourly_sell_rate > Decimal("700.00")
+
+        policy = PricingPolicy(
+            min_margin_pct=Decimal("0.00"),
+            min_profit_sek=Decimal("0.00"),
+            min_effective_hourly_ex_vat=Decimal("700.00"),
+        )
+
+        result = evaluate_floor(baseline, hourly, policy)
+        reason_codes = {r.code for r in result.reasons}
+
+        assert result.is_below_floor is True
+        assert "EFFECTIVE_HOURLY_BELOW_MIN" in reason_codes
+    finally:
+        db.close()
+
+
 def test_pricing_ui_shows_below_floor_badge_and_recommendations():
     login(settings.admin_email, settings.admin_password)
     project_id = _make_golden_project()
