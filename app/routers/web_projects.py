@@ -1,5 +1,6 @@
 import csv
 import io
+import json
 from pathlib import Path
 import logging
 from decimal import Decimal, InvalidOperation
@@ -194,6 +195,7 @@ def _find_preset_work_type(worktypes: list[WorkType], preset: str) -> WorkType |
         "wall_putty": ["putty", "шпат", "spack"],
         "sanding": ["sand", "шлиф", "slip"],
         "primer": ["primer", "грунт"],
+        "baseboard_paint": ["plint", "плинт", "sockel", "paint"],
     }
     markers = keys.get(preset, [])
     for wt in worktypes:
@@ -1724,27 +1726,47 @@ async def project_estimator_apply_preset(
     selected_room_ids = form.getlist("selected_room_ids")
     layers = Decimal(str(form.get("coats") or "1"))
     worktypes = db.query(WorkType).filter(WorkType.is_active).all()
-    work_type = _find_preset_work_type(worktypes, preset)
+    preset_map = {
+        "wall_paint": ["wall_paint", "ceiling_paint"],
+        "wall_putty": ["wall_putty", "sanding"],
+        "floor_protection": ["floor_protection"],
+        "baseboard_paint": ["baseboard_paint"],
+    }
+    preset_keys = preset_map.get(preset, [preset])
+    chosen_work_types = [wt for key in preset_keys if (wt := _find_preset_work_type(worktypes, key))]
     t = make_t(lang)
-    if not work_type:
+    if not chosen_work_types:
         add_flash_message(request, t("estimator.bulk.preset_not_found"), "error")
         return RedirectResponse(url=f"/projects/{project_id}/estimator", status_code=status.HTTP_303_SEE_OTHER)
-    result = apply_work_item_to_scope(
-        project_id,
-        {
-            "work_type_id": work_type.id,
-            "scope_apply_mode": scope_mode,
-            "selected_room_ids": selected_room_ids,
-            "layers": layers,
-            "difficulty_factor": Decimal("1"),
-            "pricing_mode": "hourly",
-        },
-        db,
-    )
+    created_count = 0
+    for work_type in chosen_work_types:
+        result = apply_work_item_to_scope(
+            project_id,
+            {
+                "work_type_id": work_type.id,
+                "scope_apply_mode": scope_mode,
+                "selected_room_ids": selected_room_ids,
+                "layers": layers,
+                "difficulty_factor": Decimal("1"),
+                "pricing_mode": "hourly",
+            },
+            db,
+        )
+        created_count += result.created_count
     recalculate_project_work_items(db, project)
     db.commit()
-    add_flash_message(request, t("estimator.bulk.applied").format(count=result.created_count), "success")
+    add_flash_message(request, t("estimator.bulk.applied").format(count=created_count), "success")
     return RedirectResponse(url=f"/projects/{project_id}/estimator", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{project_id}/estimator/presets/add")
+async def project_estimator_apply_preset_alias(
+    project_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    lang: str = Depends(get_current_lang),
+):
+    return await project_estimator_apply_preset(project_id=project_id, request=request, db=db, lang=lang)
 
 
 @router.post("/{project_id}/estimator/select-pricing")
@@ -1782,6 +1804,80 @@ async def project_estimator_apply_mode(
     form = await request.form()
     mode = form.get("mode") or "HOURLY"
     select_pricing_mode(db, pricing=pricing, mode=mode, user_id=get_current_user_email(request))
+    return RedirectResponse(url=f"/projects/{project_id}/estimator", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{project_id}/estimator/items/add")
+async def project_estimator_add_item(
+    project_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    form = await request.form()
+    work_type_id = int(form.get("work_type_id") or 0)
+    work_type = db.get(WorkType, work_type_id)
+    if not work_type:
+        raise HTTPException(status_code=400, detail="Work type required")
+    item = ProjectWorkItem(
+        project_id=project_id,
+        work_type_id=work_type_id,
+        room_id=None,
+        quantity=Decimal("1"),
+        difficulty_factor=Decimal("1"),
+        scope_mode="PROJECT",
+        basis_type="wall_area_m2",
+        pricing_mode="HOURLY",
+        hourly_rate_ex_vat=Decimal("0"),
+        norm_hours_per_unit=work_type.hours_per_unit,
+    )
+    db.add(item)
+    db.commit()
+    return RedirectResponse(url=f"/projects/{project_id}/estimator", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{project_id}/estimator/items/{item_id}/update")
+async def project_estimator_update_item(
+    project_id: int,
+    item_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    item = db.query(ProjectWorkItem).filter(ProjectWorkItem.id == item_id, ProjectWorkItem.project_id == project_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Work item not found")
+    form = await request.form()
+    item.scope_mode = (form.get("scope_mode") or item.scope_mode or "PROJECT").upper()
+    item.basis_type = (form.get("basis_type") or item.basis_type or "wall_area_m2").lower()
+    item.pricing_mode = (form.get("pricing_mode") or item.pricing_mode or "HOURLY").upper()
+    selected_room_ids = [int(room_id) for room_id in form.getlist("selected_room_ids") if str(room_id).isdigit()]
+    item.selected_room_ids_json = json.dumps(selected_room_ids) if selected_room_ids else None
+    manual_qty = form.get("manual_qty")
+    item.manual_qty = Decimal(str(manual_qty)) if manual_qty not in (None, "") else item.manual_qty
+    fixed_total = form.get("fixed_total_ex_vat")
+    item.fixed_total_ex_vat = Decimal(str(fixed_total)) if fixed_total not in (None, "") else item.fixed_total_ex_vat
+    unit_rate = form.get("unit_rate_ex_vat")
+    item.unit_rate_ex_vat = Decimal(str(unit_rate)) if unit_rate not in (None, "") else item.unit_rate_ex_vat
+    hourly_rate = form.get("hourly_rate_ex_vat")
+    item.hourly_rate_ex_vat = Decimal(str(hourly_rate)) if hourly_rate not in (None, "") else item.hourly_rate_ex_vat
+    db.add(item)
+    db.commit()
+    return RedirectResponse(url=f"/projects/{project_id}/estimator", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{project_id}/estimator/items/{item_id}/delete")
+async def project_estimator_delete_item(
+    project_id: int,
+    item_id: int,
+    db: Session = Depends(get_db),
+):
+    item = db.query(ProjectWorkItem).filter(ProjectWorkItem.id == item_id, ProjectWorkItem.project_id == project_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Work item not found")
+    db.delete(item)
+    db.commit()
     return RedirectResponse(url=f"/projects/{project_id}/estimator", status_code=status.HTTP_303_SEE_OTHER)
 
 

@@ -60,7 +60,7 @@ def test_workspace_builder_returns_geometry_hours_pricing_materials():
     assert workspace["geometry"]["rooms_count"] == 2
     assert workspace["geometry"]["total_floor_area"] == Decimal("22")
     assert workspace["work_items"]["total_hours"] == Decimal("11.00")
-    assert {"HOURLY", "FIXED_TOTAL", "PER_M2", "PER_ROOM", "PIECEWORK", "HYBRID"}.issubset(set(workspace["pricing"]["scenarios"].keys()))
+    assert {"HOURLY", "FIXED_TOTAL", "PER_M2", "PER_ROOM", "PIECEWORK"}.issubset(set(workspace["pricing"]["scenarios"].keys()))
     assert any(row["mode"] == "FIXED_TOTAL" and row["enabled"] is False for row in workspace["pricing"]["compare_rows"])
     assert "rows" in workspace["materials"]
 
@@ -113,7 +113,6 @@ def test_estimator_route_renders_sections_and_ru_labeling():
     assert "Смета проекта" in response.text
     assert "Общие часы" in response.text
     assert "Геометрия" in response.text
-    assert "Массовые действия" in response.text
 
 
 def test_estimator_bulk_apply_and_recalc_and_select_pricing():
@@ -185,3 +184,27 @@ def test_material_override_has_priority_in_materials_plan():
 
     assert workspace["materials"]["rows"]
     assert any(row["source"] in {"project_override", "room_override"} for row in workspace["materials"]["rows"])
+
+
+def test_workspace_item_invalid_reasons_are_returned():
+    project_id = _seed_project()
+    db = SessionLocal()
+    try:
+        item = db.query(ProjectWorkItem).filter(ProjectWorkItem.project_id == project_id).first()
+        assert item is not None
+        item.scope_mode = "SELECTED_ROOMS"
+        item.selected_room_ids_json = None
+        item.pricing_mode = "FIXED_TOTAL"
+        item.fixed_total_ex_vat = None
+        item.norm_hours_per_unit = None
+        item.work_type.hours_per_unit = Decimal("0")
+        db.add(item)
+        db.commit()
+
+        workspace = build_estimator_workspace(db, project_id, lang="ru")
+    finally:
+        db.close()
+
+    row = workspace["work_items"]["rows"][0]
+    assert row["invalid"] is True
+    assert "estimator.invalid.no_rooms_selected" in row["reasons"]

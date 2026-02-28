@@ -1543,6 +1543,15 @@ TRANSLATIONS_RU.update({
     "documents.go_to_pricing": "{message}. Перейдите в раздел Pricing.",
     "projects.takeoff.recommended_applied": "Рекомендованные значения применены",
     "projects.takeoff.conversion_applied": "Конвертация применена",
+    "estimator.help.scope": "Как считать объём: по комнате, по выбранным комнатам, по проекту или вручную.",
+    "estimator.help.basis": "База расчёта количества: площадь пола/стен/потолка, периметр, проёмы или custom.",
+    "estimator.help.compare": "Таблица показывает, какой режим выгоднее при текущем наборе работ.",
+    "estimator.invalid.no_rooms_selected": "Не выбран ни один room в SELECTED_ROOMS",
+    "estimator.invalid.manual_qty_missing": "Не задан manual qty",
+    "estimator.invalid.norm_hours_missing": "Не задана норма часов на единицу",
+    "estimator.invalid.fixed_total_missing": "Не задан fixed_total для режима FIXED_TOTAL",
+    "estimator.invalid.unit_rate_missing": "Не задан unit_rate для PER_M2/PIECEWORK",
+    "estimator.invalid.no_geometry": "Нет геометрии по выбранной базе",
 })
 
 TRANSLATIONS_SV.update({
@@ -1573,6 +1582,15 @@ TRANSLATIONS_SV.update({
     "documents.go_to_pricing": "{message}. Gå till prissättning.",
     "projects.takeoff.recommended_applied": "Rekommenderade värden har tillämpats",
     "projects.takeoff.conversion_applied": "Konvertering har tillämpats",
+    "estimator.help.scope": "Beräkna omfattning per rum, valda rum, hela projektet eller manuellt.",
+    "estimator.help.basis": "Beräkningsbas: golv/vägg/tak, omkrets, öppningar eller custom.",
+    "estimator.help.compare": "Jämförelsen visar vilket läge som är mest lönsamt.",
+    "estimator.invalid.no_rooms_selected": "Inga rum valda i SELECTED_ROOMS",
+    "estimator.invalid.manual_qty_missing": "Manuell mängd saknas",
+    "estimator.invalid.norm_hours_missing": "Normtimmar per enhet saknas",
+    "estimator.invalid.fixed_total_missing": "Fixed total saknas för FIXED_TOTAL",
+    "estimator.invalid.unit_rate_missing": "Enhetspris saknas för PER_M2/PIECEWORK",
+    "estimator.invalid.no_geometry": "Ingen geometri för vald bas",
 })
 
 TRANSLATIONS_EN.update({
@@ -1602,6 +1620,15 @@ TRANSLATIONS_EN.update({
     "documents.go_to_pricing": "{message}. Go to Pricing.",
     "projects.takeoff.recommended_applied": "Recommended values applied",
     "projects.takeoff.conversion_applied": "Conversion applied",
+    "estimator.help.scope": "Scope can be room, selected rooms, whole project, or manual quantity.",
+    "estimator.help.basis": "Quantity basis: floor/wall/ceiling/perimeter/openings/custom.",
+    "estimator.help.compare": "Comparison table shows which mode is currently more profitable.",
+    "estimator.invalid.no_rooms_selected": "No room selected in SELECTED_ROOMS",
+    "estimator.invalid.manual_qty_missing": "Manual qty is missing",
+    "estimator.invalid.norm_hours_missing": "Norm hours per unit is missing",
+    "estimator.invalid.fixed_total_missing": "Fixed total is missing for FIXED_TOTAL",
+    "estimator.invalid.unit_rate_missing": "Unit rate is missing for PER_M2/PIECEWORK",
+    "estimator.invalid.no_geometry": "No geometry for selected basis",
 })
 
 TRANSLATIONS_RU.update({
