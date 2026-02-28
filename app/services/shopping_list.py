@@ -25,7 +25,7 @@ class ShoppingListItem:
     planned_unit: str
     pack_size: Decimal | None
     pack_unit: str | None
-    packs_needed: Decimal
+    packs_needed: Decimal | None
     purchase_qty: Decimal
     supplier_id: int | None
     supplier_name: str | None
@@ -44,7 +44,7 @@ class ShoppingListItem:
 
     @property
     def packs_count(self) -> Decimal:
-        return self.packs_needed
+        return self.packs_needed or Decimal("0")
 
     @property
     def pack_price_ex_vat(self) -> Decimal:
@@ -139,10 +139,13 @@ def compute_project_shopping_list(
             pack_size = Decimal(str(material.pack_size))
             pack_unit = material.pack_unit or line.unit
 
-        if pack_size is None and line.packs_needed > 0:
+        if pack_size is None and line.packs_needed is not None and line.packs_needed > 0:
             pack_size = (line.purchase_qty / line.packs_needed) if line.packs_needed > 0 else None
 
         line_warnings = list(line.warnings)
+        is_unpriced = line.packs_needed is None or line.unit_price_ex_vat is None
+        if is_unpriced:
+            line_warnings.append("UNPRICED_DUE_TO_UNIT_MISMATCH")
         if line.unit_price_ex_vat is None:
             if not include_items_without_price:
                 continue
@@ -162,7 +165,7 @@ def compute_project_shopping_list(
                 supplier_name=line.supplier_name,
                 unit_price=line.unit_price_ex_vat,
                 line_total_cost=_qm(line.line_total_cost_ex_vat),
-                warnings=line_warnings,
+                warnings=sorted(set(line_warnings)),
             )
         )
 
@@ -173,7 +176,7 @@ def compute_project_shopping_list(
             key = item.supplier_name or "Unassigned"
             grouped.setdefault(key, []).append(item)
 
-    total_packs = _qm(sum((item.packs_needed for item in items), start=Decimal("0")))
+    total_packs = _qm(sum(((item.packs_needed or Decimal("0")) for item in items), start=Decimal("0")))
     total_cost = _qm(sum((item.line_total_cost for item in items), start=Decimal("0")))
     payload = {
         "project_id": project_id,
@@ -211,7 +214,7 @@ def apply_shopping_list_to_invoice_material_lines(db: Session, project_id: int, 
     changed = 0
     for item in report.items:
         line = by_material.get(item.material_id)
-        qty = Decimal(str(item.packs_needed))
+        qty = Decimal(str(item.packs_needed or 0))
         if line is None:
             max_pos += 1
             line = InvoiceLine(invoice_id=invoice.id, position=max_pos, kind="MATERIAL", source_type="SHOPPING_LIST", source_id=item.material_id)

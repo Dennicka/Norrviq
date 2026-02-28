@@ -1,8 +1,8 @@
 from decimal import Decimal
 
-from app.services.materials_bom import _convert_qty
+from app.services.unit_conversion import convert_qty
 
 
-def test_pack_conversion_rounds_to_packs():
-    qty_packs = _convert_qty(Decimal("13.2"), "L", "PACK", pack_size=Decimal("10"), pack_unit="L")
-    assert qty_packs == Decimal("1.32")
+def test_convert_qty_volume_roundtrip():
+    qty_ml = convert_qty(Decimal("13.2"), "L", "ml")
+    assert qty_ml == Decimal("13200.0000")
