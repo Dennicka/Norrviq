@@ -12,6 +12,7 @@ from app.models.material import Material
 from app.models.project_procurement_settings import ProjectProcurementSettings
 from app.services.invoice_lines import recalculate_invoice_totals
 from app.services.materials_bom import ProcurementStrategy, compute_procurement_plan
+from app.services.procurement_rounding import ProcurementRoundingPolicy
 
 MONEY_Q = Decimal("0.01")
 
@@ -111,6 +112,7 @@ def compute_project_shopping_list(
     group_by_supplier: bool = True,
     include_items_without_price: bool = True,
     strategy: str | None = None,
+    policy: ProcurementRoundingPolicy | None = None,
 ) -> ShoppingListReport:
     settings = get_or_create_procurement_settings(db, project_id)
     strategy_mode = (strategy or ("PREFERRED_FIRST" if settings.preferred_supplier_id else "CHEAPEST")).upper()
@@ -121,6 +123,7 @@ def compute_project_shopping_list(
         project_id,
         strategy=ProcurementStrategy(strategy_mode if strategy_mode in {"CHEAPEST", "PREFERRED_FIRST", "FIXED_SUPPLIER"} else "CHEAPEST"),
         supplier_id=supplier_id or settings.preferred_supplier_id,
+        policy=policy,
     )
     warnings: list[str] = list(plan.warnings)
     items: list[ShoppingListItem] = []
