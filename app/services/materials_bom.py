@@ -8,6 +8,7 @@ from app.models.cost import CostCategory, ProjectCostItem
 from app.models.invoice import Invoice
 from app.models.invoice_line import InvoiceLine
 from app.models.material import Material
+from app.models.material_catalog_item import MaterialCatalogItem
 from app.models.material_norm import MaterialConsumptionNorm
 from app.models.material_consumption_override import MaterialConsumptionOverride
 from app.models.material_recipe import MaterialRecipe
@@ -279,7 +280,17 @@ def _compute_bom_from_norms(db: Session, project: Project, warnings: list[str]) 
     if not rooms:
         return []
     materials = {m.id: m for m in db.query(Material).filter(Material.is_active.is_(True)).all()}
-    materials_by_name = {m.name_sv.lower(): m for m in materials.values()}
+    materials_by_name_sv = {m.name_sv.lower(): m for m in materials.values()}
+    materials_by_code = {m.code.lower(): m for m in materials.values() if m.code}
+    norm_catalog_ids = {norm.material_catalog_item_id for norm in norms if norm.material_catalog_item_id is not None}
+    catalog_by_id: dict[int, MaterialCatalogItem] = {}
+    if norm_catalog_ids:
+        catalog_by_id = {
+            item.id: item
+            for item in db.query(MaterialCatalogItem)
+            .filter(MaterialCatalogItem.id.in_(norm_catalog_ids), MaterialCatalogItem.is_active.is_(True))
+            .all()
+        }
 
     grouped: dict[str, dict] = {}
     for item in sorted(project.work_items, key=lambda wi: wi.id or 0):
@@ -292,7 +303,20 @@ def _compute_bom_from_norms(db: Session, project: Project, warnings: list[str]) 
         target_rooms = [rooms[item.room_id]] if item.room_id in rooms else list(rooms.values())
         for norm in matched_norms:
             default_surface = _normalize_surface_kind(norm.surface_type or _infer_surface_for_work(item))
-            material = materials_by_name.get((norm.material_name or "").strip().lower())
+            material = None
+            catalog = None
+            display_name = (norm.material_name or "").strip()
+            if norm.material_catalog_item_id is not None:
+                catalog = catalog_by_id.get(norm.material_catalog_item_id)
+                if catalog is not None:
+                    material = materials_by_code.get((catalog.material_code or "").strip().lower())
+                    if material is not None:
+                        display_name = (catalog.name or material.name_sv or display_name).strip()
+                    else:
+                        warnings.append(f"norm:{norm.id}:MISSING_MATERIAL_FOR_CATALOG_CODE:{catalog.material_code}")
+
+            if material is None:
+                material = materials_by_name_sv.get((norm.material_name or "").strip().lower())
             material_id = material.id if material else None
             resolved = resolve_material_norm(db, project.id, item.room_id, item.work_type_id, material_id, default_surface, norm)
 
@@ -333,6 +357,8 @@ def _compute_bom_from_norms(db: Session, project: Project, warnings: list[str]) 
             qty = _q(qty * (Decimal("1") + waste_pct / Decimal("100")))
 
             pack_size = Decimal(str(norm.package_size)) if norm.package_size is not None else None
+            if (pack_size is None or pack_size <= 0) and catalog is not None and catalog.package_size is not None:
+                pack_size = Decimal(str(catalog.package_size))
             packs_count = None
             qty_final = qty
             if pack_size is not None and pack_size > 0:
@@ -343,7 +369,8 @@ def _compute_bom_from_norms(db: Session, project: Project, warnings: list[str]) 
             basis_label = {"m2": "m2", "piece": "pcs", "room": "room"}.get(resolved.unit_basis, resolved.unit_basis)
             norm_label = f"{consumption_qty} / {per_basis_qty} {basis_label}"
 
-            key = f"{norm.material_name}|{norm.material_unit}"
+            material_key = f"M:{material_id}" if material_id is not None else f"N:{norm.material_name}|{norm.material_unit}"
+            key = material_key
             bucket = grouped.setdefault(
                 key,
                 {
@@ -360,7 +387,8 @@ def _compute_bom_from_norms(db: Session, project: Project, warnings: list[str]) 
                     "norm": norm_label,
                     "waste": waste_pct,
                     "unit": norm.material_unit,
-                    "material_name": norm.material_name,
+                    "material_name": display_name or norm.material_name,
+                    "material_id": material_id,
                     "details": [],
                 },
             )
@@ -376,7 +404,8 @@ def _compute_bom_from_norms(db: Session, project: Project, warnings: list[str]) 
 
     items: list[BOMItem] = []
     for idx, bucket in enumerate(grouped.values(), start=1):
-        items.append(BOMItem(material_id=-idx, name=bucket["material_name"], unit=bucket["unit"], area_m2_used=_q(bucket["area"]), qty_required_unit=_q(bucket["qty_required"]), packs_count=bucket["packs"] if bucket["has_packs"] else None, pack_size=bucket["pack_size"], qty_final_unit=_q(bucket["qty_final"]), cost_ex_vat=_qm(bucket["cost"]), sell_ex_vat=_qm(bucket["cost"]), details=bucket["details"], source_works=", ".join(sorted(bucket["work_codes"])), surface_type=bucket["surface"], coats=bucket["coats"], norm_label=bucket["norm"], waste_percent=bucket["waste"]))
+        resolved_material_id = bucket.get("material_id")
+        items.append(BOMItem(material_id=resolved_material_id if resolved_material_id is not None else -idx, name=bucket["material_name"], unit=bucket["unit"], area_m2_used=_q(bucket["area"]), qty_required_unit=_q(bucket["qty_required"]), packs_count=bucket["packs"] if bucket["has_packs"] else None, pack_size=bucket["pack_size"], qty_final_unit=_q(bucket["qty_final"]), cost_ex_vat=_qm(bucket["cost"]), sell_ex_vat=_qm(bucket["cost"]), details=bucket["details"], source_works=", ".join(sorted(bucket["work_codes"])), surface_type=bucket["surface"], coats=bucket["coats"], norm_label=bucket["norm"], waste_percent=bucket["waste"]))
     return items
 
 
@@ -626,9 +655,44 @@ def compute_procurement_plan(db: Session, project_id: int, strategy: Procurement
         line_total = Decimal("0")
         unit_price = None
         price_unit = None
+        supplier_name = selected.supplier.name if selected else None
         if selected is None:
-            line_warnings.append("NO_SUPPLIER_PRICE")
-            line_total = _qm(Decimal(str(item.cost_ex_vat or 0)))
+            material = db.get(Material, item.material_id)
+            catalog_selected: MaterialCatalogItem | None = None
+            if material is not None:
+                catalog_prices = db.query(MaterialCatalogItem).filter(
+                    MaterialCatalogItem.material_code == material.code,
+                    MaterialCatalogItem.is_active.is_(True),
+                ).all()
+                default_prices = [catalog for catalog in catalog_prices if catalog.is_default_for_material]
+                price_pool = default_prices or catalog_prices
+                if price_pool:
+                    catalog_selected = min(
+                        price_pool,
+                        key=lambda catalog: Decimal(str(catalog.price_ex_vat or 0)) / Decimal(str(catalog.package_size or 1)),
+                    )
+
+            if catalog_selected is None:
+                line_warnings.append("NO_SUPPLIER_PRICE")
+                line_total = _qm(Decimal(str(item.cost_ex_vat or 0)))
+            else:
+                pack_size = Decimal(str(catalog_selected.package_size or 0))
+                if pack_size <= 0:
+                    line_warnings.append("NO_PACK_SIZE")
+                    line_warnings.append("INVALID_PACK_SIZE")
+                    line_total = _qm(Decimal(str(item.cost_ex_vat or 0)))
+                else:
+                    qty_in_pack_unit = _convert_qty(qty, item.unit, catalog_selected.package_unit)
+                    if qty_in_pack_unit is None:
+                        line_warnings.append(f"CONVERSION_{item.unit}_TO_{catalog_selected.package_unit}_UNAVAILABLE")
+                    else:
+                        packs_needed = (qty_in_pack_unit / pack_size).to_integral_value(rounding=ROUND_CEILING)
+                        purchase_qty = packs_needed * pack_size
+                        unit_price = Decimal(str(catalog_selected.price_ex_vat or 0))
+                        price_unit = "PACK"
+                        line_total = _qm(packs_needed * unit_price)
+                        supplier_name = (catalog_selected.supplier_name or "Catalog").strip() or "Catalog"
+                        line_warnings.append("CATALOG_PRICE_USED")
         else:
             pack_size = Decimal(str(selected.pack_size or 0))
             if pack_size <= 0:
@@ -654,7 +718,7 @@ def compute_procurement_plan(db: Session, project_id: int, strategy: Procurement
                 qty=qty,
                 unit=item.unit,
                 supplier_id=selected.supplier_id if selected else None,
-                supplier_name=selected.supplier.name if selected else None,
+                supplier_name=supplier_name,
                 price_unit=price_unit,
                 unit_price_ex_vat=unit_price,
                 packs_needed=packs_needed,
