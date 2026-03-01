@@ -9,6 +9,7 @@ from app.dependencies import get_current_lang, get_db, template_context, templat
 from app.audit import log_event
 from app.security import get_current_user_email
 from app.services.auth import authenticate_user
+from app.services.setup_status import get_blocking_setup_checks
 from app.web_utils import clean_str, safe_commit
 from app.services.form_utils import get_str
 
@@ -46,6 +47,8 @@ async def login(request: Request, db: Session = Depends(get_db), lang: str = Dep
             context["next_path"] = next_path
             context["invalid_credentials"] = True
             return templates.TemplateResponse(request, "auth/login.html", context, status_code=400)
+        if get_blocking_setup_checks(db):
+            return RedirectResponse(url="/onboarding", status_code=HTTP_302_FOUND)
         return RedirectResponse(url=next_path, status_code=HTTP_302_FOUND)
 
     log_event(db, request, "login_failed", entity_type="SYSTEM", severity="SECURITY", metadata={"user_email": email.strip().lower()})

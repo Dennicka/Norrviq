@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Setup: Terms templates</h1>
+{% if has_sv_terms %}
+<p>Swedish template exists. You can continue.</p>
+{% else %}
+<p>No active Swedish templates found.</p>
+<form method="post" action="/onboarding/terms/seed-default">
+    {{ csrf_input(request) }}
+    <button type="submit">Seed default Swedish templates</button>
+</form>
+{% endif %}
+<p><a href="/settings/terms">Open full terms settings</a></p>
+{% endblock %}
