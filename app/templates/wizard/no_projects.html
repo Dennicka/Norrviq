@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t('wizard.title') }}</h1>
+<p>{{ t('wizard.no_projects') }}</p>
+<p>
+  <a href="{{ create_project_href }}">{{ t('wizard.create_project') }}</a> ·
+  <a href="{{ projects_href }}">{{ t('menu.projects') }}</a>
+</p>
+{% endblock %}

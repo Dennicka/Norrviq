@@ -79,7 +79,23 @@
 python -m app.scripts.create_admin --email admin@example.com --password "StrongPassword#2026"
 ```
 
-Команда идемпотентна по email: при существующем пользователе завершится с ошибкой.
+Команда идемпотентна по email: при существующем пользователе печатает `User already exists, skipping` и завершается успешно.
+
+Чтобы обновить пароль существующего пользователя:
+```bash
+python -m app.scripts.create_admin --email admin@example.com --password "StrongPassword#2026" --update-password
+```
+
+
+## Clean DB quickstart (runbook)
+
+```bash
+rm -f norrviq.db
+alembic upgrade head
+python -m app.scripts.seed_defaults
+python -m app.scripts.create_admin --email admin@example.com --password "StrongPassword#2026"
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
+```
 
 ## Database initialization and migrations
 

@@ -60,5 +60,5 @@ def test_project_pages_have_wizard_link():
 
     assert detail.status_code == 200
     assert estimator.status_code == 200
-    assert f"/projects/{project_id}/wizard?step=rooms" in detail.text
-    assert f"/projects/{project_id}/wizard?step=rooms" in estimator.text
+    assert f"/projects/{project_id}/wizard?step=object" in detail.text
+    assert f"/projects/{project_id}/wizard?step=object" in estimator.text

@@ -3,16 +3,16 @@
 {% from "_macros/help.html" import help_icon %}
 <h2>{{ t('wizard.step.documents') }}</h2>
 <p>
-  Issue policy{{ help_icon('documents.issue_freeze_explained', lang) }} ·
-  Print vs PDF{{ help_icon('documents.print_vs_pdf', lang) }}
+  {{ t('wizard.documents.issue_policy') }}{{ help_icon('documents.issue_freeze_explained', lang) }} ·
+  {{ t('wizard.documents.print_vs_pdf') }}{{ help_icon('documents.print_vs_pdf', lang) }}
 </p>
-<h3>Offer</h3>
+<h3>{{ t('wizard.documents.offer') }}</h3>
 <ul>
   <li><a href="/offers/{{ project.id }}/print?lang={{ lang }}">/offers/{{ project.id }}/print?lang={{ lang }}</a></li>
   <li><a href="/offers/{{ project.id }}/pdf?lang={{ lang }}">/offers/{{ project.id }}/pdf?lang={{ lang }}</a></li>
 </ul>
 {% if latest_invoice %}
-<h3>Invoice #{{ latest_invoice.id }}</h3>
+<h3>{{ t('wizard.documents.invoice') }} #{{ latest_invoice.id }}</h3>
 <ul>
   <li><a href="/invoices/{{ latest_invoice.id }}/print?lang={{ lang }}">/invoices/{{ latest_invoice.id }}/print?lang={{ lang }}</a></li>
   <li><a href="/invoices/{{ latest_invoice.id }}/pdf?lang={{ lang }}">/invoices/{{ latest_invoice.id }}/pdf?lang={{ lang }}</a></li>

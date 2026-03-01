@@ -18,7 +18,7 @@
     <form method="post" action="/projects/{{ project.id }}/estimator/recalculate">{{ csrf_input(request) }}<button type="submit">{{ t('estimator.recalculate') }}</button></form>
     <a href="#compare"><button type="button">Compare modes</button></a>
     <form method="post" action="/projects/{{ project.id }}/estimator/apply-best-mode">{{ csrf_input(request) }}<button type="submit">Apply best mode</button></form>
-    <a href="/projects/{{ project.id }}/wizard?step=rooms&lang={{ lang }}"><button type="button">Wizard / Быстрая смета</button></a>
+    <a href="/projects/{{ project.id }}/wizard?step=object&lang={{ lang }}"><button type="button">{{ t('projects.open_wizard') }}</button></a>
     <a href="/projects/{{ project.id }}/offer"><button type="button">Issue Offer</button></a>
     <a href="/projects/{{ project.id }}/invoices/create"><button type="button">Issue Invoice</button></a>
     <a href="/projects/{{ project.id }}"><button type="button">Open PDFs</button></a>
