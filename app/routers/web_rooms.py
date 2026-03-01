@@ -67,6 +67,23 @@ def _validate_non_negative_decimal(field_name: str, value: Decimal | None) -> No
         raise HTTPException(status_code=400, detail=f"{field_name} can not be negative")
 
 
+FAST_ENTRY_PRESET_NAMES = {"Kitchen", "Bathroom", "Hallway", "Bedroom", "Living room", "Storage"}
+
+
+def _wizard_rooms_redirect(project_id: int, lang: str) -> RedirectResponse:
+    return RedirectResponse(url=f"/projects/{project_id}/wizard?step=rooms&lang={lang}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+def _get_common_room_presets(project: Project) -> list[str]:
+    if project.object_type and project.object_template:
+        from app.routers.web_projects import WIZARD_ROOM_TEMPLATES
+
+        presets = WIZARD_ROOM_TEMPLATES.get(project.object_type, {}).get(project.object_template, [])
+        if presets:
+            return presets[:5]
+    return ["Hallway", "Bathroom", "Kitchen", "Living room", "Bedroom"]
+
+
 def _audit(db: Session, *, event_type: str, user_id: str | None, project_id: int, details: dict) -> None:
     db.add(
         AuditEvent(
@@ -312,7 +329,7 @@ async def duplicate_room(
         getattr(request.state, "request_id", None),
     )
     db.commit()
-    return RedirectResponse(url=f"/projects/{project_id}/rooms/", status_code=status.HTTP_303_SEE_OTHER)
+    return _wizard_rooms_redirect(project_id, lang)
 
 
 @router.post("/{room_id}/duplicate_many")
@@ -428,6 +445,7 @@ async def bulk_create_rooms(
 
 
 @router.post("/bulk_update")
+@router.post("/bulk-update")
 async def bulk_update_rooms(
     project_id: int,
     request: Request,
@@ -436,9 +454,96 @@ async def bulk_update_rooms(
     _role: str = Depends(require_role("admin", "operator")),
 ):
     form = await request.form()
+    updates_json = form.get("updates_json")
+    if updates_json:
+        try:
+            updates = json.loads(str(updates_json))
+        except json.JSONDecodeError as exc:
+            raise HTTPException(status_code=400, detail="updates_json must be valid json") from exc
+        if not isinstance(updates, list) or not updates:
+            raise HTTPException(status_code=400, detail="updates_json must contain at least one room update")
+        room_ids: list[int] = []
+        for payload in updates:
+            if not isinstance(payload, dict) or "id" not in payload:
+                raise HTTPException(status_code=400, detail="each room update must contain id")
+            try:
+                room_ids.append(int(payload["id"]))
+            except Exception as exc:
+                raise HTTPException(status_code=400, detail="room id must be integer") from exc
+
+        rooms = db.query(Room).filter(Room.project_id == project_id, Room.id.in_(room_ids)).all()
+        rooms_map = {room.id: room for room in rooms}
+        if len(rooms_map) != len(set(room_ids)):
+            raise HTTPException(status_code=404, detail="Some rooms were not found")
+
+        changed = 0
+        for payload in updates:
+            room = rooms_map[int(payload["id"])]
+            room.name = (str(payload.get("name") or room.name)).strip() or room.name
+            room.length_m = _parse_decimal(payload.get("length_m"))
+            room.width_m = _parse_decimal(payload.get("width_m"))
+            room.wall_height_m = _parse_decimal(payload.get("height_m"))
+            room.openings_area_m2 = _parse_decimal(payload.get("openings_area_m2"))
+            for field in ("length_m", "width_m", "wall_height_m", "openings_area_m2"):
+                _validate_non_negative_decimal(field, getattr(room, field))
+            recalc_room_dimensions(room)
+            db.add(room)
+            changed += 1
+
+        evaluate_project_quality(db, project_id, lang=lang)
+        user_id = request.session.get("user_email") if hasattr(request, "session") else None
+        _audit(
+            db,
+            event_type="rooms_bulk_updated",
+            user_id=user_id,
+            project_id=project_id,
+            details={"count": changed, "fields": ["name", "length_m", "width_m", "wall_height_m", "openings_area_m2"]},
+        )
+        db.commit()
+        return _wizard_rooms_redirect(project_id, lang)
+
     raw_room_ids = form.getlist("room_ids")
     if not raw_room_ids:
         raise HTTPException(status_code=400, detail="room_ids are required")
+
+    fast_entry_payload = []
+    for raw_room_id in raw_room_ids:
+        if not str(raw_room_id).isdigit():
+            continue
+        room_id = int(raw_room_id)
+        fast_name = form.get(f"name_{room_id}")
+        if fast_name is None:
+            continue
+        fast_entry_payload.append(
+            {
+                "id": room_id,
+                "name": fast_name,
+                "length_m": form.get(f"length_m_{room_id}"),
+                "width_m": form.get(f"width_m_{room_id}"),
+                "height_m": form.get(f"height_m_{room_id}"),
+                "openings_area_m2": form.get(f"openings_area_m2_{room_id}"),
+            }
+        )
+
+    if fast_entry_payload:
+        rooms = db.query(Room).filter(Room.project_id == project_id, Room.id.in_([item["id"] for item in fast_entry_payload])).all()
+        rooms_map = {room.id: room for room in rooms}
+        if len(rooms_map) != len({item["id"] for item in fast_entry_payload}):
+            raise HTTPException(status_code=404, detail="Some rooms were not found")
+        for payload in fast_entry_payload:
+            room = rooms_map[payload["id"]]
+            room.name = (str(payload.get("name") or "")).strip() or room.name
+            room.length_m = _parse_decimal(payload.get("length_m"))
+            room.width_m = _parse_decimal(payload.get("width_m"))
+            room.wall_height_m = _parse_decimal(payload.get("height_m"))
+            room.openings_area_m2 = _parse_decimal(payload.get("openings_area_m2"))
+            for field in ("length_m", "width_m", "wall_height_m", "openings_area_m2"):
+                _validate_non_negative_decimal(field, getattr(room, field))
+            recalc_room_dimensions(room)
+            db.add(room)
+        evaluate_project_quality(db, project_id, lang=lang)
+        db.commit()
+        return _wizard_rooms_redirect(project_id, lang)
 
     try:
         room_ids = [int(value) for value in raw_room_ids]
@@ -503,4 +608,67 @@ async def bulk_update_rooms(
         getattr(request.state, "request_id", None),
     )
     db.commit()
-    return RedirectResponse(url=f"/projects/{project_id}/rooms/", status_code=status.HTTP_303_SEE_OTHER)
+    return _wizard_rooms_redirect(project_id, lang)
+
+
+@router.post("/bulk-set-height")
+async def bulk_set_height(
+    project_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    lang: str = Depends(get_current_lang),
+    _role: str = Depends(require_role("admin", "operator")),
+):
+    form = await request.form()
+    height_m = _parse_decimal(form.get("height_m"))
+    _validate_non_negative_decimal("height_m", height_m)
+    if height_m is None:
+        raise HTTPException(status_code=400, detail="height_m is required")
+
+    raw_room_ids = form.getlist("room_ids")
+    rooms_query = db.query(Room).filter(Room.project_id == project_id)
+    if raw_room_ids:
+        try:
+            room_ids = [int(room_id) for room_id in raw_room_ids]
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail="room_ids must be integers") from exc
+        rooms_query = rooms_query.filter(Room.id.in_(room_ids))
+    rooms = rooms_query.all()
+    for room in rooms:
+        room.wall_height_m = height_m
+        recalc_room_dimensions(room)
+        db.add(room)
+    evaluate_project_quality(db, project_id, lang=lang)
+    db.commit()
+    return _wizard_rooms_redirect(project_id, lang)
+
+
+@router.post("/preset-add")
+async def preset_add_room(
+    project_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    lang: str = Depends(get_current_lang),
+    _role: str = Depends(require_role("admin", "operator")),
+):
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    form = await request.form()
+    preset_name = (form.get("preset_name") or "").strip()
+    add_common = form.get("add_common") in {"1", "true", "on"}
+    existing_names = {name for (name,) in db.query(Room.name).filter(Room.project_id == project_id).all()}
+
+    names_to_add = _get_common_room_presets(project) if add_common else [preset_name]
+    for name in names_to_add:
+        if not name:
+            continue
+        if not add_common and name not in FAST_ENTRY_PRESET_NAMES:
+            raise HTTPException(status_code=400, detail="Unknown preset")
+        safe_name = name if name not in existing_names else _build_copy_name(existing_names, name)
+        existing_names.add(safe_name)
+        db.add(Room(project_id=project_id, name=safe_name))
+
+    db.commit()
+    return _wizard_rooms_redirect(project_id, lang)

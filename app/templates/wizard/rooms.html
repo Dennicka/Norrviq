@@ -1,13 +1,85 @@
 {% extends "wizard/layout.html" %}
 {% block wizard_step_content %}
 <h2>{{ t('wizard.step.rooms') }}</h2>
-<p><a href="/projects/{{ project.id }}/rooms/?lang={{ lang }}">Open full rooms editor</a></p>
+<p><a href="/projects/{{ project.id }}/rooms/?lang={{ lang }}">Open full rooms editor (advanced)</a></p>
+
+<section style="margin: 12px 0; display: flex; flex-wrap: wrap; gap: 12px; align-items: center;">
+  <form method="post" action="/projects/{{ project.id }}/rooms/bulk-set-height?lang={{ lang }}" style="display:flex; gap:8px; align-items:center;">
+    {{ csrf_input(request) }}
+    <label for="bulk-height">Bulk height (m)</label>
+    <input id="bulk-height" type="number" step="0.01" min="0" name="height_m" placeholder="2.60">
+    <button type="submit">Apply to all rooms</button>
+  </form>
+
+  <form method="post" action="/projects/{{ project.id }}/rooms/preset-add?lang={{ lang }}" style="display:flex; gap:8px; align-items:center;">
+    {{ csrf_input(request) }}
+    <label for="preset_name">Add preset room</label>
+    <select id="preset_name" name="preset_name">
+      <option>Kitchen</option>
+      <option>Bathroom</option>
+      <option>Hallway</option>
+      <option>Bedroom</option>
+      <option>Living room</option>
+      <option>Storage</option>
+    </select>
+    <button type="submit">Add</button>
+  </form>
+
+  <form method="post" action="/projects/{{ project.id }}/rooms/preset-add?lang={{ lang }}">
+    {{ csrf_input(request) }}
+    <input type="hidden" name="add_common" value="1">
+    <button type="submit">Add 5 common rooms</button>
+  </form>
+</section>
+
 <table>
-  <tr><th>{{ t('label.name') }}</th><th>{{ t('rooms.field.floor_area') }}</th><th>{{ t('rooms.field.wall_area') }}</th></tr>
+  <thead>
+    <tr>
+      <th>{{ t('label.name') }}</th>
+      <th>Length (m)</th>
+      <th>Width (m)</th>
+      <th>Height (m)</th>
+      <th>Openings (m²)</th>
+      <th>{{ t('rooms.field.floor_area') }}</th>
+      <th>{{ t('rooms.field.wall_area') }}</th>
+      <th>{{ t('rooms.field.ceiling_area') }}</th>
+      <th>{{ t('label.actions') }}</th>
+    </tr>
+  </thead>
+  <tbody>
   {% for room in rooms %}
-  <tr><td>{{ room.name }}</td><td>{{ room.floor_area_m2 or 0 }}</td><td>{{ room.wall_area_m2 or 0 }}</td></tr>
+    {% set incomplete = room.length_m is none or room.width_m is none or room.wall_height_m is none %}
+    <tr>
+      <form method="post" action="/projects/{{ project.id }}/rooms/bulk-update?lang={{ lang }}">
+        {{ csrf_input(request) }}
+        <input type="hidden" name="room_ids" value="{{ room.id }}">
+        <td>
+          <input type="text" name="name_{{ room.id }}" value="{{ room.name }}" required>
+          {% if incomplete %}<span title="Incomplete dimensions">⚠️</span>{% endif %}
+        </td>
+        <td><input type="number" step="0.01" min="0" name="length_m_{{ room.id }}" value="{{ room.length_m if room.length_m is not none else '' }}"></td>
+        <td><input type="number" step="0.01" min="0" name="width_m_{{ room.id }}" value="{{ room.width_m if room.width_m is not none else '' }}"></td>
+        <td><input type="number" step="0.01" min="0" name="height_m_{{ room.id }}" value="{{ room.wall_height_m if room.wall_height_m is not none else '' }}"></td>
+        <td><input type="number" step="0.01" min="0" name="openings_area_m2_{{ room.id }}" value="{{ room.openings_area_m2 if room.openings_area_m2 is not none else '' }}"></td>
+        <td>{{ room.floor_area_m2 or 0 }}</td>
+        <td>{{ room.wall_area_m2 or 0 }}</td>
+        <td>{{ room.ceiling_area_m2 or 0 }}</td>
+        <td style="white-space: nowrap; display:flex; gap:6px;">
+          <button type="submit">{{ t('label.save') }}</button>
+      </form>
+          <form method="post" action="/projects/{{ project.id }}/rooms/{{ room.id }}/duplicate?lang={{ lang }}" style="display:inline;">
+            {{ csrf_input(request) }}
+            <button type="submit">Duplicate</button>
+          </form>
+          <form method="post" action="/projects/{{ project.id }}/rooms/{{ room.id }}/delete?lang={{ lang }}" style="display:inline;">
+            {{ csrf_input(request) }}
+            <button type="submit">{{ t('label.delete') }}</button>
+          </form>
+        </td>
+    </tr>
   {% else %}
-  <tr><td colspan="3">—</td></tr>
+    <tr><td colspan="9">No rooms yet — add a preset to start.</td></tr>
   {% endfor %}
+  </tbody>
 </table>
 {% endblock %}
