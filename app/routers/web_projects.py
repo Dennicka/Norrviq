@@ -428,9 +428,41 @@ PROJECT_WORKSPACE_TABS = {
     "audit",
 }
 
-WIZARD_STEPS = ["rooms", "works", "pricing", "materials", "documents"]
+WIZARD_STEPS = ["object", "rooms", "works", "pricing", "materials", "review", "documents"]
 WIZARD_NEXT_STEP = {current: WIZARD_STEPS[index + 1] for index, current in enumerate(WIZARD_STEPS[:-1])}
 WIZARD_PREV_STEP = {current: WIZARD_STEPS[index - 1] for index, current in enumerate(WIZARD_STEPS[1:], start=1)}
+
+WIZARD_OBJECT_TYPES = ["house", "apartment", "office", "commercial"]
+WIZARD_ROOM_TEMPLATES = {
+    "apartment": {
+        "studio": ["Hallway", "Bathroom", "Kitchen", "Living room"],
+        "1br": ["Hallway", "Bathroom", "Kitchen", "Living room", "Bedroom 1"],
+        "2br": ["Hallway", "Bathroom", "Kitchen", "Living room", "Bedroom 1", "Bedroom 2"],
+        "3br": ["Hallway", "Bathroom", "Kitchen", "Living room", "Bedroom 1", "Bedroom 2", "Bedroom 3"],
+    },
+    "house": {
+        "small": ["Hallway", "Kitchen", "Bathroom", "Living room", "Bedroom 1"],
+        "medium": ["Hallway", "Kitchen", "Bathroom", "Living room", "Bedroom 1", "Bedroom 2"],
+        "large": ["Hallway", "Kitchen", "Bathroom", "Living room", "Bedroom 1", "Bedroom 2", "Bedroom 3"],
+    },
+}
+
+
+def _build_wizard_summary(db: Session, project_id: int, *, cache: RequestCache | None = None) -> dict:
+    pricing = get_or_create_project_pricing(db, project_id)
+    project = db.get(Project, project_id)
+    pricing_totals = calculate_project_pricing_totals(project)
+    geometry = aggregate_project_geometry(db, project_id, cache=cache)
+    material_plan = cost_project_materials(db, project_id)
+    return {
+        "hours_total": calculate_project_total_hours(db, project_id),
+        "sell_ex_vat": pricing_totals.total_price_sek,
+        "materials_total": material_plan.total_ex_vat,
+        "profit": pricing_totals.total_margin_sek,
+        "margin_pct": pricing_totals.total_margin_pct,
+        "pricing_mode": pricing.mode or "HOURLY",
+        "floor_area_m2": geometry.total_floor_area_m2,
+    }
 
 
 def _resolve_wizard_step(raw_step: str | None) -> str | None:
@@ -653,14 +685,14 @@ async def project_detail(
 async def project_wizard(
     project_id: int,
     request: Request,
-    step: str = Query("rooms"),
+    step: str | None = Query(default=None),
     db: Session = Depends(get_db),
     lang: str = Depends(get_current_lang),
     cache: RequestCache = Depends(get_request_cache),
 ):
     resolved_step = _resolve_wizard_step(step)
-    if resolved_step is None:
-        return RedirectResponse(url=f"/projects/{project_id}/wizard?step=rooms&lang={lang}", status_code=status.HTTP_303_SEE_OTHER)
+    if step is None or resolved_step is None:
+        return RedirectResponse(url=f"/projects/{project_id}/wizard?step=object&lang={lang}", status_code=status.HTTP_303_SEE_OTHER)
 
     project = (
         db.query(Project)
@@ -687,9 +719,17 @@ async def project_wizard(
         wizard_step=resolved_step,
         wizard_warning=request.query_params.get("warning"),
         wizard_warning_text=request.query_params.get("warning_text"),
+        wizard_summary=_build_wizard_summary(db, project_id, cache=cache),
     )
 
-    if resolved_step == "rooms":
+    if resolved_step == "object":
+        context.update(
+            {
+                "wizard_object_types": WIZARD_OBJECT_TYPES,
+                "wizard_room_templates": WIZARD_ROOM_TEMPLATES,
+            }
+        )
+    elif resolved_step == "rooms":
         context["rooms"] = sorted(project.rooms, key=lambda room: room.name.lower() if room.name else "")
     elif resolved_step == "works":
         context["workspace"] = build_estimator_workspace(db, project_id)
@@ -709,6 +749,22 @@ async def project_wizard(
                 "shopping_list": compute_project_shopping_list(db, project_id, cache=cache),
             }
         )
+    elif resolved_step == "review":
+        latest_invoice = (
+            db.query(Invoice)
+            .filter(Invoice.project_id == project_id)
+            .order_by(Invoice.id.desc())
+            .first()
+        )
+        context.update(
+            {
+                "latest_invoice": latest_invoice,
+                "geometry_summary": aggregate_project_geometry(db, project_id, cache=cache),
+                "workspace": build_estimator_workspace(db, project_id),
+                "shopping_list": compute_project_shopping_list(db, project_id, cache=cache),
+                "pricing": get_or_create_project_pricing(db, project_id),
+            }
+        )
     elif resolved_step == "documents":
         latest_invoice = (
             db.query(Invoice)
@@ -721,12 +777,38 @@ async def project_wizard(
     return templates.TemplateResponse(request, f"wizard/{resolved_step}.html", context)
 
 
+@router.post("/{project_id}/wizard/object")
+async def project_wizard_object(project_id: int, request: Request, db: Session = Depends(get_db)):
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    form = await request.form()
+    lang = str(form.get("lang") or request.query_params.get("lang") or "sv")
+    object_type = (form.get("object_type") or "").strip().lower()
+    template_key = (form.get("object_template") or "").strip().lower()
+
+    if object_type in WIZARD_OBJECT_TYPES:
+        project.object_type = object_type
+    if template_key:
+        project.object_template = template_key
+        template_rooms = WIZARD_ROOM_TEMPLATES.get(object_type, {}).get(template_key, [])
+        existing_names = {room.name.strip().lower() for room in project.rooms if room.name}
+        for room_name in template_rooms:
+            if room_name.lower() in existing_names:
+                continue
+            db.add(Room(project_id=project_id, name=room_name))
+
+    db.add(project)
+    db.commit()
+    return RedirectResponse(url=f"/projects/{project_id}/wizard?step=rooms&lang={lang}", status_code=status.HTTP_303_SEE_OTHER)
+
+
 @router.post("/{project_id}/wizard/next")
 async def project_wizard_next(project_id: int, request: Request, db: Session = Depends(get_db)):
     if not db.get(Project, project_id):
         raise HTTPException(status_code=404, detail="Project not found")
     form = await request.form()
-    step = _resolve_wizard_step(str(form.get("step") or "rooms")) or "rooms"
+    step = _resolve_wizard_step(str(form.get("step") or "object")) or "object"
     lang = str(form.get("lang") or request.query_params.get("lang") or "sv")
     next_step = WIZARD_NEXT_STEP.get(step, step)
     warning = None
@@ -759,7 +841,7 @@ async def project_wizard_back(project_id: int, request: Request, db: Session = D
     if not db.get(Project, project_id):
         raise HTTPException(status_code=404, detail="Project not found")
     form = await request.form()
-    step = _resolve_wizard_step(str(form.get("step") or "rooms")) or "rooms"
+    step = _resolve_wizard_step(str(form.get("step") or "object")) or "object"
     lang = str(form.get("lang") or request.query_params.get("lang") or "sv")
     prev_step = WIZARD_PREV_STEP.get(step, step)
     return RedirectResponse(url=f"/projects/{project_id}/wizard?step={prev_step}&lang={lang}", status_code=status.HTTP_303_SEE_OTHER)

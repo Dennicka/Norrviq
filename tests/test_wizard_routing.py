@@ -30,7 +30,7 @@ def test_wizard_routing_steps_and_invalid_redirect():
     _login()
     project_id = _seed_project()
 
-    rooms = client.get(f"/projects/{project_id}/wizard?step=rooms&lang=ru")
+    rooms = client.get(f"/projects/{project_id}/wizard?step=object&lang=ru")
     assert rooms.status_code == 200
     assert "Мастер сметы" in rooms.text
 
@@ -40,4 +40,4 @@ def test_wizard_routing_steps_and_invalid_redirect():
 
     invalid = client.get(f"/projects/{project_id}/wizard?step=bad&lang=ru", follow_redirects=False)
     assert invalid.status_code == 303
-    assert f"/projects/{project_id}/wizard?step=rooms&lang=ru" in invalid.headers["location"]
+    assert f"/projects/{project_id}/wizard?step=object&lang=ru" in invalid.headers["location"]

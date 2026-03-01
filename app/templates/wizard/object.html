@@ -1,0 +1,29 @@
+{% extends "wizard/layout.html" %}
+{% block wizard_step_content %}
+<h2>{{ t('wizard.step.object') }}</h2>
+<form method="post" action="/projects/{{ project.id }}/wizard/object">
+  {{ csrf_input(request) }}
+  <input type="hidden" name="lang" value="{{ lang }}">
+  <div style="display:grid;grid-template-columns:repeat(4,minmax(100px,1fr));gap:8px;">
+    {% for item in wizard_object_types %}
+    <label style="border:1px solid #d1d5db;padding:10px;border-radius:6px;display:block;">
+      <input type="radio" name="object_type" value="{{ item }}" {% if project.object_type == item %}checked{% endif %}>
+      {{ t('wizard.object_type.' ~ item) }}
+    </label>
+    {% endfor %}
+  </div>
+  <p style="margin-top:12px;">
+    <label>{{ t('wizard.object_template') }}
+      <select name="object_template">
+        <option value="">—</option>
+        {% if project.object_type == 'apartment' %}
+          <option value="studio">studio</option><option value="1br">1BR</option><option value="2br">2BR</option><option value="3br">3BR</option>
+        {% elif project.object_type == 'house' %}
+          <option value="small">small</option><option value="medium">medium</option><option value="large">large</option>
+        {% endif %}
+      </select>
+    </label>
+  </p>
+  <button type="submit">{{ t('wizard.object_apply_template') }}</button>
+</form>
+{% endblock %}
