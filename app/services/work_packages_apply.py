@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from decimal import Decimal
 
@@ -12,10 +13,14 @@ from app.models.worktype import WorkType
 from app.services.work_packages import list_active_packages
 
 
+logger = logging.getLogger(__name__)
+
+
 @dataclass(frozen=True)
 class PackageApplySummary:
     created_count: int
     updated_count: int
+    missing_work_type_codes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -40,10 +45,12 @@ def apply_package(
     work_types = {row.code: row for row in db.query(WorkType).filter(WorkType.is_active.is_(True)).all()}
     created_count = 0
     updated_count = 0
+    missing_codes: set[str] = set()
 
     for line in template.items:
         work_type = work_types.get(line.work_type_code)
         if work_type is None:
+            missing_codes.add(line.work_type_code)
             continue
 
         existing = (
@@ -85,8 +92,21 @@ def apply_package(
         )
         created_count += 1
 
+    missing_list = tuple(sorted(missing_codes))
+    if missing_list:
+        logger.warning(
+            "work_package_apply_missing_work_types package=%s template=%s missing=%s",
+            package_code,
+            getattr(template, "code", package_code),
+            ",".join(missing_list),
+        )
+
     db.commit()
-    return PackageApplySummary(created_count=created_count, updated_count=updated_count)
+    return PackageApplySummary(
+        created_count=created_count,
+        updated_count=updated_count,
+        missing_work_type_codes=missing_list,
+    )
 
 
 def remove_package(db: Session, project_id: int, package_code: str) -> PackageRemoveSummary:

@@ -1,70 +1,126 @@
+from __future__ import annotations
+
 from decimal import Decimal
+from pathlib import Path
 from uuid import uuid4
 
-from fastapi.testclient import TestClient
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker
 
-from app.config import get_settings
 from app.db import SessionLocal
-from app.main import app
 from app.models.project import Project, ProjectWorkItem
 from app.models.room import Room
 from app.models.worktype import WorkType
+from app.scripts.seed_defaults import seed_defaults
+from app.services.bootstrap import ensure_default_worktypes
+from app.services.work_packages import ensure_default_packages
+from app.services.work_packages_apply import apply_package
+from tests.db_utils import upgrade_database
 
 
-client = TestClient(app)
-settings = get_settings()
+def _seed_project_with_rooms(db, *, rooms: int = 1) -> tuple[int, list[int]]:
+    project = Project(name=f"Work package {uuid4().hex[:6]}")
+    db.add(project)
+    db.flush()
 
-
-def _login() -> None:
-    client.post('/login', data={'username': settings.admin_username, 'password': settings.admin_password})
-
-
-def _seed_project_with_package_worktypes() -> int:
-    db = SessionLocal()
-    try:
-        project = Project(name=f'Package {uuid4().hex[:6]}')
-        room = Room(project=project, name='Living', floor_area_m2=Decimal('20'), wall_area_m2=Decimal('40'), ceiling_area_m2=Decimal('20'), wall_perimeter_m=Decimal('18'))
-        wts = [
-            WorkType(code='MASK_FLOOR', name_ru='Укрывка пола', name_sv='Mask golv', category='prep', unit='m2', hours_per_unit=Decimal('0.1'), is_active=True),
-            WorkType(code='PAINT_CEILING', name_ru='Покраска потолка', name_sv='Måla tak', category='paint', unit='m2', hours_per_unit=Decimal('0.2'), is_active=True),
-        ]
-        db.add(project)
+    room_ids: list[int] = []
+    for index in range(rooms):
+        room = Room(
+            project_id=project.id,
+            name=f"Room {index + 1}",
+            floor_area_m2=Decimal("12"),
+            wall_area_m2=Decimal("30"),
+            ceiling_area_m2=Decimal("12"),
+            wall_perimeter_m=Decimal("14"),
+        )
         db.add(room)
-        for wt in wts:
-            existing = db.query(WorkType).filter(WorkType.code == wt.code).first()
-            if not existing:
-                db.add(wt)
-        db.commit()
-        return project.id
+        db.flush()
+        room_ids.append(room.id)
+
+    db.commit()
+    return project.id, room_ids
+
+
+def test_work_package_templates_have_valid_work_type_codes(tmp_path: Path):
+    db_path = tmp_path / "work-packages.sqlite3"
+    db_url = f"sqlite:///{db_path}"
+    upgrade_database(db_url)
+
+    engine = create_engine(db_url)
+    LocalSession = sessionmaker(bind=engine)
+    db = LocalSession()
+    try:
+        ensure_default_worktypes(db)
+        ensure_default_packages(db)
     finally:
         db.close()
 
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text(
+                """
+                SELECT i.work_type_code
+                FROM work_package_template_items i
+                JOIN work_package_templates t ON t.id = i.template_id
+                LEFT JOIN work_types wt ON wt.code = i.work_type_code
+                WHERE t.is_active = 1 AND wt.code IS NULL
+                """
+            )
+        ).all()
+    assert rows == []
 
-def test_add_package_creates_work_items_and_recalc_non_zero():
-    _login()
-    project_id = _seed_project_with_package_worktypes()
-    add = client.post(
-        f'/projects/{project_id}/estimator/packages/add',
-        data={'package_code': 'PKG_PAINT_CEILING_2'},
-        follow_redirects=False,
-    )
-    assert add.status_code == 303
 
+def test_apply_pkg_paint_walls_2_creates_two_coat_items():
     db = SessionLocal()
     try:
-        rows = db.query(ProjectWorkItem).filter(ProjectWorkItem.project_id == project_id).all()
-        assert len(rows) >= 1
-        assert rows[0].scope_mode == 'WHOLE_PROJECT'
-        assert rows[0].basis_type == 'ceiling_area_m2'
+        seed_defaults(db)
+        project_id, _ = _seed_project_with_rooms(db, rooms=1)
+
+        summary = apply_package(
+            db,
+            project_id=project_id,
+            package_code="PKG_PAINT_WALL_2",
+            scope_mode="WHOLE_PROJECT",
+            selected_room_ids=[],
+        )
+
+        assert summary.created_count == 2
+        assert summary.missing_work_type_codes == ()
+
+        items = (
+            db.query(ProjectWorkItem)
+            .join(WorkType, WorkType.id == ProjectWorkItem.work_type_id)
+            .filter(ProjectWorkItem.project_id == project_id)
+            .all()
+        )
+        codes = sorted(item.work_type.code for item in items)
+        assert codes == ["WALL_PAINT_COAT_1", "WALL_PAINT_COAT_2"]
     finally:
+        db.rollback()
         db.close()
 
-    recalc = client.post(f'/projects/{project_id}/estimator/recalculate', data={}, follow_redirects=False)
-    assert recalc.status_code == 303
 
+def test_apply_pkg_selected_rooms_creates_items_per_room():
     db = SessionLocal()
     try:
-        total_sell = sum((Decimal(str(r.calculated_sell_ex_vat or 0)) for r in db.query(ProjectWorkItem).filter(ProjectWorkItem.project_id == project_id).all()), Decimal('0'))
-        assert total_sell >= 0
+        seed_defaults(db)
+        project_id, room_ids = _seed_project_with_rooms(db, rooms=2)
+        selected_room_id = room_ids[0]
+
+        summary = apply_package(
+            db,
+            project_id=project_id,
+            package_code="PKG_PAINT_WALL_2",
+            scope_mode="SELECTED_ROOMS",
+            selected_room_ids=[selected_room_id],
+        )
+
+        assert summary.created_count == 2
+
+        created = db.query(ProjectWorkItem).filter(ProjectWorkItem.project_id == project_id).all()
+        assert len(created) == 2
+        assert all(item.scope_mode == "SELECTED_ROOMS" for item in created)
+        assert all(item.selected_room_ids_json == f"[{selected_room_id}]" for item in created)
     finally:
+        db.rollback()
         db.close()

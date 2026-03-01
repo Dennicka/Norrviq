@@ -39,7 +39,7 @@ DEFAULT_WORK_PACKAGES: tuple[DefaultPackageTemplate, ...] = (
         description_ru="Плёнка/бумага для защиты пола перед работами.",
         description_sv="Plast/papper för att skydda golv före arbete.",
         description_en="Film/paper to protect floors before work.",
-        items=(DefaultPackageItem(work_type_code="MASK_FLOOR", basis_type="floor_area_m2"),),
+        items=(DefaultPackageItem(work_type_code="COVER_FLOOR_PAPER", basis_type="floor_area_m2"),),
     ),
     DefaultPackageTemplate(
         code="PKG_MASKING",
@@ -50,7 +50,7 @@ DEFAULT_WORK_PACKAGES: tuple[DefaultPackageTemplate, ...] = (
         description_ru="Укрытие поверхностей и проклейка стыков.",
         description_sv="Maskering av ytor och tejpning av skarvar.",
         description_en="Masking surfaces and taping edges.",
-        items=(DefaultPackageItem(work_type_code="MASKING", basis_type="wall_area_m2"),),
+        items=(DefaultPackageItem(work_type_code="MASKING_TAPE", basis_type="perimeter_m"),),
     ),
     DefaultPackageTemplate(
         code="PKG_SPOT_REPAIR",
@@ -61,7 +61,7 @@ DEFAULT_WORK_PACKAGES: tuple[DefaultPackageTemplate, ...] = (
         description_ru="Локальный ремонт трещин и отверстий.",
         description_sv="Lokal lagning av sprickor och hål.",
         description_en="Local repair of cracks and holes.",
-        items=(DefaultPackageItem(work_type_code="SPOT_REPAIR", basis_type="wall_area_m2"),),
+        items=(DefaultPackageItem(work_type_code="WALL_SPACKLE_LAYER_1", basis_type="wall_area_m2"),),
     ),
     DefaultPackageTemplate(
         code="PKG_SPACKLE_WALL_1",
@@ -72,7 +72,7 @@ DEFAULT_WORK_PACKAGES: tuple[DefaultPackageTemplate, ...] = (
         description_ru="Базовый выравнивающий слой шпаклевки.",
         description_sv="Grundläggande utjämnande spackellager.",
         description_en="Base leveling putty layer.",
-        items=(DefaultPackageItem(work_type_code="SKIM_WALL", basis_type="wall_area_m2"),),
+        items=(DefaultPackageItem(work_type_code="WALL_SPACKLE_LAYER_1", basis_type="wall_area_m2"),),
     ),
     DefaultPackageTemplate(
         code="PKG_SPACKLE_WALL_2",
@@ -83,7 +83,11 @@ DEFAULT_WORK_PACKAGES: tuple[DefaultPackageTemplate, ...] = (
         description_ru="Финишный слой шпаклевки для подготовки под покраску.",
         description_sv="Finputsningslager för målning.",
         description_en="Finishing putty layer before painting.",
-        items=(DefaultPackageItem(work_type_code="SKIM_WALL", basis_type="wall_area_m2"),),
+        items=(
+            DefaultPackageItem(work_type_code="WALL_SPACKLE_LAYER_1", basis_type="wall_area_m2"),
+            DefaultPackageItem(work_type_code="WALL_SPACKLE_LAYER_2", basis_type="wall_area_m2"),
+            DefaultPackageItem(work_type_code="WALL_SANDING", basis_type="wall_area_m2"),
+        ),
     ),
     DefaultPackageTemplate(
         code="PKG_SANDING_WALL",
@@ -94,7 +98,7 @@ DEFAULT_WORK_PACKAGES: tuple[DefaultPackageTemplate, ...] = (
         description_ru="Шлифовка после шпаклевки.",
         description_sv="Slipning efter spackling.",
         description_en="Sanding after putty.",
-        items=(DefaultPackageItem(work_type_code="SAND_WALL", basis_type="wall_area_m2"),),
+        items=(DefaultPackageItem(work_type_code="WALL_SANDING", basis_type="wall_area_m2"),),
     ),
     DefaultPackageTemplate(
         code="PKG_PRIMER_WALL",
@@ -105,7 +109,7 @@ DEFAULT_WORK_PACKAGES: tuple[DefaultPackageTemplate, ...] = (
         description_ru="Грунтование стен перед покраской.",
         description_sv="Grundning av väggar före målning.",
         description_en="Priming walls before painting.",
-        items=(DefaultPackageItem(work_type_code="PRIMER_WALL", basis_type="wall_area_m2"),),
+        items=(DefaultPackageItem(work_type_code="WALL_PAINT_PRIMER", basis_type="wall_area_m2"),),
     ),
     DefaultPackageTemplate(
         code="PKG_PAINT_WALL_2",
@@ -116,7 +120,10 @@ DEFAULT_WORK_PACKAGES: tuple[DefaultPackageTemplate, ...] = (
         description_ru="Два финишных слоя краски на стены.",
         description_sv="Två färdiga lager färg på väggar.",
         description_en="Two final paint coats on walls.",
-        items=(DefaultPackageItem(work_type_code="PAINT_WALL", basis_type="wall_area_m2", coats=Decimal("2"), difficulty_factor=Decimal("2")),),
+        items=(
+            DefaultPackageItem(work_type_code="WALL_PAINT_COAT_1", basis_type="wall_area_m2"),
+            DefaultPackageItem(work_type_code="WALL_PAINT_COAT_2", basis_type="wall_area_m2"),
+        ),
     ),
     DefaultPackageTemplate(
         code="PKG_PAINT_CEILING_2",
@@ -127,7 +134,10 @@ DEFAULT_WORK_PACKAGES: tuple[DefaultPackageTemplate, ...] = (
         description_ru="Два слоя краски для потолка.",
         description_sv="Två lager färg för tak.",
         description_en="Two paint coats for ceiling.",
-        items=(DefaultPackageItem(work_type_code="PAINT_CEILING", basis_type="ceiling_area_m2", coats=Decimal("2"), difficulty_factor=Decimal("2")),),
+        items=(
+            DefaultPackageItem(work_type_code="CEILING_PAINT_COAT_1", basis_type="ceiling_area_m2"),
+            DefaultPackageItem(work_type_code="CEILING_PAINT_COAT_2", basis_type="ceiling_area_m2"),
+        ),
     ),
     DefaultPackageTemplate(
         code="PKG_BASEBOARD",
@@ -138,7 +148,7 @@ DEFAULT_WORK_PACKAGES: tuple[DefaultPackageTemplate, ...] = (
         description_ru="Покраска/монтаж плинтусов при наличии.",
         description_sv="Målning/montering av socklar om de finns.",
         description_en="Paint/install baseboards when present.",
-        items=(DefaultPackageItem(work_type_code="PAINT_TRIM", basis_type="perimeter_m"),),
+        items=(DefaultPackageItem(work_type_code="BASEBOARD_PAINT", basis_type="perimeter_m"),),
     ),
 )
 
