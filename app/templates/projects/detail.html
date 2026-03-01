@@ -15,7 +15,7 @@
         <form method="post" action="/projects/{{ project.id }}/recalculate-finance?tab={{ active_tab }}">{{ csrf_input(request) }}<button type="submit">{{ t('projects.recalculate') }}</button></form>
         <a href="/projects/{{ project.id }}/pricing">Compare modes</a>
         <form method="post" action="/projects/{{ project.id }}/pricing">{{ csrf_input(request) }}<input type="hidden" name="intent" value="apply_best_mode"><button type="submit">Apply best mode</button></form>
-        <a href="/projects/{{ project.id }}/wizard?step=rooms&lang={{ lang }}">Wizard / Быстрая смета</a>
+        <a href="/projects/{{ project.id }}/wizard?step=rooms&lang={{ lang }}"><button type="button">Open Wizard</button></a>
         <form method="post" action="/offers/{{ project.id }}/issue">{{ csrf_input(request) }}<button type="submit">Issue Offer</button></form>
         {% if selected_invoice %}<form method="post" action="/invoices/{{ selected_invoice.id }}/issue">{{ csrf_input(request) }}<button type="submit">Issue Invoice</button></form>{% endif %}
         <a href="/offers/{{ project.id }}/pdf">Open PDFs</a>
