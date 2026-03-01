@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Setup complete</h1>
+{% if block_count == 0 %}
+<p>All blocking setup items are complete.</p>
+{% else %}
+<p>Some blocking items are still unresolved. <a href="/onboarding?step=overview">Return to onboarding</a>.</p>
+{% endif %}
+<p><a href="/projects/">Go to Projects</a></p>
+<p><a href="/wizard/object">Open Wizard</a></p>
+{% endblock %}

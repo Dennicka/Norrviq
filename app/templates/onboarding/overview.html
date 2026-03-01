@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>First-run setup</h1>
+<p>Complete critical setup items before issuing Offer/Invoice documents.</p>
+
+<table>
+    <thead>
+        <tr><th>Check</th><th>Status</th><th>Details</th><th>Action</th></tr>
+    </thead>
+    <tbody>
+    {% for check in checks %}
+        <tr>
+            <td>{{ check.title }}</td>
+            <td>{{ check.status }}</td>
+            <td>{{ check.details }}</td>
+            <td>
+                {% if check.fix_url %}
+                <a href="{{ check.fix_url }}">Fix</a>
+                {% else %}
+                -
+                {% endif %}
+            </td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+
+{% if next_block_step %}
+<p><a href="/onboarding?step={{ next_block_step }}">Continue</a></p>
+{% else %}
+<p><a href="/onboarding/complete">Setup complete</a></p>
+{% endif %}
+{% endblock %}

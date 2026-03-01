@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Setup: Pricing policy</h1>
+{% if pricing_policy %}
+<p>Pricing policy exists.</p>
+{% else %}
+<p>No pricing policy found. Create defaults.</p>
+<form method="post" action="/onboarding/pricing/save-default">
+    {{ csrf_input(request) }}
+    <button type="submit">Create default pricing policy</button>
+</form>
+{% endif %}
+<p><a href="/settings/pricing-policy">Open full pricing policy</a></p>
+{% endblock %}

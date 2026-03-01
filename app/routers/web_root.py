@@ -1,17 +1,21 @@
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Request
+from sqlalchemy.orm import Session
 from fastapi.responses import RedirectResponse
 
 from ..config import get_settings
-from ..dependencies import get_current_lang, template_context, templates
+from ..services.setup_status import get_blocking_setup_checks
+from ..dependencies import get_current_lang, get_db, template_context, templates
 
 router = APIRouter()
 settings = get_settings()
 
 
 @router.get("/")
-async def root(request: Request, lang: str = Depends(get_current_lang)):
+async def root(request: Request, lang: str = Depends(get_current_lang), db: Session = Depends(get_db)):
+    if request.session.get("user_email") and get_blocking_setup_checks(db):
+        return RedirectResponse(url="/onboarding", status_code=302)
     context = template_context(request, lang)
     return templates.TemplateResponse(request, "index.html", context)
 

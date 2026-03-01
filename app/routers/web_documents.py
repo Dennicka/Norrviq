@@ -28,6 +28,7 @@ from app.services.document_numbering import (
     finalize_offer,
 )
 from app.services.pdf_renderer import invoice_pdf_capability, render_invoice_pdf, render_pdf_from_html_with_engine
+from app.services.setup_status import get_blocking_setup_checks
 from app.services.completeness import compute_completeness
 from app.services.quality import evaluate_project_quality
 from app.services.terms_templates import DOC_TYPE_OFFER, resolve_terms_template
@@ -82,6 +83,14 @@ def _completeness_mode_gate_response(request: Request, *, project_id: int, score
         )
     add_flash_message(request, detail, "error")
     return RedirectResponse(url=f"/projects/{project_id}/pricing", status_code=status.HTTP_303_SEE_OTHER)
+
+
+
+
+def _setup_gate_response(request: Request, *, redirect_url: str, blockers: list) -> RedirectResponse:
+    titles = ", ".join(item.title for item in blockers)
+    add_flash_message(request, f"Setup incomplete: {titles}", "error")
+    return RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)
 
 
 def _check_fixed_mode_completeness(db: Session, *, project_id: int, lang: str) -> tuple[bool, int, list[dict]]:
@@ -450,6 +459,10 @@ async def finalize_offer_action(
     _lang: str = Depends(get_current_lang),
     _role: str = Depends(require_role("admin", "operator")),
 ):
+    blockers = get_blocking_setup_checks(db)
+    if blockers:
+        return _setup_gate_response(request, redirect_url=f"/projects/{project_id}/offer", blockers=blockers)
+
     profile = get_or_create_company_profile(db)
     user_id = request.session.get("user_email") if hasattr(request, "session") else None
     form = await request.form()
@@ -522,6 +535,12 @@ async def finalize_invoice_action(
     _lang: str = Depends(get_current_lang),
     _role: str = Depends(require_role("admin", "operator")),
 ):
+    blockers = get_blocking_setup_checks(db)
+    if blockers:
+        invoice = db.get(Invoice, invoice_id)
+        project_id = invoice.project_id if invoice else 0
+        redirect_url = f"/projects/{project_id}/invoices/{invoice_id}" if project_id else f"/invoices/{invoice_id}"
+        return _setup_gate_response(request, redirect_url=redirect_url, blockers=blockers)
     profile = get_or_create_company_profile(db)
     user_id = request.session.get("user_email") if hasattr(request, "session") else None
     form = await request.form()

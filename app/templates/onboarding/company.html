@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Setup: Company</h1>
+<form method="post" action="/onboarding/company/save" class="form-grid">
+    {{ csrf_input(request) }}
+    <label>Company name</label>
+    <input type="text" name="legal_name" value="{{ company.legal_name if company else '' }}" required>
+
+    <label>Organisation number</label>
+    <input type="text" name="org_number" value="{{ company.org_number if company else '' }}">
+
+    <button type="submit">Save company</button>
+</form>
+<p><a href="/settings/company">Open full company settings</a></p>
+{% endblock %}
