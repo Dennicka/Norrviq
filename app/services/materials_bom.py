@@ -352,7 +352,7 @@ def _compute_bom_from_norms(db: Session, project: Project, warnings: list[str]) 
             if norm.layers_multiplier_enabled:
                 coats_candidate = Decimal(str(item.quantity or 1))
                 coats = coats_candidate if coats_candidate > 0 else Decimal("1")
-            if norm.coats_multiplier_mode == "use_work_coats":
+            if (norm.coats_multiplier_mode or "").strip().lower() in {"use_work_coats", "use_work_item_quantity"}:
                 coats_candidate = Decimal(str(item.quantity or 1))
                 coats = coats_candidate if coats_candidate > 0 else Decimal("1")
             qty = _q(qty * coats)
