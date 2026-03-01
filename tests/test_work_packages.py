@@ -45,7 +45,7 @@ def test_add_package_creates_work_items_and_recalc_non_zero():
     project_id = _seed_project_with_package_worktypes()
     add = client.post(
         f'/projects/{project_id}/estimator/packages/add',
-        data={'package_code': 'paint_ceiling_2coats_project'},
+        data={'package_code': 'PKG_PAINT_CEILING_2'},
         follow_redirects=False,
     )
     assert add.status_code == 303
@@ -54,7 +54,7 @@ def test_add_package_creates_work_items_and_recalc_non_zero():
     try:
         rows = db.query(ProjectWorkItem).filter(ProjectWorkItem.project_id == project_id).all()
         assert len(rows) >= 1
-        assert rows[0].scope_mode == 'PROJECT'
+        assert rows[0].scope_mode == 'WHOLE_PROJECT'
         assert rows[0].basis_type == 'ceiling_area_m2'
     finally:
         db.close()

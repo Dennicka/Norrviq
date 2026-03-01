@@ -53,7 +53,8 @@ from app.services.workflow import build_project_workflow_state
 from app.services.work_scope_apply import apply_work_item_to_scope
 from app.services.estimator_workspace import build_estimator_workspace
 from app.services.estimator_engine import recalculate_project_work_items as recalc_estimator_project
-from app.services.work_packages import apply_package_to_project
+from app.services.work_packages import apply_package_to_project, list_active_packages, package_description, package_icon, package_label
+from app.services.work_packages_apply import apply_package, list_applied_package_codes, remove_package
 from app.services.pricing import (
     LOW_MARGIN_WARN_PCT,
     WARNING_LOW_MARGIN,
@@ -732,7 +733,26 @@ async def project_wizard(
     elif resolved_step == "rooms":
         context["rooms"] = sorted(project.rooms, key=lambda room: room.name.lower() if room.name else "")
     elif resolved_step == "works":
-        context["workspace"] = build_estimator_workspace(db, project_id)
+        workspace = build_estimator_workspace(db, project_id, lang=lang)
+        templates_list = list_active_packages(db)
+        applied_codes = set(list_applied_package_codes(db, project_id))
+        package_catalog = [
+            {
+                "code": template.code,
+                "name": package_label(template, lang),
+                "description": package_description(template, lang),
+                "icon": package_icon(template.code),
+            }
+            for template in templates_list
+        ]
+        applied_packages = [item for item in package_catalog if item["code"] in applied_codes]
+        context.update(
+            {
+                "workspace": workspace,
+                "package_catalog": package_catalog,
+                "applied_packages": applied_packages,
+            }
+        )
     elif resolved_step == "pricing":
         baseline, scenarios = compute_pricing_scenarios(db, project_id, request_id=getattr(request.state, "request_id", None), cache=cache)
         context.update(
@@ -801,6 +821,66 @@ async def project_wizard_object(project_id: int, request: Request, db: Session =
     db.add(project)
     db.commit()
     return RedirectResponse(url=f"/projects/{project_id}/wizard?step=rooms&lang={lang}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{project_id}/wizard/packages/apply")
+async def project_wizard_apply_package(
+    project_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    lang: str = Depends(get_current_lang),
+):
+    if not db.get(Project, project_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    form = await request.form()
+    package_code = (form.get("package_code") or "").strip()
+    scope_mode = (form.get("scope_mode") or "WHOLE_PROJECT").strip().upper()
+    selected_room_ids = [int(room_id) for room_id in form.getlist("selected_room_ids") if str(room_id).isdigit()]
+
+    summary = apply_package(
+        db,
+        project_id=project_id,
+        package_code=package_code,
+        scope_mode=scope_mode,
+        selected_room_ids=selected_room_ids,
+    )
+    t = make_t(lang)
+    if summary.created_count == 0 and summary.updated_count == 0:
+        add_flash_message(request, t("estimator.bulk.preset_not_found"), "error")
+    else:
+        recalc_estimator_project(db, project_id)
+        add_flash_message(
+            request,
+            f"Package applied: +{summary.created_count} created, {summary.updated_count} updated.",
+            "success",
+        )
+
+    return RedirectResponse(
+        url=f"/projects/{project_id}/wizard?step=works&lang={lang}",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
+@router.post("/{project_id}/wizard/packages/remove")
+async def project_wizard_remove_package(
+    project_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    lang: str = Depends(get_current_lang),
+):
+    if not db.get(Project, project_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    form = await request.form()
+    package_code = (form.get("package_code") or "").strip()
+    summary = remove_package(db, project_id=project_id, package_code=package_code)
+    recalc_estimator_project(db, project_id)
+    add_flash_message(request, f"Package removed: {summary.deleted_count} items deleted.", "success")
+    return RedirectResponse(
+        url=f"/projects/{project_id}/wizard?step=works&lang={lang}",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
 
 
 @router.post("/{project_id}/wizard/next")
