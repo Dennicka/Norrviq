@@ -45,29 +45,20 @@ def test_wizard_object_redirects_not_404():
 def test_wizard_entry_redirects_to_projects_when_no_projects():
     _login()
 
-    class _FakeQuery:
-        def order_by(self, *_args, **_kwargs):
-            return self
-
-        def first(self):
-            return None
-
-    class _FakeSession:
-        def query(self, *_args, **_kwargs):
-            return _FakeQuery()
-
-    def _fake_get_db():
-        yield _FakeSession()
-
-    app.dependency_overrides[get_db] = _fake_get_db
-
+    db = SessionLocal()
     try:
-        response = client.get("/wizard", follow_redirects=False)
+        db.query(Project).delete()
+        db.commit()
     finally:
-        app.dependency_overrides.pop(get_db, None)
+        db.close()
 
+    response = client.get("/wizard", follow_redirects=False)
     assert response.status_code in (302, 303)
-    assert response.headers["location"] in {"/projects/new", "/projects/"}
+    assert "state=empty" in response.headers["location"]
+
+    page = client.get(response.headers["location"])
+    assert page.status_code == 200
+    assert "Создайте проект" in page.text
 
 
 def test_onboarding_open_wizard_link_is_valid():

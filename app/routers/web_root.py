@@ -21,17 +21,21 @@ def _normalize_wizard_step(step: str | None) -> str:
     return "rooms"
 
 
-def _wizard_redirect_target(request: Request, db: Session, normalized_step: str) -> str:
+def _wizard_redirect_target(request: Request, db: Session, normalized_step: str, *, lang: str) -> str:
     project_id = request.query_params.get("project_id")
     if project_id and project_id.isdigit():
         selected_project_id = int(project_id)
     else:
-        latest_project = db.query(Project).order_by(Project.id.desc()).first()
-        if not latest_project:
-            add_flash_message(request, "Создайте проект, чтобы запустить мастер", "warning")
-            return "/projects/new"
-        selected_project_id = latest_project.id
-    return f"/projects/{selected_project_id}/wizard?step={normalized_step}"
+        selected_project_id = None
+    if selected_project_id is not None:
+        return f"/projects/{selected_project_id}/wizard?step={normalized_step}&lang={lang}"
+
+    projects = db.query(Project).order_by(Project.id.desc()).all()
+    if not projects:
+        return "/wizard?state=empty"
+    if len(projects) == 1:
+        return f"/projects/{projects[0].id}/wizard?step={normalized_step}&lang={lang}"
+    return f"/wizard?state=select&step={normalized_step}&lang={lang}"
 
 
 @router.get("/")
@@ -58,9 +62,17 @@ async def wizard_entrypoint(
     request: Request,
     step: str | None = Query(default=None),
     db: Session = Depends(get_db),
+    lang: str = Depends(get_current_lang),
 ):
+    state = (request.query_params.get("state") or "").strip().lower()
     normalized_step = _normalize_wizard_step(step)
-    redirect_target = _wizard_redirect_target(request, db, normalized_step)
+    if state in {"empty", "select"}:
+        projects = db.query(Project).order_by(Project.id.desc()).all()
+        context = template_context(request, lang)
+        context.update({"projects": projects, "wizard_step": normalized_step, "wizard_state": state})
+        return templates.TemplateResponse(request, "wizard/entrypoint.html", context)
+
+    redirect_target = _wizard_redirect_target(request, db, normalized_step, lang=lang)
     return RedirectResponse(url=redirect_target, status_code=status.HTTP_303_SEE_OTHER)
 
 
@@ -69,7 +81,8 @@ async def wizard_step_entrypoint(
     step: str,
     request: Request,
     db: Session = Depends(get_db),
+    lang: str = Depends(get_current_lang),
 ):
     normalized_step = _normalize_wizard_step(step)
-    redirect_target = _wizard_redirect_target(request, db, normalized_step)
+    redirect_target = _wizard_redirect_target(request, db, normalized_step, lang=lang)
     return RedirectResponse(url=redirect_target, status_code=status.HTTP_303_SEE_OTHER)

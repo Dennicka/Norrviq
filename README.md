@@ -79,7 +79,23 @@
 python -m app.scripts.create_admin --email admin@example.com --password "StrongPassword#2026"
 ```
 
-Команда идемпотентна по email: при существующем пользователе завершится с ошибкой.
+Команда идемпотентна по email: при существующем пользователе выведет `User already exists, skipping` и завершится успешно.
+
+Для принудительного обновления пароля используйте:
+```bash
+python -m app.scripts.create_admin --email admin@example.com --password "StrongPassword#2026" --update-password
+```
+
+
+## Снести базу и начать заново
+
+```bash
+rm -f norrviq.db
+alembic upgrade head
+python -m app.scripts.seed_defaults
+python -m app.scripts.create_admin --email admin@example.com --password "StrongPassword#2026"
+uvicorn app.main:app --reload --port 8001
+```
 
 ## Database initialization and migrations
 

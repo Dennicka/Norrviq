@@ -1,18 +1,11 @@
 {% extends "wizard/layout.html" %}
 {% block wizard_step_content %}
-{% from "_macros/help.html" import help_icon %}
 <h2>{{ t('wizard.step.materials') }}</h2>
 <p>
-  <a href="/projects/{{ project.id }}/materials-plan?lang={{ lang }}">BOM details</a> ·
-  <a href="/projects/{{ project.id }}/shopping-list?lang={{ lang }}">Shopping list</a>
+  <a href="/projects/{{ project.id }}/materials-plan?lang={{ lang }}">{{ t('wizard.materials.bom_details') }}</a> ·
+  <a href="/projects/{{ project.id }}/shopping-list?lang={{ lang }}">{{ t('wizard.materials.shopping_list') }}</a> ·
+  <a href="/materials/norms?lang={{ lang }}">{{ t('wizard.materials.configure_norms') }}</a>
 </p>
-<p>
-  Waste %{{ help_icon('materials.waste_percent', lang) }} ·
-  Rounding{{ help_icon('procurement.rounding_mode', lang) }} ·
-  Min packs{{ help_icon('procurement.min_packs', lang) }} ·
-  Pack multiple{{ help_icon('procurement.pack_multiple', lang) }} ·
-  Unit mismatch{{ help_icon('procurement.unit_mismatch_warning', lang) }}
-</p>
-<p>BOM items: {{ bom.items|length }} · Total: {{ bom.total_cost_ex_vat }}</p>
-<p>Shopping items: {{ shopping_list.items|length }} · Total: {{ shopping_list.total_cost_sek }}</p>
+<p>{{ t('wizard.materials.bom_items') }}: {{ bom.items|length }} · {{ t('wizard.materials.total') }}: {{ bom.total_cost_ex_vat }}</p>
+<p>{{ t('wizard.materials.shopping_items') }}: {{ shopping_list.items|length }} · {{ t('wizard.materials.total') }}: {{ shopping_list.total_cost_sek }}</p>
 {% endblock %}

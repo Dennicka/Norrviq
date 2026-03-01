@@ -3,6 +3,12 @@
 <h1>First-run setup</h1>
 <p>Complete critical setup items before issuing Offer/Invoice documents.</p>
 
+
+{% if worktypes_missing %}
+<div class="flash warning">Не заполнены базовые справочники.</div>
+<form method="post" action="/onboarding/seed-defaults">{{ csrf_input(request) }}<button type="submit">Заполнить</button></form>
+{% endif %}
+
 <table>
     <thead>
         <tr><th>Check</th><th>Status</th><th>Details</th><th>Action</th></tr>
@@ -30,5 +36,5 @@
 {% else %}
 <p><a href="/onboarding/complete">Setup complete</a></p>
 {% endif %}
-<p><a href="/wizard?step=rooms">Open Wizard</a></p>
+<p><a href="/wizard?lang={{ lang }}">{{ t("wizard.open") }}</a></p>
 {% endblock %}

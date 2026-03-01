@@ -34,6 +34,7 @@
                 |
                 <a href="/projects/{{ project.id }}/edit">{{ t('projects.edit') }}</a>
                 | <a href="/projects/{{ project.id }}/workflow">{{ t('workflow.open') }}</a>
+                | <a href="/projects/{{ project.id }}/wizard?step=object&lang={{ lang }}">{{ t("wizard.open") }}</a>
                 <form method="post" action="/projects/{{ project.id }}/delete" style="display:inline;">
                     {{ csrf_input(request) }}
                     <button type="submit" onclick="return confirm('{{ t("label.delete") }}?');">{{ t('label.delete') }}</button>
