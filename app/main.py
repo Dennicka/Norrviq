@@ -131,7 +131,7 @@ async def observability_middleware(request: Request, call_next):
 
 @app.middleware("http")
 async def normalize_backslash_paths(request: Request, call_next):
-    raw_path = request.url.path
+    raw_path = str(request.scope.get("path") or request.url.path)
     if "\\" in raw_path:
         normalized_path = raw_path.replace("\\", "/")
         query = request.url.query

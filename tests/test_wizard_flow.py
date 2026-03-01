@@ -107,12 +107,21 @@ def test_wizard_end_to_end_clean_db_flow():
     )
     assert apply_pkg.status_code == 303
 
+    apply_mask = client.post(
+        f"/projects/{project_id}/wizard/packages/apply",
+        data={"lang": "ru", "package_code": "PKG_MASKING", "scope_mode": "WHOLE_PROJECT"},
+        follow_redirects=False,
+    )
+    assert apply_mask.status_code == 303
+
     db = SessionLocal()
     try:
         items_count = db.query(ProjectWorkItem).filter(ProjectWorkItem.project_id == project_id).count()
+        masking_count = db.query(ProjectWorkItem).filter(ProjectWorkItem.project_id == project_id, ProjectWorkItem.source_package_code == "PKG_MASKING").count()
     finally:
         db.close()
     assert items_count > 0
+    assert masking_count > 0
 
     for step in ("pricing", "review", "documents"):
         page = client.get(f"/projects/{project_id}/wizard?step={step}&lang=ru")

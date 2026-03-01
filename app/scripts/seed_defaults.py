@@ -8,6 +8,7 @@ from app.db import SessionLocal
 from app.models.material_catalog_item import MaterialCatalogItem
 from app.models.material_norm import MaterialConsumptionNorm
 from app.models.worktype import WorkType
+from app.services.bootstrap import ensure_default_speed_profiles, ensure_default_worktypes
 
 
 def _upsert_work_type(db: Session, *, code: str, name_ru: str, name_sv: str, name_en: str, unit: str = "m2", category: str = "paint", hours_per_unit: Decimal = Decimal("0.25")) -> WorkType:
@@ -97,8 +98,12 @@ def _upsert_norm(db: Session, *, work_type_code: str, material: MaterialCatalogI
 
 
 def seed_defaults(db: Session) -> None:
+    ensure_default_worktypes(db)
+    ensure_default_speed_profiles(db)
+
     work_types = [
         ("MASK_FLOOR", "Защита пола", "Golvmaskering", "Floor masking", "m2", Decimal("0.08")),
+        ("MASKING", "Укрытие и лента", "Maskering och tejp", "Masking and tape", "m2", Decimal("0.10")),
         ("PAINT_CEILING", "Покраска потолка", "Måla tak", "Paint ceiling", "m2", Decimal("0.15")),
         ("PAINT_TRIM", "Покраска плинтусов", "Måla lister", "Paint trim", "m", Decimal("0.12")),
         ("PAINT_WALL", "Покраска стен", "Måla vägg", "Paint wall", "m2", Decimal("0.18")),
@@ -123,6 +128,7 @@ def seed_defaults(db: Session) -> None:
     _upsert_norm(db, work_type_code="SKIM_WALL", material=spackle, qty_per_basis=Decimal("0.80"), basis_type="m2", material_unit="kg")
     _upsert_norm(db, work_type_code="SAND_WALL", material=sanding, qty_per_basis=Decimal("0.15"), basis_type="m2", material_unit="pcs")
     _upsert_norm(db, work_type_code="MASK_FLOOR", material=masking, qty_per_basis=Decimal("0.08"), basis_type="m2", material_unit="pcs")
+    _upsert_norm(db, work_type_code="MASKING", material=masking, qty_per_basis=Decimal("0.10"), basis_type="m2", material_unit="pcs")
 
     db.commit()
 

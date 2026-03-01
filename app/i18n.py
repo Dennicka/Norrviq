@@ -2820,6 +2820,7 @@ TRANSLATIONS_RU.update({
     "wizard.pricing.margin": "Маржа",
     "wizard.pricing.floor_policy": "Политика нижней границы: проверка минимальной эффективной ставки",
     "wizard.pricing.apply_best_mode": "Применить лучший режим",
+    "wizard.rooms.perimeter_estimated": "Периметр оценён автоматически по площади",
 })
 TRANSLATIONS_SV.update({
     "wizard.pricing.open_screen": "Öppna prissättningsskärmen",
@@ -2830,6 +2831,7 @@ TRANSLATIONS_SV.update({
     "wizard.pricing.margin": "Marginal",
     "wizard.pricing.floor_policy": "Golvpolicy: kontroll av minsta effektiva timpris",
     "wizard.pricing.apply_best_mode": "Använd bästa läge",
+    "wizard.rooms.perimeter_estimated": "Omkrets uppskattad automatiskt från yta",
 })
 TRANSLATIONS_EN.update({
     "wizard.pricing.open_screen": "Open pricing screen",
@@ -2840,4 +2842,5 @@ TRANSLATIONS_EN.update({
     "wizard.pricing.margin": "Margin",
     "wizard.pricing.floor_policy": "Floor policy: minimum effective hourly check",
     "wizard.pricing.apply_best_mode": "Apply best mode",
+    "wizard.rooms.perimeter_estimated": "Perimeter estimated automatically from area",
 })
