@@ -64,6 +64,7 @@ from .services.bootstrap import (
     ensure_default_worktypes,
     ensure_default_speed_profiles,
 )
+from starlette.responses import RedirectResponse
 
 settings = get_settings()
 configure_logging(settings)
@@ -105,6 +106,19 @@ app.add_middleware(
 )
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
+
+
+@app.middleware("http")
+async def normalize_backslash_paths(request: Request, call_next):
+    raw_path = request.scope.get("path", "")
+    if "\\" in raw_path:
+        normalized_path = raw_path.replace("\\", "/")
+        query_string = request.scope.get("query_string", b"").decode("utf-8")
+        target = normalized_path
+        if query_string:
+            target = f"{target}?{query_string}"
+        return RedirectResponse(url=target, status_code=308)
+    return await call_next(request)
 
 
 @app.middleware("http")

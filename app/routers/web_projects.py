@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Reques
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session, selectinload
 
+from app.config import get_settings
 from app.dependencies import add_flash_message, get_current_lang, get_db, template_context, templates
 from app.models.client import Client
 from app.models.company_profile import get_or_create_company_profile
@@ -118,6 +119,7 @@ from app.i18n import make_t
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 logger = logging.getLogger("uvicorn.error")
+app_settings = get_settings()
 MAX_IMPORT_FILE_BYTES = 5 * 1024 * 1024
 IMPORT_SESSION_KEY = "csv_import_previews"
 ROOMS_EXPORT_COLUMNS = ["room_id", "name", "floor_area_m2", "perimeter_m", "ceiling_height_m", "notes"]
@@ -803,7 +805,7 @@ async def project_wizard_object(project_id: int, request: Request, db: Session =
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     form = await request.form()
-    lang = str(form.get("lang") or request.query_params.get("lang") or "sv")
+    lang = str(form.get("lang") or request.query_params.get("lang") or request.cookies.get("lang") or app_settings.default_lang)
     object_type = (form.get("object_type") or "").strip().lower()
     template_key = (form.get("object_template") or "").strip().lower()
 
@@ -852,7 +854,7 @@ async def project_wizard_apply_package(
         recalc_estimator_project(db, project_id)
         add_flash_message(
             request,
-            f"Package applied: +{summary.created_count} created, {summary.updated_count} updated.",
+            t("wizard.package.applied").format(created=summary.created_count, updated=summary.updated_count),
             "success",
         )
 
@@ -876,7 +878,8 @@ async def project_wizard_remove_package(
     package_code = (form.get("package_code") or "").strip()
     summary = remove_package(db, project_id=project_id, package_code=package_code)
     recalc_estimator_project(db, project_id)
-    add_flash_message(request, f"Package removed: {summary.deleted_count} items deleted.", "success")
+    t = make_t(lang)
+    add_flash_message(request, t("wizard.package.removed").format(count=summary.deleted_count), "success")
     return RedirectResponse(
         url=f"/projects/{project_id}/wizard?step=works&lang={lang}",
         status_code=status.HTTP_303_SEE_OTHER,
@@ -889,7 +892,7 @@ async def project_wizard_next(project_id: int, request: Request, db: Session = D
         raise HTTPException(status_code=404, detail="Project not found")
     form = await request.form()
     step = _resolve_wizard_step(str(form.get("step") or "object")) or "object"
-    lang = str(form.get("lang") or request.query_params.get("lang") or "sv")
+    lang = str(form.get("lang") or request.query_params.get("lang") or request.cookies.get("lang") or app_settings.default_lang)
     next_step = WIZARD_NEXT_STEP.get(step, step)
     warning = None
     warning_text = None
@@ -922,7 +925,7 @@ async def project_wizard_back(project_id: int, request: Request, db: Session = D
         raise HTTPException(status_code=404, detail="Project not found")
     form = await request.form()
     step = _resolve_wizard_step(str(form.get("step") or "object")) or "object"
-    lang = str(form.get("lang") or request.query_params.get("lang") or "sv")
+    lang = str(form.get("lang") or request.query_params.get("lang") or request.cookies.get("lang") or app_settings.default_lang)
     prev_step = WIZARD_PREV_STEP.get(step, step)
     return RedirectResponse(url=f"/projects/{project_id}/wizard?step={prev_step}&lang={lang}", status_code=status.HTTP_303_SEE_OTHER)
 

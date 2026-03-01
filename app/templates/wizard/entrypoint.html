@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t('wizard.title') }}</h1>
+{% if wizard_state == 'empty' %}
+  <p>{{ t('wizard.entry.empty') }}</p>
+  <p><a href="/projects/new?lang={{ lang }}">{{ t('wizard.entry.create_project') }}</a></p>
+{% else %}
+  <p>{{ t('wizard.entry.select_project') }}</p>
+  <ul>
+  {% for project in projects %}
+    <li><a href="/projects/{{ project.id }}/wizard?step={{ wizard_step }}&lang={{ lang }}">{{ project.name }}</a></li>
+  {% endfor %}
+  </ul>
+{% endif %}
+{% endblock %}

@@ -10,6 +10,7 @@ from app.models.company_profile import CompanyProfile
 from app.models.pricing_policy import PricingPolicy
 from app.models.terms_template import TermsTemplate
 from app.models.user import User
+from app.models.worktype import WorkType
 from app.services.pdf_renderer import invoice_pdf_capability
 
 
@@ -57,6 +58,17 @@ def get_setup_status(db: Session) -> list[SetupCheck]:
         )
     )
 
+
+    has_worktypes = (db.query(func.count(WorkType.id)).scalar() or 0) > 0
+    checks.append(
+        SetupCheck(
+            id="worktypes_seeded",
+            status="OK" if has_worktypes else "BLOCK",
+            title="Базовые справочники работ",
+            details="Заполните базовые виды работ и нормы для мастера сметы.",
+            fix_url="/onboarding?step=overview",
+        )
+    )
     has_pricing_policy = (db.query(func.count(PricingPolicy.id)).scalar() or 0) > 0
     checks.append(
         SetupCheck(

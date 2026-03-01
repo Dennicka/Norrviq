@@ -1,9 +1,9 @@
 {% extends "wizard/layout.html" %}
 {% block wizard_step_content %}
 <h2>{{ t('wizard.step.works') }}</h2>
-<p><a href="/projects/{{ project.id }}/estimator?lang={{ lang }}">Open estimator workspace</a></p>
+<p><a href="/projects/{{ project.id }}/estimator?lang={{ lang }}">{{ t('wizard.works.open_estimator') }}</a></p>
 
-<h3>Package catalog</h3>
+<h3>{{ t('wizard.works.package_catalog') }}</h3>
 <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-bottom:16px;">
   {% for package in package_catalog %}
   <form method="post" action="/projects/{{ project.id }}/wizard/packages/apply" style="border:1px solid #d1d5db;padding:12px;border-radius:8px;" data-pkg-code="{{ package.code }}">
@@ -12,25 +12,25 @@
     <div style="font-size:20px;">{{ package.icon }} <strong>{{ package.name }}</strong></div>
     <p style="margin-top:6px;min-height:38px;">{{ package.description }}</p>
 
-    <label>Scope</label>
+    <label>{{ t('wizard.works.scope') }}</label>
     <select name="scope_mode" style="display:block;width:100%;margin-bottom:8px;">
-      <option value="WHOLE_PROJECT">Whole project</option>
-      <option value="SELECTED_ROOMS">Selected rooms</option>
+      <option value="WHOLE_PROJECT">{{ t('wizard.works.scope_all') }}</option>
+      <option value="SELECTED_ROOMS">{{ t('wizard.works.scope_selected') }}</option>
     </select>
 
-    <label>Rooms (optional)</label>
+    <label>{{ t('wizard.works.rooms_optional') }}</label>
     <select name="selected_room_ids" multiple size="4" style="display:block;width:100%;margin-bottom:10px;">
       {% for room in project.rooms %}
       <option value="{{ room.id }}">{{ room.name }}</option>
       {% endfor %}
     </select>
 
-    <button type="submit">Apply package</button>
+    <button type="submit">{{ t('wizard.works.apply_package') }}</button>
   </form>
   {% endfor %}
 </div>
 
-<h3>Applied packages</h3>
+<h3>{{ t('wizard.works.applied_packages') }}</h3>
 <ul>
   {% for package in applied_packages %}
   <li>
@@ -38,23 +38,11 @@
     <form method="post" action="/projects/{{ project.id }}/wizard/packages/remove" style="display:inline;">
       {{ csrf_input(request) }}
       <input type="hidden" name="package_code" value="{{ package.code }}">
-      <button type="submit">Remove</button>
+      <button type="submit">{{ t('wizard.works.remove') }}</button>
     </form>
   </li>
   {% else %}
   <li>—</li>
   {% endfor %}
 </ul>
-
-<details>
-  <summary><strong>Advanced: Work items table</strong></summary>
-  <table>
-    <tr><th>Work type</th><th>Qty</th><th>Hours</th><th>Sell ex VAT</th></tr>
-    {% for item in workspace.work_items.rows %}
-    <tr><td>{{ item.work_type_name }}</td><td>{{ item.qty }}</td><td>{{ item.hours }}</td><td>{{ item.sell_ex_vat }}</td></tr>
-    {% else %}
-    <tr><td colspan="4">—</td></tr>
-    {% endfor %}
-  </table>
-</details>
 {% endblock %}

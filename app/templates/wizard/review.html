@@ -9,21 +9,7 @@
 </ul>
 
 <p>
-  <a href="/offers/{{ project.id }}/print?lang=sv">Open Offert (SV) Print</a> |
-  <a href="/offers/{{ project.id }}/pdf?lang=sv">Open Offert (SV) PDF</a>
-</p>
-<p>
-  <form method="post" action="/offers/{{ project.id }}/issue" style="display:inline;">{{ csrf_input(request) }}<button type="submit">Issue Offert</button></form>
-  <a href="/projects/{{ project.id }}/invoices/create">Create Invoice</a>
-  {% if latest_invoice %}
-  <form method="post" action="/invoices/{{ latest_invoice.id }}/issue" style="display:inline;">{{ csrf_input(request) }}<button type="submit">Issue Invoice</button></form>
-  {% endif %}
-</p>
-<p>
-  <a href="/projects/{{ project.id }}/wizard?step=object&lang={{ lang }}">Edit object</a> ·
-  <a href="/projects/{{ project.id }}/wizard?step=rooms&lang={{ lang }}">Edit rooms</a> ·
-  <a href="/projects/{{ project.id }}/wizard?step=works&lang={{ lang }}">Edit works</a> ·
-  <a href="/projects/{{ project.id }}/wizard?step=pricing&lang={{ lang }}">Edit pricing</a> ·
-  <a href="/projects/{{ project.id }}/wizard?step=materials&lang={{ lang }}">Edit materials</a>
+  <a href="/offers/{{ project.id }}/print?lang=sv">{{ t('wizard.review.offer_sv_print') }}</a> |
+  <a href="/offers/{{ project.id }}/pdf?lang=sv">{{ t('wizard.review.offer_sv_pdf') }}</a>
 </p>
 {% endblock %}

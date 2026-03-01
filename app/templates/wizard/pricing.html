@@ -2,14 +2,13 @@
 {% block wizard_step_content %}
 {% from "_macros/help.html" import help_icon %}
 <h2>{{ t('wizard.step.pricing') }}</h2>
-<p><a href="/projects/{{ project.id }}/pricing?lang={{ lang }}">Open pricing screen</a></p>
-<p><strong>Pricing modes</strong>{{ help_icon('pricing.modes', lang) }}</p>
+<p><a href="/projects/{{ project.id }}/pricing?lang={{ lang }}">{{ t('wizard.pricing.open') }}</a></p>
+<p><strong>{{ t('wizard.pricing.modes') }}</strong>{{ help_icon('pricing.modes', lang) }}</p>
 <table>
-  <tr><th>Mode</th><th>Price ex VAT</th><th>Profit{{ help_icon('pricing.margin_profit_explained', lang) }}</th><th>Margin</th></tr>
+  <tr><th>{{ t('wizard.pricing.mode') }}</th><th>{{ t('wizard.pricing.price') }}</th><th>{{ t('wizard.pricing.profit') }}{{ help_icon('pricing.margin_profit_explained', lang) }}</th><th>{{ t('wizard.pricing.margin') }}</th></tr>
   {% for row in scenarios %}
   <tr><td>{{ row.mode }}</td><td>{{ row.price_ex_vat_display }}</td><td>{{ row.profit_display }}</td><td>{{ row.margin_pct_display }}</td></tr>
   {% endfor %}
 </table>
-<p>Floor policy: minimum effective hourly check{{ help_icon('pricing.floor_min_effective_hourly', lang) }}</p>
-<form method="post" action="/projects/{{ project.id }}/estimator/apply-best-mode?lang={{ lang }}">{{ csrf_input(request) }}<button type="submit">Apply best mode</button>{{ help_icon('pricing.apply_best_mode', lang) }}</form>
+<form method="post" action="/projects/{{ project.id }}/estimator/apply-best-mode?lang={{ lang }}">{{ csrf_input(request) }}<button type="submit">{{ t('wizard.pricing.apply_best_mode') }}</button>{{ help_icon('pricing.apply_best_mode', lang) }}</form>
 {% endblock %}
