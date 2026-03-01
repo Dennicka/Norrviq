@@ -6,7 +6,7 @@ from fastapi.responses import RedirectResponse
 
 from ..config import get_settings
 from ..services.setup_status import get_blocking_setup_checks
-from ..dependencies import add_flash_message, get_current_lang, get_db, template_context, templates
+
 from ..models.project import Project
 
 router = APIRouter()
