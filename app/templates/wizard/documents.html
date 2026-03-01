@@ -8,8 +8,8 @@
 </p>
 <h3>{{ t('wizard.documents.offer') }}</h3>
 <ul>
-  <li><a href="/offers/{{ project.id }}/print?lang=sv">/offers/{{ project.id }}/print?lang=sv</a></li>
-  <li><a href="/offers/{{ project.id }}/pdf?lang=sv">/offers/{{ project.id }}/pdf?lang=sv</a></li>
+  <li><a href="/offers/{{ project.id }}/print?lang={{ lang }}">/offers/{{ project.id }}/print?lang={{ lang }}</a></li>
+  <li><a href="/offers/{{ project.id }}/pdf?lang={{ lang }}">/offers/{{ project.id }}/pdf?lang={{ lang }}</a></li>
 </ul>
 {% if latest_invoice %}
 <h3>{{ t('wizard.documents.invoice') }} #{{ latest_invoice.id }}</h3>

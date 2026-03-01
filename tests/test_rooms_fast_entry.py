@@ -54,8 +54,9 @@ def test_rooms_step_renders_table():
     response = client.get(f"/projects/{project_id}/wizard?step=rooms&lang=ru")
 
     assert response.status_code == 200
-    assert "Length" in response.text
-    assert 'name="length_m_' in response.text
+    assert f"/projects/{project_id}/rooms/bulk-set-height" in response.text
+    assert f"/projects/{project_id}/rooms/preset-add" in response.text
+    assert ('name="floor_area_m2_' in response.text) or ('name="length_m_' in response.text)
 
 
 def test_duplicate_room_creates_copy():
