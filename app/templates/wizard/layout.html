@@ -15,25 +15,42 @@
   {% endfor %}
 </nav>
 
-{% block wizard_step_content %}{% endblock %}
+<div style="display:flex;gap:16px;align-items:flex-start;">
+  <div style="flex:1;min-width:0;">
+    {% block wizard_step_content %}{% endblock %}
 
-<div style="display:flex;gap:8px;margin-top:16px;">
-  {% if wizard_step != wizard_steps[0] %}
-  <form method="post" action="/projects/{{ project.id }}/wizard/back">
-    {{ csrf_input(request) }}
-    <input type="hidden" name="step" value="{{ wizard_step }}">
-    <input type="hidden" name="lang" value="{{ lang }}">
-    <button type="submit">{{ t('wizard.back') }}</button>
-  </form>
-  {% endif %}
+    <div style="display:flex;gap:8px;margin-top:16px;">
+      {% if wizard_step != wizard_steps[0] %}
+      <form method="post" action="/projects/{{ project.id }}/wizard/back">
+        {{ csrf_input(request) }}
+        <input type="hidden" name="step" value="{{ wizard_step }}">
+        <input type="hidden" name="lang" value="{{ lang }}">
+        <button type="submit">{{ t('wizard.back') }}</button>
+      </form>
+      {% endif %}
 
-  {% if wizard_step != wizard_steps[-1] %}
-  <form method="post" action="/projects/{{ project.id }}/wizard/next">
-    {{ csrf_input(request) }}
-    <input type="hidden" name="step" value="{{ wizard_step }}">
-    <input type="hidden" name="lang" value="{{ lang }}">
-    <button type="submit">{{ t('wizard.next') }}</button>
-  </form>
-  {% endif %}
+      {% if wizard_step != wizard_steps[-1] %}
+      <form method="post" action="/projects/{{ project.id }}/wizard/next">
+        {{ csrf_input(request) }}
+        <input type="hidden" name="step" value="{{ wizard_step }}">
+        <input type="hidden" name="lang" value="{{ lang }}">
+        <button type="submit">{{ t('wizard.next') }}</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <aside style="width:280px;position:sticky;top:16px;border:1px solid #e5e7eb;border-radius:8px;padding:12px;background:#fff;">
+    <h3 style="margin-top:0;">{{ t('wizard.summary.title') }}</h3>
+    <div style="font-size:14px;display:grid;gap:6px;">
+      <div>{{ t('wizard.summary.area') }}: <strong>{{ wizard_summary.floor_area_m2 }}</strong></div>
+      <div>{{ t('wizard.summary.hours') }}: <strong>{{ wizard_summary.hours_total }}</strong></div>
+      <div>{{ t('wizard.summary.sell') }}: <strong>{{ wizard_summary.sell_ex_vat }}</strong></div>
+      <div>{{ t('wizard.summary.materials') }}: <strong>{{ wizard_summary.materials_total }}</strong></div>
+      <div>{{ t('wizard.summary.profit') }}: <strong>{{ wizard_summary.profit }}</strong></div>
+      <div>{{ t('wizard.summary.margin') }}: <strong>{{ wizard_summary.margin_pct }}%</strong></div>
+      <div>{{ t('wizard.summary.mode') }}: <strong>{{ wizard_summary.pricing_mode }}</strong></div>
+    </div>
+  </aside>
 </div>
 {% endblock %}

@@ -12,6 +12,8 @@ class Project(Base):
     name = Column(String(255), nullable=False)
     address = Column(String(255), nullable=True)
     description = Column(Text, nullable=True)
+    object_type = Column(String(32), nullable=True)
+    object_template = Column(String(32), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
     status = Column(String(50), nullable=False, default="draft")
     planned_start_date = Column(Date, nullable=True)
