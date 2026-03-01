@@ -74,7 +74,8 @@ def test_wizard_works_shows_package_cards():
 
 def test_apply_package_is_idempotent_no_duplicates():
     _login()
-    _ensure_worktype("PAINT_WALL", "Покраска стен")
+    _ensure_worktype("WALL_PAINT_COAT_1", "Покраска стен 1")
+    _ensure_worktype("WALL_PAINT_COAT_2", "Покраска стен 2")
     project_id = _seed_project()
 
     payload = {"package_code": "PKG_PAINT_WALL_2", "scope_mode": "WHOLE_PROJECT"}
@@ -94,14 +95,14 @@ def test_apply_package_is_idempotent_no_duplicates():
             )
             .all()
         )
-        assert len(rows) == 1
+        assert len(rows) == 2
     finally:
         db.close()
 
 
 def test_remove_package_deletes_only_package_items():
     _login()
-    _ensure_worktype("PRIMER_WALL", "Грунт")
+    _ensure_worktype("WALL_PAINT_PRIMER", "Грунт")
     _ensure_worktype("MANUAL_TASK", "Ручная работа")
     project_id = _seed_project()
 
@@ -153,7 +154,8 @@ def test_remove_package_deletes_only_package_items():
 
 def test_apply_selected_rooms_scope_persists():
     _login()
-    _ensure_worktype("PAINT_CEILING", "Покраска потолка")
+    _ensure_worktype("CEILING_PAINT_COAT_1", "Покраска потолка 1")
+    _ensure_worktype("CEILING_PAINT_COAT_2", "Покраска потолка 2")
     project_id = _seed_project(with_rooms=3)
 
     db = SessionLocal()

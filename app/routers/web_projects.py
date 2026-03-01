@@ -835,8 +835,17 @@ async def project_wizard_apply_package(
 
     form = await request.form()
     package_code = (form.get("package_code") or "").strip()
-    scope_mode = (form.get("scope_mode") or "WHOLE_PROJECT").strip().upper()
-    selected_room_ids = [int(room_id) for room_id in form.getlist("selected_room_ids") if str(room_id).isdigit()]
+    scope_mode = (form.get("scope_mode") or form.get("scope_apply_mode") or "WHOLE_PROJECT").strip().upper()
+    room_values = form.getlist("selected_room_ids") or form.getlist("room_ids") or form.getlist("room_ids[]")
+    selected_room_ids = [int(room_id) for room_id in room_values if str(room_id).isdigit()]
+
+    t = make_t(lang)
+    if scope_mode == "SELECTED_ROOMS" and not selected_room_ids:
+        add_flash_message(request, t("projects.work_items.empty_selected_rooms"), "error")
+        return RedirectResponse(
+            url=f"/projects/{project_id}/wizard?step=works&lang={lang}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
 
     summary = apply_package(
         db,
@@ -845,8 +854,16 @@ async def project_wizard_apply_package(
         scope_mode=scope_mode,
         selected_room_ids=selected_room_ids,
     )
-    t = make_t(lang)
-    if summary.created_count == 0 and summary.updated_count == 0:
+    if summary.missing_work_type_codes:
+        missing_preview = ", ".join(summary.missing_work_type_codes[:5])
+        if len(summary.missing_work_type_codes) > 5:
+            missing_preview += ", ..."
+        add_flash_message(
+            request,
+            f"{t('estimator.bulk.preset_not_found')}: {missing_preview}",
+            "error",
+        )
+    elif summary.created_count == 0 and summary.updated_count == 0:
         add_flash_message(request, t("estimator.bulk.preset_not_found"), "error")
     else:
         recalc_estimator_project(db, project_id)
