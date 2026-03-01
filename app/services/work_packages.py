@@ -12,6 +12,8 @@ from app.models.work_package import WorkPackageTemplate, WorkPackageTemplateItem
 class DefaultPackageItem:
     work_type_code: str
     basis_type: str
+    coats: Decimal | None = None
+    difficulty_factor: Decimal | None = None
 
 
 @dataclass(frozen=True)
@@ -114,7 +116,7 @@ DEFAULT_WORK_PACKAGES: tuple[DefaultPackageTemplate, ...] = (
         description_ru="Два финишных слоя краски на стены.",
         description_sv="Två färdiga lager färg på väggar.",
         description_en="Two final paint coats on walls.",
-        items=(DefaultPackageItem(work_type_code="PAINT_WALL", basis_type="wall_area_m2"),),
+        items=(DefaultPackageItem(work_type_code="PAINT_WALL", basis_type="wall_area_m2", coats=Decimal("2"), difficulty_factor=Decimal("2")),),
     ),
     DefaultPackageTemplate(
         code="PKG_PAINT_CEILING_2",
@@ -125,7 +127,7 @@ DEFAULT_WORK_PACKAGES: tuple[DefaultPackageTemplate, ...] = (
         description_ru="Два слоя краски для потолка.",
         description_sv="Två lager färg för tak.",
         description_en="Two paint coats for ceiling.",
-        items=(DefaultPackageItem(work_type_code="PAINT_CEILING", basis_type="ceiling_area_m2"),),
+        items=(DefaultPackageItem(work_type_code="PAINT_CEILING", basis_type="ceiling_area_m2", coats=Decimal("2"), difficulty_factor=Decimal("2")),),
     ),
     DefaultPackageTemplate(
         code="PKG_BASEBOARD",
@@ -188,7 +190,8 @@ def ensure_default_packages(db: Session) -> None:
                     scope_mode="PROJECT",
                     basis_type=item.basis_type,
                     pricing_mode="HOURLY",
-                    difficulty_factor=Decimal("1"),
+                    coats=item.coats,
+                    difficulty_factor=item.difficulty_factor or Decimal("1"),
                     sort_order=sort_order,
                 )
             )

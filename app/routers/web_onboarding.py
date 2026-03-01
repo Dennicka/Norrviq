@@ -10,6 +10,8 @@ from app.dependencies import add_flash_message, get_current_lang, get_db, templa
 from app.models.company_profile import CompanyProfile
 from app.models.pricing_policy import PricingPolicy
 from app.models.terms_template import TermsTemplate
+from app.models.worktype import WorkType
+from app.scripts.seed_defaults import seed_defaults
 from app.services.setup_status import get_setup_status
 from app.services.terms_templates import create_versioned_template
 
@@ -56,6 +58,7 @@ async def onboarding_page(
             "company": db.get(CompanyProfile, 1) or CompanyProfile(id=1),
             "has_sv_terms": any(c.id == "terms_templates_present_sv" and c.status == "OK" for c in checks),
             "pricing_policy": db.query(PricingPolicy).first(),
+            "worktypes_empty": db.query(WorkType.id).count() == 0,
         }
     )
 
@@ -149,3 +152,10 @@ async def onboarding_complete(request: Request, db: Session = Depends(get_db), l
     checks = get_setup_status(db)
     context.update({"checks": checks, "block_count": sum(1 for c in checks if c.status == "BLOCK")})
     return templates.TemplateResponse(request, "onboarding/complete.html", context)
+
+
+@router.post("/onboarding/seed-defaults")
+async def onboarding_seed_defaults(request: Request, db: Session = Depends(get_db)):
+    seed_defaults(db)
+    add_flash_message(request, "Default dictionaries seeded.", "success")
+    return RedirectResponse(url="/onboarding?step=overview", status_code=status.HTTP_303_SEE_OTHER)

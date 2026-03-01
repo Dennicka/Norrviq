@@ -40,7 +40,7 @@ def test_object_step_renders_project_type_cards():
     project_id = _seed_project()
     response = client.get(f"/projects/{project_id}/wizard?step=object")
     assert response.status_code == 200
-    for expected in ("House", "Apartment", "Office", "Commercial"):
+    for expected in ("Дом", "Квартира", "Офис", "Коммерческий объект"):
         assert expected in response.text
 
 

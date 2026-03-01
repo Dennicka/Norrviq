@@ -1,5 +1,6 @@
 import json
 import logging
+import math
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -520,6 +521,8 @@ async def bulk_update_rooms(
                 "name": fast_name,
                 "length_m": form.get(f"length_m_{room_id}"),
                 "width_m": form.get(f"width_m_{room_id}"),
+                "floor_area_m2": form.get(f"floor_area_m2_{room_id}"),
+                "wall_perimeter_m": form.get(f"wall_perimeter_m_{room_id}"),
                 "height_m": form.get(f"height_m_{room_id}"),
                 "openings_area_m2": form.get(f"openings_area_m2_{room_id}"),
             }
@@ -535,10 +538,14 @@ async def bulk_update_rooms(
             room.name = (str(payload.get("name") or "")).strip() or room.name
             room.length_m = _parse_decimal(payload.get("length_m"))
             room.width_m = _parse_decimal(payload.get("width_m"))
+            room.floor_area_m2 = _parse_decimal(payload.get("floor_area_m2"))
+            room.wall_perimeter_m = _parse_decimal(payload.get("wall_perimeter_m"))
             room.wall_height_m = _parse_decimal(payload.get("height_m"))
             room.openings_area_m2 = _parse_decimal(payload.get("openings_area_m2"))
-            for field in ("length_m", "width_m", "wall_height_m", "openings_area_m2"):
+            for field in ("length_m", "width_m", "floor_area_m2", "wall_perimeter_m", "wall_height_m", "openings_area_m2"):
                 _validate_non_negative_decimal(field, getattr(room, field))
+            if room.floor_area_m2 is not None and room.floor_area_m2 > 0 and room.wall_perimeter_m in (None, Decimal("0")):
+                room.wall_perimeter_m = Decimal(str(round(4 * math.sqrt(float(room.floor_area_m2)), 2)))
             recalc_room_dimensions(room)
             db.add(room)
         evaluate_project_quality(db, project_id, lang=lang)

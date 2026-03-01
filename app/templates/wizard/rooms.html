@@ -1,34 +1,29 @@
 {% extends "wizard/layout.html" %}
 {% block wizard_step_content %}
 <h2>{{ t('wizard.step.rooms') }}</h2>
-<p><a href="/projects/{{ project.id }}/rooms/?lang={{ lang }}">Open full rooms editor (advanced)</a></p>
+<p><a href="/projects/{{ project.id }}/rooms/?lang={{ lang }}">{{ t('wizard.rooms.open_advanced') }}</a></p>
 
 <section style="margin: 12px 0; display: flex; flex-wrap: wrap; gap: 12px; align-items: center;">
   <form method="post" action="/projects/{{ project.id }}/rooms/bulk-set-height?lang={{ lang }}" style="display:flex; gap:8px; align-items:center;">
     {{ csrf_input(request) }}
-    <label for="bulk-height">Bulk height (m)</label>
+    <label for="bulk-height">{{ t('wizard.rooms.bulk_height') }}</label>
     <input id="bulk-height" type="number" step="0.01" min="0" name="height_m" placeholder="2.60">
-    <button type="submit">Apply to all rooms</button>
+    <button type="submit">{{ t('wizard.rooms.apply_all') }}</button>
   </form>
 
   <form method="post" action="/projects/{{ project.id }}/rooms/preset-add?lang={{ lang }}" style="display:flex; gap:8px; align-items:center;">
     {{ csrf_input(request) }}
-    <label for="preset_name">Add preset room</label>
+    <label for="preset_name">{{ t('wizard.rooms.add_preset_room') }}</label>
     <select id="preset_name" name="preset_name">
-      <option>Kitchen</option>
-      <option>Bathroom</option>
-      <option>Hallway</option>
-      <option>Bedroom</option>
-      <option>Living room</option>
-      <option>Storage</option>
+      <option>Kitchen</option><option>Bathroom</option><option>Hallway</option><option>Bedroom</option><option>Living room</option><option>Storage</option>
     </select>
-    <button type="submit">Add</button>
+    <button type="submit">{{ t('wizard.rooms.add') }}</button>
   </form>
 
   <form method="post" action="/projects/{{ project.id }}/rooms/preset-add?lang={{ lang }}">
     {{ csrf_input(request) }}
     <input type="hidden" name="add_common" value="1">
-    <button type="submit">Add 5 common rooms</button>
+    <button type="submit">{{ t('wizard.rooms.add_common') }}</button>
   </form>
 </section>
 
@@ -36,10 +31,10 @@
   <thead>
     <tr>
       <th>{{ t('label.name') }}</th>
-      <th>Length (m)</th>
-      <th>Width (m)</th>
-      <th>Height (m)</th>
-      <th>Openings (m²)</th>
+      <th>{{ t('wizard.rooms.area_m2') }}</th>
+      <th>{{ t('wizard.rooms.perimeter_m') }}</th>
+      <th>{{ t('wizard.rooms.height_m') }}</th>
+      <th>{{ t('wizard.rooms.openings_m2') }}</th>
       <th>{{ t('rooms.field.floor_area') }}</th>
       <th>{{ t('rooms.field.wall_area') }}</th>
       <th>{{ t('rooms.field.ceiling_area') }}</th>
@@ -48,17 +43,17 @@
   </thead>
   <tbody>
   {% for room in rooms %}
-    {% set incomplete = room.length_m is none or room.width_m is none or room.wall_height_m is none %}
+    {% set incomplete = room.floor_area_m2 is none or room.wall_height_m is none %}
     <tr>
       <form method="post" action="/projects/{{ project.id }}/rooms/bulk-update?lang={{ lang }}">
         {{ csrf_input(request) }}
         <input type="hidden" name="room_ids" value="{{ room.id }}">
         <td>
           <input type="text" name="name_{{ room.id }}" value="{{ room.name }}" required>
-          {% if incomplete %}<span title="Incomplete dimensions">⚠️</span>{% endif %}
+          {% if incomplete %}<span title="{{ t('wizard.rooms.incomplete_dimensions') }}">⚠️</span>{% endif %}
         </td>
-        <td><input type="number" step="0.01" min="0" name="length_m_{{ room.id }}" value="{{ room.length_m if room.length_m is not none else '' }}"></td>
-        <td><input type="number" step="0.01" min="0" name="width_m_{{ room.id }}" value="{{ room.width_m if room.width_m is not none else '' }}"></td>
+        <td><input type="number" step="0.01" min="0" name="floor_area_m2_{{ room.id }}" value="{{ room.floor_area_m2 if room.floor_area_m2 is not none else '' }}"></td>
+        <td><input type="number" step="0.01" min="0" name="wall_perimeter_m_{{ room.id }}" value="{{ room.wall_perimeter_m if room.wall_perimeter_m is not none else '' }}"></td>
         <td><input type="number" step="0.01" min="0" name="height_m_{{ room.id }}" value="{{ room.wall_height_m if room.wall_height_m is not none else '' }}"></td>
         <td><input type="number" step="0.01" min="0" name="openings_area_m2_{{ room.id }}" value="{{ room.openings_area_m2 if room.openings_area_m2 is not none else '' }}"></td>
         <td>{{ room.floor_area_m2 or 0 }}</td>
@@ -69,7 +64,7 @@
       </form>
           <form method="post" action="/projects/{{ project.id }}/rooms/{{ room.id }}/duplicate?lang={{ lang }}" style="display:inline;">
             {{ csrf_input(request) }}
-            <button type="submit">Duplicate</button>
+            <button type="submit">{{ t('wizard.rooms.duplicate') }}</button>
           </form>
           <form method="post" action="/projects/{{ project.id }}/rooms/{{ room.id }}/delete?lang={{ lang }}" style="display:inline;">
             {{ csrf_input(request) }}
@@ -78,7 +73,7 @@
         </td>
     </tr>
   {% else %}
-    <tr><td colspan="9">No rooms yet — add a preset to start.</td></tr>
+    <tr><td colspan="9">{{ t('wizard.rooms.empty') }}</td></tr>
   {% endfor %}
   </tbody>
 </table>
