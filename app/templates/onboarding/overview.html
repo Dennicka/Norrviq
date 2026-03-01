@@ -25,10 +25,20 @@
     </tbody>
 </table>
 
+{% if worktypes_empty %}
+<div class="flash warning" style="margin-top:12px;">
+  {{ t('onboarding.defaults.missing') }}
+  <form method="post" action="/onboarding/seed-defaults" style="display:inline; margin-left:8px;">
+    {{ csrf_input(request) }}
+    <button type="submit">{{ t('onboarding.defaults.seed') }}</button>
+  </form>
+</div>
+{% endif %}
+
 {% if next_block_step %}
 <p><a href="/onboarding?step={{ next_block_step }}">Continue</a></p>
 {% else %}
 <p><a href="/onboarding/complete">Setup complete</a></p>
 {% endif %}
-<p><a href="/wizard?step=rooms">Open Wizard</a></p>
+<p><a href="/wizard?lang={{ lang }}">{{ t("menu.wizard") }}</a></p>
 {% endblock %}

@@ -5,7 +5,7 @@ import itsdangerous
 import multipart
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -127,6 +127,18 @@ async def observability_middleware(request: Request, call_next):
     log_access(request, response.status_code, latency_ms)
     record_metrics(request, response.status_code, latency_ms)
     return response
+
+
+@app.middleware("http")
+async def normalize_backslash_paths(request: Request, call_next):
+    raw_path = str(request.scope.get("path") or request.url.path)
+    if "\\" in raw_path:
+        normalized_path = raw_path.replace("\\", "/")
+        query = request.url.query
+        if query:
+            normalized_path = f"{normalized_path}?{query}"
+        return RedirectResponse(url=normalized_path, status_code=308)
+    return await call_next(request)
 
 
 

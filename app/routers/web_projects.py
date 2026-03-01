@@ -803,7 +803,7 @@ async def project_wizard_object(project_id: int, request: Request, db: Session =
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     form = await request.form()
-    lang = str(form.get("lang") or request.query_params.get("lang") or "sv")
+    lang = str(form.get("lang") or request.query_params.get("lang") or (await get_current_lang(request)))
     object_type = (form.get("object_type") or "").strip().lower()
     template_key = (form.get("object_template") or "").strip().lower()
 
@@ -852,7 +852,7 @@ async def project_wizard_apply_package(
         recalc_estimator_project(db, project_id)
         add_flash_message(
             request,
-            f"Package applied: +{summary.created_count} created, {summary.updated_count} updated.",
+            t("wizard.packages.applied").format(created=summary.created_count, updated=summary.updated_count),
             "success",
         )
 
@@ -876,7 +876,8 @@ async def project_wizard_remove_package(
     package_code = (form.get("package_code") or "").strip()
     summary = remove_package(db, project_id=project_id, package_code=package_code)
     recalc_estimator_project(db, project_id)
-    add_flash_message(request, f"Package removed: {summary.deleted_count} items deleted.", "success")
+    t = make_t(lang)
+    add_flash_message(request, t("wizard.packages.removed").format(deleted=summary.deleted_count), "success")
     return RedirectResponse(
         url=f"/projects/{project_id}/wizard?step=works&lang={lang}",
         status_code=status.HTTP_303_SEE_OTHER,
@@ -889,7 +890,7 @@ async def project_wizard_next(project_id: int, request: Request, db: Session = D
         raise HTTPException(status_code=404, detail="Project not found")
     form = await request.form()
     step = _resolve_wizard_step(str(form.get("step") or "object")) or "object"
-    lang = str(form.get("lang") or request.query_params.get("lang") or "sv")
+    lang = str(form.get("lang") or request.query_params.get("lang") or (await get_current_lang(request)))
     next_step = WIZARD_NEXT_STEP.get(step, step)
     warning = None
     warning_text = None
@@ -922,7 +923,7 @@ async def project_wizard_back(project_id: int, request: Request, db: Session = D
         raise HTTPException(status_code=404, detail="Project not found")
     form = await request.form()
     step = _resolve_wizard_step(str(form.get("step") or "object")) or "object"
-    lang = str(form.get("lang") or request.query_params.get("lang") or "sv")
+    lang = str(form.get("lang") or request.query_params.get("lang") or (await get_current_lang(request)))
     prev_step = WIZARD_PREV_STEP.get(step, step)
     return RedirectResponse(url=f"/projects/{project_id}/wizard?step={prev_step}&lang={lang}", status_code=status.HTTP_303_SEE_OTHER)
 
